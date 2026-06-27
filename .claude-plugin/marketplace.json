@@ -1,0 +1,12 @@
+{
+  "name": "flow-debugger",
+  "owner": { "name": "Simon Kim" },
+  "description": "Flow Debugger - visual workflow debugger for non-developers.",
+  "plugins": [
+    {
+      "name": "flow-debugger",
+      "source": "./",
+      "description": "Maps app screens to actions, data/server/AI calls; risk markers, diagnostic checklists, connection editing, and a file:line bug-report generator. Outputs one self-contained interactive HTML."
+    }
+  ]
+}

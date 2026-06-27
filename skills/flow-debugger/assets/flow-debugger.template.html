@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2nd-B 기능 흐름도 — 비주얼 맵</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<style>
+  :root{
+    --bg:#0f0f16; --panel:#16161f; --panel2:#1b1b27; --line:rgba(255,255,255,.09);
+    --line2:rgba(255,255,255,.16); --text:#e8e8f1; --muted:#9a9ab2; --faint:#6f6f86;
+    --accent:#8b93ff; --ai:#d8a657;
+    --db:#6fb6ff; --rpc:#b89cff; --edge:#e0a35c; --storage:#7fd1b9; --auth:#e8896f; --misc:#9a9ab2;
+    --mono:ui-monospace,SFMono-Regular,"Cascadia Code",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{background:var(--bg);color:var(--text);font-family:"Pretendard Variable",Pretendard,-apple-system,sans-serif;
+    font-size:14px;line-height:1.55;letter-spacing:-.01em;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;overflow:hidden}
+  code,.mono{font-family:var(--mono);font-size:11.5px}
+
+  .topbar{flex:0 0 auto;border-bottom:1px solid var(--line);padding:9px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--panel)}
+  .brand{font-weight:800;font-size:15px;letter-spacing:-.02em;white-space:nowrap}.brand span{color:var(--accent)}
+  .stat{font-size:11.5px;color:var(--faint);font-family:var(--mono)}.grow{flex:1}
+  .ctrl{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .btn{font-size:12px;color:var(--muted);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:5px 11px;cursor:pointer}
+  .btn:hover{color:var(--text);border-color:var(--line2)}.btn.on{color:var(--bg);background:var(--accent);border-color:var(--accent)}
+  input.search{font-size:12.5px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;color:var(--text);width:160px;font-family:inherit}
+  input.search::placeholder{color:var(--faint)}
+
+  .help{font-size:12px;color:var(--muted);padding:8px 16px;background:var(--panel);border-bottom:1px solid var(--line);line-height:1.6}
+  .help b{color:var(--text)}.help .faint{color:var(--faint)}
+  .chips{display:flex;gap:5px;flex-wrap:wrap;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .chip{font-size:11px;padding:3px 9px;border-radius:99px;border:1px solid var(--line);color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:5px}
+  .chip .gd{width:8px;height:8px;border-radius:2px}.chip.off{opacity:.32;text-decoration:line-through}
+
+  .main{flex:1;display:flex;min-height:0}
+  .stage{flex:1;position:relative;overflow:hidden;background:radial-gradient(circle at 1px 1px, rgba(255,255,255,.045) 1px, transparent 0) 0 0/26px 26px;cursor:grab}
+  .stage.panning{cursor:grabbing}
+  #world{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
+  svg.edges{position:absolute;top:0;left:0;overflow:visible;pointer-events:none}
+  .edge{fill:none;stroke:rgba(255,255,255,.14);stroke-width:1.4;pointer-events:none}
+  .edge.hot{stroke:var(--accent);stroke-width:2.4}.edge.aiedge{stroke:rgba(216,166,87,.5)}.edge.aiedge.hot{stroke:var(--ai)}
+  .edge.user{stroke:rgba(139,147,255,.6);stroke-dasharray:6 4}.edge.esel{stroke:#e8896f;stroke-width:2.8}
+  .ehit{fill:none;stroke:transparent;stroke-width:16;pointer-events:stroke;cursor:pointer}
+  .port{position:absolute;right:5px;top:calc(50% - 7px);width:14px;height:14px;border-radius:50%;background:var(--accent);border:2px solid var(--panel);cursor:crosshair;display:none;z-index:4;box-shadow:0 0 0 2px rgba(139,147,255,.3)}
+  body.linkmode .port{display:block}
+  body.linkmode .node{cursor:default}
+  #overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:6}
+  #cutbtn{position:absolute;display:none;transform:translate(-50%,-50%);z-index:7;background:#e8896f;color:#140d0a;border:none;border-radius:8px;padding:5px 10px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 3px 10px rgba(0,0,0,.4)}
+
+  .node{position:absolute;border:1px solid var(--line2);border-radius:12px;background:var(--panel);padding:0;cursor:grab;user-select:none;box-shadow:0 2px 10px rgba(0,0,0,.25);transition:border-color .12s,box-shadow .12s,opacity .12s;overflow:hidden}
+  .node:hover{border-color:var(--accent)}
+  .node.sel{border-color:var(--accent);box-shadow:0 0 0 2px rgba(139,147,255,.35),0 6px 18px rgba(0,0,0,.4)}
+  .node.lit{border-color:var(--accent)}
+  .node.dim{opacity:.22}
+  .node .pad{padding:9px 12px}
+  .node .t{font-weight:650;font-size:13.5px;line-height:1.35;letter-spacing:-.01em;word-break:keep-all}
+  .node .sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4;word-break:keep-all}
+  .node .badges{display:flex;gap:5px;margin-top:7px;flex-wrap:wrap}
+  .pill{font-size:10px;padding:1px 7px;border-radius:99px;border:1px solid var(--line);color:var(--faint)}
+  .pill.ai{color:var(--ai);border-color:rgba(216,166,87,.4)}
+  .rdot{width:9px;height:9px;border-radius:3px;display:inline-block;margin-right:3px;vertical-align:middle}
+  .rchip{display:inline-block;font-size:10px;padding:1px 7px;border-radius:99px;color:#0c0c12;font-weight:600;margin:0 4px 4px 0}
+
+  .node.screen{width:262px;border-top:4px solid var(--gc,var(--accent))}
+  .shead{display:flex;align-items:center;gap:8px;padding:9px 12px 7px}
+  .sicon{width:26px;height:26px;border-radius:7px;background:var(--gc,var(--accent));color:#0c0c12;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+  .sicon svg{width:16px;height:16px}
+  .stitle{font-weight:700;font-size:14px;line-height:1.25;flex:1;word-break:keep-all}
+  .stype{font-size:9.5px;color:var(--gc,var(--accent));border:1px solid var(--gc,var(--accent));opacity:.85;border-radius:99px;padding:1px 7px;white-space:nowrap;flex:0 0 auto}
+  .ex{font-size:12px;color:var(--faint);flex:0 0 auto;width:14px;text-align:center}
+  .thumb{width:100%;height:96px;object-fit:cover;object-position:top center;display:block;border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:#0b0b11}
+  .nothumb{height:0}
+  .node.screen .pad{padding:8px 12px 10px}
+  .node.action{width:288px;border-color:rgba(139,147,255,.35);background:linear-gradient(180deg,rgba(139,147,255,.07),var(--panel))}
+  .node.api{width:240px}
+  .node.api .t{font-size:12.5px;font-weight:600;display:flex;align-items:flex-start;gap:8px}
+  .node.api .kd{width:10px;height:10px;border-radius:3px;flex:0 0 auto;margin-top:3px}
+  .node.ai{width:232px;border-color:rgba(216,166,87,.5);background:linear-gradient(180deg,rgba(216,166,87,.12),var(--panel))}
+  .node.ai .t{color:var(--ai);display:flex;align-items:flex-start;gap:7px}.node.ai .t::before{content:"◆";font-size:10px;margin-top:3px}
+  .node .flag{position:absolute;left:-7px;top:-8px;font-size:10px;background:var(--ai);color:#000;border-radius:99px;padding:0 6px;font-weight:700;z-index:2}
+
+  .glabel{position:absolute;font-size:11.5px;font-weight:700;letter-spacing:.04em;color:var(--faint);display:flex;align-items:center;gap:7px}
+  .glabel .gd{width:10px;height:10px;border-radius:3px}
+
+  /* zoom + minimap overlay */
+  .zoomctl{position:absolute;right:14px;bottom:14px;display:flex;flex-direction:column;gap:6px;z-index:5}
+  .zoomctl .zb{width:34px;height:34px;border-radius:9px;background:var(--panel);border:1px solid var(--line2);color:var(--text);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .zoomctl .zb:hover{border-color:var(--accent)}
+  .zoomctl .zpct{font-size:10px;color:var(--faint);text-align:center;font-family:var(--mono)}
+  .minimap{position:absolute;left:14px;bottom:14px;width:212px;height:150px;background:rgba(11,11,17,.85);border:1px solid var(--line2);border-radius:10px;z-index:5;overflow:hidden;cursor:pointer}
+  .minimap canvas{display:block}
+  .minimap .vp{position:absolute;border:1.5px solid var(--accent);background:rgba(139,147,255,.12);pointer-events:none}
+  .minimap .mt{position:absolute;top:4px;left:8px;font-size:9.5px;color:var(--faint)}
+
+  .side{flex:0 0 376px;border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+  .side .tabs{display:flex;border-bottom:1px solid var(--line)}
+  .side .tab{flex:1;text-align:center;padding:11px;font-size:12.5px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent}
+  .side .tab.on{color:var(--text);border-bottom-color:var(--accent)}
+  .side .body{flex:1;overflow-y:auto;padding:16px}
+  .side .body::-webkit-scrollbar{width:8px}.side .body::-webkit-scrollbar-thumb{background:var(--line2);border-radius:4px}
+  .dh{font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 7px;font-weight:600}.dh:first-child{margin-top:0}
+  .kv{font-size:13px;margin:4px 0;color:#d4d4e2;word-break:keep-all}.kv b{color:var(--text)}
+  .dtitle{display:flex;align-items:center;gap:10px;margin-top:4px}
+  .dtitle .sicon{width:30px;height:30px}
+  .typetag{display:inline-block;font-size:11px;padding:2px 9px;border-radius:99px;font-weight:600}
+  .shotbig{width:100%;border-radius:10px;border:1px solid var(--line);margin-top:10px;display:block}
+  .ed-label{width:100%;font-size:16px;font-weight:700;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 11px;color:var(--text);font-family:inherit;margin-top:10px}
+  .plainbox{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:13.5px;color:#e3e3ef;line-height:1.6;margin-top:8px}
+  textarea.note{width:100%;min-height:60px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--text);font-family:inherit;font-size:12.5px;resize:vertical}
+  textarea.note::placeholder{color:var(--faint)}
+  .flags{display:flex;gap:6px;margin-top:8px}
+  .fbtn{flex:1;font-size:11.5px;padding:7px;border-radius:7px;border:1px solid var(--line);background:var(--panel2);color:var(--muted);cursor:pointer}
+  .fbtn.on{background:var(--ai);color:#000;border-color:var(--ai);font-weight:700}
+  .item{font-size:12.5px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;margin:5px 0;display:flex;align-items:flex-start;gap:8px;cursor:pointer;line-height:1.45}
+  .item:hover{border-color:var(--accent)}.item .kd{width:10px;height:10px;border-radius:3px;flex:0 0 auto;margin-top:3px}
+  .item .sm{font-size:10.5px;color:var(--faint);font-family:var(--mono);margin-top:2px}
+  .actrow{border:1px solid var(--line);border-radius:9px;padding:9px 11px;margin:8px 0;cursor:pointer}.actrow:hover{border-color:var(--accent)}
+  .actrow .an{font-weight:650;font-size:13.5px}.actrow .ap{font-size:11.5px;color:var(--muted);margin-top:3px}
+  details.dev{margin-top:14px;border-top:1px dashed var(--line);padding-top:10px}
+  details.dev summary{cursor:pointer;font-size:11.5px;color:var(--faint);list-style:none}details.dev summary::-webkit-details-marker{display:none}
+  details.dev summary::before{content:"▸ 개발 정보"}details.dev[open] summary{color:var(--muted)}details.dev[open] summary::before{content:"▾ 개발 정보"}
+  details.dev .kv{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .empty{color:var(--faint);font-size:13.5px;text-align:center;margin-top:36px;line-height:1.7}
+  .prompt-wrap{display:flex;flex-direction:column;height:100%}
+  textarea.prompt{flex:1;min-height:200px;width:100%;background:#0b0b11;border:1px solid var(--line);border-radius:10px;padding:12px;color:#cfd2f0;font-family:var(--mono);font-size:11.5px;line-height:1.55;resize:none}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--faint);padding:7px 16px;border-top:1px solid var(--line);background:var(--panel);align-items:center}
+  .legend span{display:flex;align-items:center;gap:5px}.legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .hint{font-size:11.5px;color:var(--faint);margin-top:8px;line-height:1.6}
+  .countbadge{font-size:10px;color:var(--bg);background:var(--ai);border-radius:99px;padding:0 6px;margin-left:6px;font-weight:700}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">2nd-B <span>기능 흐름도</span></div>
+  <div class="stat" id="stat"></div>
+  <div class="grow"></div>
+  <div class="ctrl">
+    <input class="search" id="search" placeholder="화면·기능 검색">
+    <button class="btn" id="aiOnly">AI 기능만</button>
+    <button class="btn" id="expandAll">전체 펼치기</button>
+    <button class="btn" id="collapseAll">모두 접기</button>
+    <button class="btn" id="linkMode" title="카드의 점을 끌어 연결을 잇고, 선을 눌러 끊기">연결 편집</button>
+    <button class="btn" id="autoArrange">자동 정렬</button>
+    <button class="btn" id="resetAll">초기화</button>
+  </div>
+</div>
+
+<div class="help">
+  <b>보는 법</b> · 왼쪽 <b>화면 카드</b>(아이콘·썸네일로 어떤 화면인지 알 수 있어요)를 누르면 → <b>그 화면에서 할 수 있는 일</b> → <b>데이터·서버 작업</b>과 <b>AI 기능</b>이 오른쪽으로 펼쳐집니다.
+  카드에 마우스를 올리면 연결선이 강조돼요. <b>연결 편집</b>을 켜면 카드 오른쪽 점을 끌어 새 연결을 잇고, 선을 눌러 끊을 수 있어요(변경은 '수정 요청'에 자동 기록). <span class="faint">빈 곳 드래그=이동 · 휠/우하단 버튼=확대축소 · 미니맵 클릭=이동</span>
+</div>
+
+<div class="chips" id="chips"></div>
+
+<div class="main">
+  <div class="stage" id="stage">
+    <div id="world">
+      <svg class="edges" id="edges"></svg>
+      <div id="nodes"></div>
+      <div id="glabels"></div>
+    </div>
+    <div class="minimap" id="minimap"><div class="mt">미니맵</div><canvas id="mmcanvas" width="212" height="150"></canvas><div class="vp" id="mmvp"></div></div>
+    <div class="zoomctl">
+      <button class="zb" id="zin">+</button>
+      <div class="zpct" id="zpct">100%</div>
+      <button class="zb" id="zout">−</button>
+      <button class="zb" id="zfit" title="전체 맞춤">⤢</button>
+    </div>
+    <svg id="overlay"></svg>
+    <button id="cutbtn" title="이 연결 끊기">✕ 연결 끊기</button>
+  </div>
+  <div class="side">
+    <div class="tabs">
+      <div class="tab on" data-tab="detail">설명</div>
+      <div class="tab" data-tab="bug">버그 신고<span class="countbadge" id="bugCount" style="display:none">0</span></div>
+      <div class="tab" data-tab="prompt">수정 요청<span class="countbadge" id="editCount" style="display:none">0</span></div>
+    </div>
+    <div class="body" id="sideBody"></div>
+  </div>
+</div>
+
+<div class="legend">
+  <span><i style="background:var(--accent)"></i>화면 / 동작</span>
+  <span><i style="background:var(--ai)"></i>AI 기능</span>
+  <span><i style="background:var(--db)"></i>데이터 저장·조회</span>
+  <span><i style="background:var(--rpc)"></i>서버 계산</span>
+  <span><i style="background:var(--edge)"></i>서버 기능</span>
+  <span><i style="background:var(--storage)"></i>파일 저장</span>
+  <span><i style="background:var(--auth)"></i>로그인</span>
+</div>
+
+<script>
+const GRAPH = __GRAPH_JSON__;
+const GLOSSARY = __GLOSSARY_JSON__;
+const SHOTS = __SHOTS_JSON__;
+const GAPI = GLOSSARY.apis||{}, GAI = GLOSSARY.ai||{};
+
+const GROUP_ORDER=["auth","capture","knowledge","identity","assistant","ops","deepspace","settings"];
+const GROUP_LABEL={auth:"인증·시작",capture:"기록·수집",knowledge:"지식·위키",identity:"나·성격분석",assistant:"AI 비서",ops:"성장·운영",deepspace:"메인 화면",settings:"설정·계정"};
+const GROUP_COLOR={auth:"#e8896f",capture:"#6fb6ff",knowledge:"#7fd1b9",identity:"#b89cff",assistant:"#d8a657",ops:"#8b93ff",deepspace:"#9fd0e0",settings:"#c0a0c8"};
+const API_KIND_COLOR={db:"#6fb6ff",rpc:"#b89cff",edge:"#e0a35c",storage:"#7fd1b9",auth:"#e8896f",llm:"#d8a657",misc:"#9a9ab2"};
+const KIND_KO={db:"데이터 저장·조회",rpc:"서버 계산",edge:"서버 기능",storage:"파일 저장",auth:"로그인·인증",llm:"AI",misc:"기타"};
+const RISK_KO={network:"인터넷 필요",auth:"로그인 필요",ai:"AI(가끔 틀림)",cost:"비용 발생",external:"외부 서비스 의존",gate:"기본 꺼짐/권한",weakpoint:"조용한 실패 위험",bug:"알려진 약점"};
+const RISK_COLOR={network:"#6fb6ff",auth:"#e8896f",ai:"#d8a657",cost:"#e0a35c",external:"#b89cff",gate:"#9a9ab2",weakpoint:"#e8896f",bug:"#e8896f"};
+
+/* screen type + icon (recognition) */
+const TYPE_KO={graph:"시각화",list:"목록",form:"입력",chat:"대화",dashboard:"대시보드",settings:"설정",auth:"인증",onboarding:"시작하기",detail:"상세",card:"카드",test:"검사",media:"이미지"};
+const ICONS={
+ graph:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M6.7 7.2 10.5 16M17.3 7.2 13.5 16"/></svg>',
+ list:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',
+ form:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h5"/></svg>',
+ chat:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v11H9l-5 4z"/></svg>',
+ dashboard:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>',
+ settings:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.5 5.5l2 2M16.5 16.5l2 2M18.5 5.5l-2 2M7.5 16.5l-2 2"/></svg>',
+ auth:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
+ onboarding:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 8l5-5 5 5M5 21h14"/></svg>',
+ detail:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 13h6M9 17h6"/></svg>',
+ card:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="M19 8v11M21.5 7.5v9"/></svg>',
+ test:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 21V10M12 21V4M19 21v-8"/></svg>',
+ media:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m4 17 5-5 4 4 3-3 4 4"/></svg>',
+};
+const SCREEN_TYPE={
+ "/":"graph","/graph":"graph","/core-brain":"graph","/trinity":"graph","/deepspace-flowmap":"graph","/deepspace-home":"graph","/deepspace-hub":"dashboard","/deepspace-preview":"graph",
+ "/records":"list","/wiki":"list","/inbox":"list","/data":"list","/museum":"card","/discover":"card","/research":"list","/reading":"list","/ledger":"list","/record/[id]":"detail","/formats":"list",
+ "/capture":"form","/import":"form","/import-hub":"dashboard","/manual":"detail","/jot":"form",
+ "/secondb":"chat","/jarvis":"chat","/digest":"card","/imagine":"media","/interview":"chat","/esm":"form","/audit":"form","/journal":"form",
+ "/persona":"test","/big-five":"test","/mbti":"test","/attachment":"test","/iden":"dashboard","/profile":"dashboard",
+ "/growth":"dashboard","/insights":"dashboard","/ops":"dashboard","/milestones":"list","/reminders":"list","/srs":"card","/trends":"dashboard","/meals":"list","/side-project":"list","/review":"list","/focus":"dashboard",
+ "/settings":"settings","/account":"settings","/privacy":"settings","/permissions":"settings","/integrations":"settings","/theme":"settings","/support":"detail","/plans":"card",
+ "/sign-in":"auth","/sign-up":"auth","/complete-profile":"form","/oauth-callback":"auth","/reset-password":"auth","/onboarding":"onboarding","/ttfv":"onboarding"
+};
+const GROUP_TYPE={auth:"auth",capture:"form",knowledge:"list",identity:"test",assistant:"chat",ops:"dashboard",deepspace:"graph",settings:"settings"};
+function screenType(s){ return SCREEN_TYPE[s.route]||GROUP_TYPE[s.group]||"detail"; }
+
+/* ---------- model ---------- */
+const screens=GRAPH.map(s=>({...s,id:"s:"+s.route}));
+const nodes=new Map(),edges=[],capUsers=new Map();
+const addNode=n=>{if(!nodes.has(n.id))nodes.set(n.id,n);return nodes.get(n.id);};
+const apiId=t=>"api:"+t,aiId=p=>"ai:"+p,actId=(s,i)=>"a:"+s.route+"#"+i;
+screens.forEach(s=>{
+  addNode({id:s.id,type:"screen",group:s.group,data:s});
+  (s.actions||[]).forEach((a,i)=>{
+    const aid=actId(s,i); addNode({id:aid,type:"action",group:s.group,data:a,screen:s}); edges.push({from:s.id,to:aid,kind:"sa"});
+    (a.apis||[]).forEach(tag=>{ const id=apiId(tag),kind=tag.split(":")[0];
+      if(!nodes.has(id))addNode({id,type:"api",kind,data:{tag,kind}});
+      edges.push({from:aid,to:id,kind:"ac"}); if(!capUsers.has(id))capUsers.set(id,new Set()); capUsers.get(id).add(scrTitle(s)+" · "+actLabel(a)); });
+    if(a.ai){ const id=aiId(a.ai.purpose); if(!nodes.has(id))addNode({id,type:"ai",data:a.ai});
+      edges.push({from:aid,to:id,kind:"ai"}); if(!capUsers.has(id))capUsers.set(id,new Set()); capUsers.get(id).add(scrTitle(s)+" · "+actLabel(a)); }
+  });
+});
+function scrTitle(s){return s.titleKo||s.title||s.route;}
+function actLabel(a){return a.actionKo||a.action;}
+function apiKo(t){return(GAPI[t]&&GAPI[t].ko)||t;}
+function aiKo(p){return(GAI[p]&&GAI[p].ko)||p;}
+function dispLabel(n){return n.type==="screen"?scrTitle(n.data):n.type==="action"?actLabel(n.data):n.type==="api"?apiKo(n.data.tag):aiKo(n.data.purpose);}
+function codeRef(n){return n.type==="screen"?n.data.route:n.type==="action"?((n.data.feature||"")+(n.data.file?" @ "+n.data.file:"")):n.type==="api"?n.data.tag:n.data.purpose;}
+
+/* ---------- state ---------- */
+const LSKEY="2ndb-flowmap-v3";
+let state={pos:{},edits:{},expanded:{},groupsOff:{},globalNote:"",addedEdges:[],removedEdges:[],bugs:{}};
+try{state={...state,...JSON.parse(localStorage.getItem(LSKEY)||"{}")};}catch(e){}
+const save=()=>localStorage.setItem(LSKEY,JSON.stringify(state));
+let selected=null,hoverId=null,aiOnly=false,searchTerm="",tab="detail";
+const expanded=new Set(Object.keys(state.expanded).filter(k=>state.expanded[k]));
+
+const stage=document.getElementById("stage"),world=document.getElementById("world");
+const nodesEl=document.getElementById("nodes"),edgesEl=document.getElementById("edges"),glabelsEl=document.getElementById("glabels");
+const sideBody=document.getElementById("sideBody");
+let view={x:30,y:16,k:1},els={},groupLabelPos=[];
+
+/* ---------- visibility ---------- */
+const groupOn=g=>!state.groupsOff[g];
+function matchSearch(n){ if(!searchTerm)return true;const t=searchTerm.toLowerCase();
+  if(dispLabel(n).toLowerCase().includes(t))return true;
+  if(n.type==="screen")return(n.data.actions||[]).some(a=>(actLabel(a)+(a.plain||"")).toLowerCase().includes(t))||(n.data.summaryKo||"").toLowerCase().includes(t);
+  if(n.type==="action")return((n.data.plain||"")+(n.data.feature||"")).toLowerCase().includes(t); return false; }
+function visibleNodes(){ const vis=new Set();
+  screens.forEach(s=>{if(groupOn(s.group)&&matchSearch(nodes.get(s.id)))vis.add(s.id);});
+  screens.forEach(s=>{ if(!vis.has(s.id)||!expanded.has(s.id))return;
+    (s.actions||[]).forEach((a,i)=>{const aid=actId(s,i);if(aiOnly&&!a.ai)return;vis.add(aid);
+      if(!aiOnly)(a.apis||[]).forEach(tag=>vis.add(apiId(tag))); if(a.ai)vis.add(aiId(a.ai.purpose));}); });
+  return vis; }
+
+const COLX={screen:0,action:320,api:672,ai:952};
+const colX=n=>COLX[n.type]||0;
+
+/* ---------- render (measure -> pack -> no overlap) ---------- */
+const applyView=()=>{world.style.transform=`translate(${view.x}px,${view.y}px) scale(${view.k})`;document.getElementById("zpct").textContent=Math.round(view.k*100)+"%";drawMinimapVP();var cb=document.getElementById("cutbtn");if(cb)cb.style.display="none";};
+function nodeHtml(n){
+  const sel=selected===n.id?" sel":""; const lit=(hoverId&&connected.has&&connected.has(n.id))?" lit":"";
+  const ed=state.edits[n.id];const flag=ed&&ed.flag?`<span class="flag">${ed.flag}</span>`:"";
+  const dim=(aiOnly&&n.type==="api")?" dim":"";
+  const lab=esc(curLabel(n));
+  if(n.type==="screen"){
+    const s=n.data,ty=screenType(s),nAct=(s.actions||[]).length,nAi=(s.actions||[]).filter(a=>a.ai).length;
+    const gc=GROUP_COLOR[s.group]||"var(--accent)";
+    const shot=SHOTS[s.route]?`<img class="thumb" src="${SHOTS[s.route]}" alt="">`:"";
+    return `<div class="node screen${sel}${lit}" data-id="${n.id}" style="--gc:${gc}">${flag}
+      <div class="shead"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><div class="stitle">${lab}</div><span class="stype" style="--gc:${gc}">${TYPE_KO[ty]||""}</span><span class="ex">${expanded.has(n.id)?"▾":"▸"}</span></div>
+      ${shot}<div class="pad"><div class="sub">${esc(s.summaryKo||"")}</div><div class="badges"><span class="pill">${nAct}개 동작</span>${nAi?`<span class="pill ai">AI ${nAi}</span>`:""}</div></div></div>`;
+  }
+  if(n.type==="action"){const a=n.data;
+    const rd=(a.risks||[]).map(r=>`<span class="rdot" style="background:${RISK_COLOR[r]||'#888'}" title="${RISK_KO[r]||r}"></span>`).join("");
+    return `<div class="node action${sel}${lit}" data-id="${n.id}">${flag}<div class="pad"><div class="t">${lab}</div><div class="sub">${esc(a.plain||a.feature||"")}</div><div class="badges">${(a.apis||[]).length?`<span class="pill">${a.apis.length}개 작업</span>`:""}${a.ai?`<span class="pill ai">AI</span>`:""}${rd?`<span style="margin-left:auto">${rd}</span>`:""}</div></div></div>`;}
+  if(n.type==="api"){const c=API_KIND_COLOR[n.kind]||"var(--misc)";
+    return `<div class="node api${sel}${lit}${dim}" data-id="${n.id}"><div class="pad"><div class="t"><span class="kd" style="background:${c}"></span><span>${lab}</span></div></div></div>`;}
+  if(n.type==="ai"){
+    return `<div class="node ai${sel}${lit}" data-id="${n.id}"><div class="pad"><div class="t"><span>${lab}</span></div><div class="sub">${esc(n.data.model||"")}</div></div></div>`;}
+  return "";
+}
+let connected={has:()=>false};
+function render(){
+  const vis=visibleNodes();
+  nodesEl.innerHTML="";els={};
+  for(const [id,n] of nodes){ if(!vis.has(id))continue; n.x=state.pos[id]?state.pos[id].x:colX(n); n.y=state.pos[id]?state.pos[id].y:0;
+    const wrap=document.createElement("div");wrap.innerHTML=nodeHtml(n);const el=wrap.firstElementChild;el.style.left=n.x+"px";el.style.top=n.y+"px";
+    const port=document.createElement("span");port.className="port";port.dataset.port=id;el.appendChild(port);
+    nodesEl.appendChild(el);els[id]=el; }
+  for(const id in els)nodes.get(id).h=els[id].offsetHeight;
+  packColumns(vis);
+  for(const id in els){const n=nodes.get(id);els[id].style.left=n.x+"px";els[id].style.top=n.y+"px";}
+  drawEdges(vis);drawGroupLabels();applyView();updateStat(vis);drawMinimap(vis);
+}
+function packColumns(vis){const GAP=16,HEAD=28,GG=18;groupLabelPos=[];
+  let y=8; for(const g of GROUP_ORDER){const scrs=screens.filter(s=>s.group===g&&vis.has(s.id));if(!scrs.length)continue;groupLabelPos.push({g,x:COLX.screen,y});y+=HEAD;
+    for(const s of scrs){const n=nodes.get(s.id);if(state.pos[s.id])continue;n.x=COLX.screen;n.y=y;y+=(n.h||120)+GAP;}y+=GG;}
+  let y1=8;for(const g of GROUP_ORDER)for(const s of screens.filter(s=>s.group===g&&vis.has(s.id)&&expanded.has(s.id))){
+    (s.actions||[]).forEach((a,i)=>{const id=actId(s,i);if(!vis.has(id)||state.pos[id])return;const n=nodes.get(id);n.x=COLX.action;n.y=y1;y1+=(n.h||56)+GAP;});}
+  let y2=8,y3=8;for(const [id,n] of nodes){if(!vis.has(id)||state.pos[id])continue;
+    if(n.type==="api"){n.x=COLX.api;n.y=y2;y2+=(n.h||40)+GAP;}if(n.type==="ai"){n.x=COLX.ai;n.y=y3;y3+=(n.h||46)+GAP;}}
+}
+function drawEdges(vis){let svg="";effEdges().forEach(e=>{if(!vis.has(e.from)||!vis.has(e.to))return;const a=nodes.get(e.from),b=nodes.get(e.to);
+  const x1=a.x+(els[a.id]?els[a.id].offsetWidth:260),y1=a.y+(a.h||60)/2,x2=b.x,y2=b.y+(b.h||40)/2,mx=(x1+x2)/2;
+  const hot=(selected&&(e.from===selected||e.to===selected))||(hoverId&&(e.from===hoverId||e.to===hoverId));
+  const sel=selEdge&&selEdge.from===e.from&&selEdge.to===e.to;
+  const d=`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+  if(linkMode)svg+=`<path class="ehit" data-from="${e.from}" data-to="${e.to}" data-user="${e.user?1:0}" d="${d}"/>`;
+  svg+=`<path class="edge${e.kind==="ai"?" aiedge":""}${e.user?" user":""}${hot?" hot":""}${sel?" esel":""}" d="${d}"/>`;});
+  edgesEl.innerHTML=svg;edgesEl.style.width="9000px";edgesEl.style.height="9000px";edgesEl.style.pointerEvents=linkMode?"auto":"none";}
+function drawGroupLabels(){glabelsEl.innerHTML=groupLabelPos.map(h=>`<div class="glabel" style="left:${h.x}px;top:${h.y}px"><span class="gd" style="background:${GROUP_COLOR[h.g]}"></span>${GROUP_LABEL[h.g]}</div>`).join("");}
+function esc(s){return(s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function origLabel(n){return dispLabel(n);}function curLabel(n){const e=state.edits[n.id];return(e&&e.label!=null)?e.label:origLabel(n);}
+function updateStat(vis){const c=t=>[...nodes.values()].filter(n=>n.type===t).length;document.getElementById("stat").textContent=`${screens.length}개 화면 · 동작 ${c("action")} · 데이터/서버 ${c("api")} · AI ${c("ai")}종 · 표시 ${vis.size}`;}
+
+/* ---------- minimap ---------- */
+const mm=document.getElementById("minimap"),mmc=document.getElementById("mmcanvas"),mmvp=document.getElementById("mmvp");
+let mmBox=null;
+function drawMinimap(vis){const ctx=mmc.getContext("2d");ctx.clearRect(0,0,mmc.width,mmc.height);
+  let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;const list=[];
+  for(const id of vis){const n=nodes.get(id);const w=els[id]?els[id].offsetWidth:240,h=n.h||60;list.push({n,w,h});minx=Math.min(minx,n.x);miny=Math.min(miny,n.y);maxx=Math.max(maxx,n.x+w);maxy=Math.max(maxy,n.y+h);}
+  if(!list.length){mmBox=null;return;}
+  const pad=40;minx-=pad;miny-=pad;maxx+=pad;maxy+=pad;
+  const sc=Math.min(mmc.width/(maxx-minx),mmc.height/(maxy-miny));mmBox={minx,miny,sc};
+  list.forEach(({n,w,h})=>{ctx.fillStyle=n.type==="screen"?(GROUP_COLOR[n.group]||"#8b93ff"):n.type==="ai"?"#d8a657":n.type==="action"?"#8b93ff":"#5a5a72";
+    ctx.fillRect((n.x-minx)*sc,(n.y-miny)*sc,Math.max(2,w*sc),Math.max(2,h*sc));});
+  drawMinimapVP();}
+function drawMinimapVP(){if(!mmBox)return;const r=stage.getBoundingClientRect();const {minx,miny,sc}=mmBox;
+  const vx=(-view.x/view.k-minx)*sc,vy=(-view.y/view.k-miny)*sc,vw=(r.width/view.k)*sc,vh=(r.height/view.k)*sc;
+  mmvp.style.left=Math.max(0,vx)+"px";mmvp.style.top=Math.max(0,vy)+"px";mmvp.style.width=Math.min(mmc.width,vw)+"px";mmvp.style.height=Math.min(mmc.height,vh)+"px";}
+mm.addEventListener("pointerdown",e=>{if(!mmBox)return;const r=mm.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;
+  const wx=mx/mmBox.sc+mmBox.minx,wy=my/mmBox.sc+mmBox.miny;const sr=stage.getBoundingClientRect();
+  view.x=-(wx*view.k)+sr.width/2;view.y=-(wy*view.k)+sr.height/2;applyView();e.stopPropagation();});
+
+/* ---------- zoom ---------- */
+function zoomAt(k,cx,cy){const r=stage.getBoundingClientRect();cx=cx??r.width/2;cy=cy??r.height/2;const old=view.k;k=Math.max(.25,Math.min(2.4,k));view.x=cx-(cx-view.x)*(k/old);view.y=cy-(cy-view.y)*(k/old);view.k=k;applyView();}
+document.getElementById("zin").onclick=()=>zoomAt(view.k*1.2);
+document.getElementById("zout").onclick=()=>zoomAt(view.k/1.2);
+document.getElementById("zfit").onclick=()=>fit();
+function fit(){const vis=visibleNodes();let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
+  for(const id of vis){const n=nodes.get(id);const w=els[id]?els[id].offsetWidth:240,h=n.h||60;minx=Math.min(minx,n.x);miny=Math.min(miny,n.y);maxx=Math.max(maxx,n.x+w);maxy=Math.max(maxy,n.y+h);}
+  if(minx>maxx)return;const r=stage.getBoundingClientRect();const pad=60;
+  const k=Math.max(.25,Math.min(1.4,Math.min(r.width/(maxx-minx+pad*2),r.height/(maxy-miny+pad*2))));
+  view.k=k;view.x=-(minx-pad)*k;view.y=-(miny-pad)*k;applyView();}
+
+/* ---------- pan ---------- */
+let panning=false,panStart=null;
+stage.addEventListener("pointerdown",e=>{if(e.target.closest(".node")||e.target.closest(".minimap")||e.target.closest(".zoomctl"))return;panning=true;stage.classList.add("panning");panStart={x:e.clientX-view.x,y:e.clientY-view.y};stage.setPointerCapture(e.pointerId);});
+stage.addEventListener("pointermove",e=>{if(panning){view.x=e.clientX-panStart.x;view.y=e.clientY-panStart.y;applyView();}});
+stage.addEventListener("pointerup",()=>{panning=false;stage.classList.remove("panning");});
+stage.addEventListener("wheel",e=>{e.preventDefault();const r=stage.getBoundingClientRect();zoomAt(view.k*(e.deltaY<0?1.1:.9),e.clientX-r.left,e.clientY-r.top);},{passive:false});
+
+/* ---------- node drag/click/hover ---------- */
+let drag=null;
+nodesEl.addEventListener("pointerdown",e=>{const el=e.target.closest(".node");if(!el)return;const id=el.dataset.id,n=nodes.get(id);drag={id,el,moved:false,sx:e.clientX,sy:e.clientY,ox:n.x,oy:n.y};el.setPointerCapture(e.pointerId);e.stopPropagation();});
+nodesEl.addEventListener("pointermove",e=>{if(!drag)return;const dx=(e.clientX-drag.sx)/view.k,dy=(e.clientY-drag.sy)/view.k;if(Math.abs(dx)+Math.abs(dy)>3)drag.moved=true;const n=nodes.get(drag.id);n.x=drag.ox+dx;n.y=drag.oy+dy;if(drag.el){drag.el.style.left=n.x+"px";drag.el.style.top=n.y+"px";}drawEdges(visibleNodes());});
+nodesEl.addEventListener("pointerup",()=>{if(!drag)return;const n=nodes.get(drag.id);if(drag.moved){state.pos[drag.id]={x:n.x,y:n.y};save();drawMinimap(visibleNodes());}else{onNodeClick(drag.id);}drag=null;});
+nodesEl.addEventListener("pointerover",e=>{const el=e.target.closest(".node");if(!el)return;setHover(el.dataset.id);});
+nodesEl.addEventListener("pointerout",e=>{const el=e.target.closest(".node");if(!el)return;setHover(null);});
+function setHover(id){if(hoverId===id)return;hoverId=id;
+  connected=new Set();if(id){connected.add(id);effEdges().forEach(e=>{if(e.from===id)connected.add(e.to);if(e.to===id)connected.add(e.from);});}
+  // toggle lit classes + edge hot without full re-render
+  for(const nid in els)els[nid].classList.toggle("lit",!!id&&connected.has(nid)&&nid!==id);
+  drawEdges(visibleNodes());}
+function onNodeClick(id){const n=nodes.get(id);if(n.type==="screen"){if(expanded.has(id)){expanded.delete(id);state.expanded[id]=false;}else{expanded.add(id);state.expanded[id]=true;}save();}selected=id;setTab("detail");render();}
+
+/* ---------- 연결 편집 (visual programming) ---------- */
+let linkMode=false, pending=null, selEdge=null;
+const overlay=document.getElementById("overlay"), cutbtn=document.getElementById("cutbtn");
+const ekey=e=>e.from+">>"+e.to;
+function effEdges(){
+  const cut=new Set(state.removedEdges||[]);
+  const base=edges.filter(e=>!cut.has(ekey(e)));
+  const added=(state.addedEdges||[]).map(e=>({from:e.from,to:e.to,kind:(nodes.get(e.to)&&nodes.get(e.to).type==="ai")?"ai":"ac",user:true}));
+  return base.concat(added);
+}
+function setLinkMode(on){linkMode=on;document.body.classList.toggle("linkmode",on);document.getElementById("linkMode").classList.toggle("on",on);selEdge=null;cutbtn.style.display="none";render();}
+document.getElementById("linkMode").onclick=()=>setLinkMode(!linkMode);
+function addEdge(from,to){ if(from===to)return; const k=from+">>"+to;
+  if((state.removedEdges||[]).includes(k)){ state.removedEdges=state.removedEdges.filter(x=>x!==k); save();updateEditCount();render(); return; }
+  if(effEdges().some(e=>e.from===from&&e.to===to))return; // already connected
+  state.addedEdges=state.addedEdges||[]; state.addedEdges.push({from,to}); save();updateEditCount();render(); }
+function removeEdge(e){ if(e.user){ state.addedEdges=(state.addedEdges||[]).filter(x=>!(x.from===e.from&&x.to===e.to)); }
+  else { state.removedEdges=state.removedEdges||[]; const k=ekey(e); if(!state.removedEdges.includes(k))state.removedEdges.push(k); }
+  selEdge=null;cutbtn.style.display="none"; save();updateEditCount();render(); }
+// start a connection by dragging from a node's port
+nodesEl.addEventListener("pointerdown",e=>{ const p=e.target.closest(".port"); if(!p)return; e.stopPropagation();
+  const from=p.parentElement.dataset.id, r=stage.getBoundingClientRect(), pr=p.getBoundingClientRect();
+  pending={from,sx:pr.left+pr.width/2-r.left,sy:pr.top+pr.height/2-r.top};
+  window.addEventListener("pointermove",onLinkMove); window.addEventListener("pointerup",onLinkUp); }, true);
+function onLinkMove(e){ if(!pending)return; const r=stage.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top,mx=(pending.sx+x)/2;
+  overlay.innerHTML=`<path d="M${pending.sx},${pending.sy} C${mx},${pending.sy} ${mx},${y} ${x},${y}" fill="none" stroke="#8b93ff" stroke-width="2.4" stroke-dasharray="5 4"/><circle cx="${x}" cy="${y}" r="4" fill="#8b93ff"/>`; }
+function onLinkUp(e){ window.removeEventListener("pointermove",onLinkMove); window.removeEventListener("pointerup",onLinkUp); overlay.innerHTML="";
+  const t=document.elementFromPoint(e.clientX,e.clientY), tn=t&&t.closest&&t.closest(".node");
+  if(pending&&tn&&tn.dataset.id!==pending.from)addEdge(pending.from,tn.dataset.id); pending=null; }
+// click an edge (hit path) to select + show cut button
+edgesEl.addEventListener("pointerdown",e=>{ if(!linkMode)return; const p=e.target.closest(".ehit"); if(!p)return; e.stopPropagation();
+  selEdge={from:p.dataset.from,to:p.dataset.to,user:p.dataset.user==="1"};
+  const a=nodes.get(selEdge.from),b=nodes.get(selEdge.to); if(!a||!b)return;
+  const x1=a.x+(els[a.id]?els[a.id].offsetWidth:260),y1=a.y+(a.h||60)/2,x2=b.x,y2=b.y+(b.h||40)/2;
+  const wx=(x1+x2)/2,wy=(y1+y2)/2; cutbtn.style.left=(wx*view.k+view.x)+"px"; cutbtn.style.top=(wy*view.k+view.y)+"px"; cutbtn.style.display="block"; drawEdges(visibleNodes()); });
+cutbtn.onclick=()=>{ if(selEdge)removeEdge(selEdge); };
+
+/* ---------- side ---------- */
+function setTab(t){tab=t;document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x.dataset.tab===t));renderSide();}
+document.querySelectorAll(".tab").forEach(x=>x.onclick=()=>setTab(x.dataset.tab));
+function renderSide(){if(tab==="detail")renderDetail();else if(tab==="bug")renderBug();else renderPrompt();}
+function setEdit(id,f,v){if(!state.edits[id])state.edits[id]={};state.edits[id][f]=v;if(v===""||v==null)delete state.edits[id][f];if(state.edits[id]&&!Object.keys(state.edits[id]).length)delete state.edits[id];save();updateEditCount();}
+function updateEditCount(){const n=Object.keys(state.edits).length+(state.globalNote?1:0)+((state.addedEdges||[]).length)+((state.removedEdges||[]).length),b=document.getElementById("editCount");b.style.display=n?"inline-block":"none";b.textContent=n;
+  const bn=Object.keys(state.bugs||{}).length,bb=document.getElementById("bugCount");if(bb){bb.style.display=bn?"inline-block":"none";bb.textContent=bn;}}
+const TYPETAG={screen:["화면","#8b93ff"],action:["사용자 동작","#8b93ff"],api:["데이터·서버 작업","#6fb6ff"],ai:["AI 기능","#d8a657"]};
+function renderDetail(){
+  if(!selected){sideBody.innerHTML=`<div class="empty">왼쪽에서 <b>화면 카드</b>를 눌러보세요.<br>아이콘·썸네일로 어떤 화면인지<br>알아볼 수 있어요.<br><br>누르면 그 화면의 동작과<br>AI·데이터 작업이 펼쳐지고<br>여기에 쉬운 설명이 나옵니다.</div>`;return;}
+  const n=nodes.get(selected),ed=state.edits[selected]||{},tt=TYPETAG[n.type]||["",""];
+  let h="";
+  if(n.type==="screen"){const s=n.data,ty=screenType(s),gc=GROUP_COLOR[s.group];
+    h+=`<div class="dtitle"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><div><span class="typetag" style="background:${gc}22;color:${gc}">화면 · ${TYPE_KO[ty]||""}</span></div></div>
+      <input class="ed-label" id="edLabel" value="${esc(curLabel(n))}">`;
+    if(SHOTS[s.route])h+=`<img class="shotbig" src="${SHOTS[s.route]}" alt=""><div class="kv" style="color:var(--faint);font-size:11px">실제 화면 캡처 (참고용 · 다를 수 있어요)</div>`;
+    h+=`<div class="plainbox">${esc(s.summaryKo||s.summary||"")}</div>
+      <div class="dh">이 화면에서 할 수 있는 일 (${(s.actions||[]).length})</div>`;
+    (s.actions||[]).forEach((a,i)=>{h+=`<div class="actrow" data-go="${actId(s,i)}"><div class="an">${esc(actLabel(a))}${a.ai?' <span class="pill ai">AI</span>':''}</div><div class="ap">${esc(a.plain||"")}</div></div>`;});
+    h+=`<details class="dev"><summary></summary><div class="kv">route: ${esc(s.route)}</div><div class="kv">group: ${esc(s.group)}</div></details>`;
+  }else if(n.type==="action"){const a=n.data;
+    h+=`<span class="typetag" style="background:#8b93ff22;color:#8b93ff">사용자 동작</span><input class="ed-label" id="edLabel" value="${esc(curLabel(n))}">
+      <div class="plainbox">${esc(a.plain||a.detail||"")}</div>`;
+    if(a.ai)h+=`<div class="dh">사용하는 AI 기능</div><div class="item" data-go="${aiId(a.ai.purpose)}"><span class="kd" style="background:var(--ai)"></span><div><div>${esc(aiKo(a.ai.purpose))}</div><div class="sm">${esc(a.ai.model||"")} · ${esc(a.ai.via||"")}</div></div></div>`;
+    if((a.apis||[]).length){h+=`<div class="dh">데이터·서버 작업 (${a.apis.length})</div>`;a.apis.forEach(tag=>{const k=tag.split(":")[0];h+=`<div class="item" data-go="${apiId(tag)}"><span class="kd" style="background:${API_KIND_COLOR[k]||'var(--misc)'}"></span><div><div>${esc(apiKo(tag))}</div><div class="sm">${esc(KIND_KO[k]||k)}</div></div></div>`;});}
+    if((a.risks||[]).length){h+=`<div class="dh">이 동작의 조건·약점</div><div>`+a.risks.map(r=>`<span class="rchip" style="background:${RISK_COLOR[r]||'#888'}">${RISK_KO[r]||r}</span>`).join("")+`</div>`;}
+    if((a.checklist||[]).length){h+=`<div class="dh">안 될 때 확인하세요</div>`+a.checklist.map(c=>`<div class="kv">· ${esc(c)}</div>`).join("");}
+    if((a.failureModes||[]).length){h+=`<div class="dh">이렇게 안 될 수 있어요</div>`+a.failureModes.map(c=>`<div class="kv" style="color:var(--muted)">· ${esc(c)}</div>`).join("");}
+    h+=`<button class="btn" id="reportBug" style="width:100%;margin-top:14px;background:rgba(232,137,111,.14);border-color:#e8896f;color:#e8896f;font-weight:600">이 동작이 안 돼요 → 신고서 만들기</button>`;
+    h+=`<details class="dev"><summary></summary><div class="kv">기능: ${esc(a.feature||"")}</div><div class="kv">파일: ${esc(a.file||"")}</div><div class="kv">${esc(a.detail||"")}</div></details>`;
+  }else if(n.type==="api"){const d=n.data,users=[...(capUsers.get(selected)||[])],k=d.kind;
+    h+=`<span class="typetag" style="background:${(API_KIND_COLOR[k]||'#888')}22;color:${API_KIND_COLOR[k]||'#888'}">${KIND_KO[k]||k}</span><input class="ed-label" id="edLabel" value="${esc(curLabel(n))}">
+      <div class="plainbox">${esc(apiKo(d.tag))}</div>
+      <div class="dh">이 작업을 쓰는 동작 (${users.length})</div><div class="kv">${users.map(esc).join("<br>")||"-"}</div>
+      <details class="dev"><summary></summary><div class="kv">${esc(d.tag)}</div></details>`;
+  }else if(n.type==="ai"){const d=n.data,users=[...(capUsers.get(selected)||[])],g=GAI[d.purpose]||{};
+    h+=`<span class="typetag" style="background:#d8a65722;color:#d8a657">AI 기능</span><input class="ed-label" id="edLabel" value="${esc(curLabel(n))}">
+      <div class="plainbox">${esc(g.desc||aiKo(d.purpose))}</div>
+      <div class="dh">동작 방식</div><div class="kv" style="color:var(--muted)">앱의 단일 AI 창구(callGemini)를 거칩니다. 먼저 <b>안전 검사</b>(위기·금지어)를 한 뒤 AI 모델을 부르고 기록을 남겨요. '서버 경유'면 키를 숨긴 서버 함수로 호출됩니다.</div>
+      <div class="dh">모델</div><div class="kv">${esc(d.model||"")} · ${esc(d.via||"")}</div>
+      <div class="dh">이 AI를 쓰는 동작 (${users.length})</div><div class="kv">${users.map(esc).join("<br>")||"-"}</div>
+      <details class="dev"><summary></summary><div class="kv">purpose: ${esc(d.purpose)}</div></details>`;
+  }
+  h+=`<div class="dh">고칠 점 메모</div><textarea class="note" id="edNote" placeholder="예: 이 이름이 어색해요 / 실제로는 ~도 해요 / 이 동작은 빼주세요">${esc(ed.note||"")}</textarea>
+    <div class="flags"><div class="fbtn ${ed.flag==='틀림'?'on':''}" data-flag="틀림">틀렸어요</div><div class="fbtn ${ed.flag==='삭제'?'on':''}" data-flag="삭제">빼주세요</div><div class="fbtn ${ed.flag==='추가'?'on':''}" data-flag="추가">더 봐주세요</div></div>
+    <div class="hint">이름 수정·메모·표시는 <b>수정 요청 만들기</b> 탭에 자동으로 모여요.</div>`;
+  sideBody.innerHTML=h;
+  document.getElementById("edLabel").onchange=ev=>{const v=ev.target.value;setEdit(selected,"label",v===origLabel(n)?"":v);render();};
+  document.getElementById("edNote").onchange=ev=>setEdit(selected,"note",ev.target.value.trim());
+  document.querySelectorAll(".fbtn").forEach(b=>b.onclick=()=>{const f=b.dataset.flag,cur=(state.edits[selected]||{}).flag;setEdit(selected,"flag",cur===f?"":f);renderDetail();render();});
+  document.querySelectorAll("[data-go]").forEach(r=>r.onclick=()=>{const go=r.dataset.go;if(nodes.get(go)){selected=go;render();}});
+  var rb=document.getElementById("reportBug"); if(rb)rb.onclick=()=>{state.bugs=state.bugs||{};if(!state.bugs[selected])state.bugs[selected]={};save();updateEditCount();setTab("bug");};
+}
+function renderPrompt(){
+  const lines=["아래는 2nd-B 기능 흐름도에서 내가 요청하는 수정사항이야. 각 항목을 검토해서 (1) 흐름도 설명이 틀렸으면 정정하고 (2) 코드 변경이 필요하면 제안/적용해줘.\n"];
+  for(const [id,ed] of Object.entries(state.edits)){const n=nodes.get(id);if(!n)continue;const tt=(TYPETAG[n.type]||[""])[0];
+    const ctx=n.type==="action"&&n.screen?`[${scrTitle(n.screen)}] `:"";const ref=`${tt} "${origLabel(n)}"`;const code=codeRef(n)?` (코드: ${codeRef(n)})`:"";
+    const p=[];if(ed.label&&ed.label!==origLabel(n))p.push(`이름을 "${ed.label}"(으)로 변경`);if(ed.flag)p.push(`[${ed.flag}]`);if(ed.note)p.push(`메모: ${ed.note}`);
+    if(p.length)lines.push(`- ${ctx}${ref}${code} → ${p.join(" / ")}`);}
+  const ae=state.addedEdges||[],re=state.removedEdges||[];
+  const lf=n=>{const tt=(TYPETAG[n.type]||[""])[0];const c=codeRef(n)?` (코드: ${codeRef(n)})`:"";return `${tt} "${origLabel(n)}"${c}`;};
+  if(ae.length||re.length){ lines.push("\n[연결 변경]");
+    ae.forEach(e=>{const f=nodes.get(e.from),t=nodes.get(e.to);if(f&&t)lines.push(`- 연결 추가: ${lf(f)} → ${lf(t)}`);});
+    re.forEach(k=>{const [from,to]=k.split(">>");const f=nodes.get(from),t=nodes.get(to);if(f&&t)lines.push(`- 연결 끊기: ${lf(f)} → ${lf(t)}`);}); }
+  if(state.globalNote)lines.push("\n[전체 메모]\n"+state.globalNote);
+  if(lines.length===1)lines.push("(아직 수정사항이 없어요 — 카드를 눌러 이름/메모/표시를 입력하거나, '연결 편집'으로 선을 잇고 끊어보세요.)");
+  const text=lines.join("\n");
+  sideBody.innerHTML=`<div class="prompt-wrap"><div class="dh">전체 메모 (자유 입력)</div>
+    <textarea class="note" id="gnote" placeholder="전반적으로 바라는 점을 적어주세요">${esc(state.globalNote)}</textarea>
+    <div class="dh">자동으로 만들어진 수정 요청</div><textarea class="prompt" id="promptOut" readonly>${esc(text)}</textarea>
+    <div style="display:flex;gap:8px;margin-top:10px"><button class="btn" id="copyPrompt" style="flex:1">요청 복사</button><button class="btn" id="clearEdits">수정 초기화</button></div>
+    <div class="hint">이 글을 복사해 채팅에 붙여넣으면, 내가 그대로 흐름도/코드를 고쳐드려요.</div></div>`;
+  document.getElementById("gnote").onchange=ev=>{state.globalNote=ev.target.value.trim();save();updateEditCount();renderPrompt();};
+  document.getElementById("copyPrompt").onclick=()=>navigator.clipboard.writeText(text).then(()=>{const b=document.getElementById("copyPrompt");b.textContent="복사됨 ✓";setTimeout(()=>b.textContent="요청 복사",1200);});
+  document.getElementById("clearEdits").onclick=()=>{if(confirm("입력한 이름/메모/표시와 연결 변경을 모두 지울까요? (위치·펼침은 유지)")){state.edits={};state.globalNote="";state.addedEdges=[];state.removedEdges=[];save();updateEditCount();renderPrompt();render();}};
+}
+function buildBugReport(ids){
+  const out=["[버그 신고서] 2nd-B — 비개발자가 작성했어요. 아래 '코드' 경로와 '점검 포인트'부터 원인을 찾아 고쳐줘.\n"];
+  ids.forEach(id=>{const n=nodes.get(id);if(!n)return;const a=n.data,b=(state.bugs||{})[id]||{};
+    out.push(`■ 안 되는 동작: ${dispLabel(n)}${n.screen?"  (화면: "+scrTitle(n.screen)+" "+n.screen.data.route+")":""}`);
+    if(a.feature||a.file)out.push(`  코드: ${a.feature||""}${a.file?" @ "+a.file:""}`);
+    if(b.symptom)out.push(`  무슨 일이: ${b.symptom}`);
+    if(b.expected)out.push(`  바란 것: ${b.expected}`);
+    if(b.repro)out.push(`  하던 중: ${b.repro}`);
+    if(a.ai)out.push(`  의존 AI: ${aiKo(a.ai.purpose)} (${a.ai.purpose}${a.ai.model?", "+a.ai.model:""}${a.ai.via?", "+a.ai.via:""})`);
+    if((a.apis||[]).length)out.push(`  의존 작업: ${a.apis.map(t=>apiKo(t)+" ["+t+"]").join(", ")}`);
+    if((a.risks||[]).length)out.push(`  점검 포인트(약점): ${a.risks.map(r=>RISK_KO[r]||r).join(", ")}`);
+    out.push("");});
+  return out.join("\n");
+}
+function renderBug(){
+  const ids=Object.keys(state.bugs||{});
+  let h=`<div class="dh">고장난 동작 신고</div>
+    <div class="hint">동작 카드를 열고 <b>'이 동작이 안 돼요 → 신고서 만들기'</b>를 누르면 여기에 추가돼요. 무슨 일이 있었는지만 적으면, 개발자가 바로 고칠 수 있는 신고서(코드 경로 포함)가 자동으로 만들어집니다.</div>`;
+  if(!ids.length){ h+=`<div class="empty">아직 신고한 동작이 없어요.<br><br>왼쪽 흐름도에서 안 되는 동작 카드를 열고<br><b>'이 동작이 안 돼요'</b>를 눌러보세요.</div>`; sideBody.innerHTML=h; return; }
+  ids.forEach(id=>{const n=nodes.get(id);if(!n)return;const b=state.bugs[id]||{};
+    h+=`<div class="actrow" style="cursor:default">
+      <div class="an">${esc(dispLabel(n))} <span class="rchip" style="background:#e8896f">고장</span></div>
+      ${n.screen?`<div class="ap">${esc(scrTitle(n.screen))} 화면</div>`:""}
+      <div class="dh">무슨 일이 있었나요?</div><textarea class="note" data-bug="${id}" data-f="symptom" placeholder="예: 로그인 버튼을 눌러도 아무 반응이 없었어요">${esc(b.symptom||"")}</textarea>
+      <div class="dh">어떻게 되길 바랐나요?</div><textarea class="note" data-bug="${id}" data-f="expected" placeholder="예: 로그인되고 홈 화면으로 넘어가길 바랐어요">${esc(b.expected||"")}</textarea>
+      <div class="dh">어떻게 하다가 그랬나요? (선택)</div><textarea class="note" data-bug="${id}" data-f="repro" placeholder="예: 카카오로 로그인을 누르고 잠깐 기다렸더니">${esc(b.repro||"")}</textarea>
+      <button class="btn" data-rmbug="${id}" style="margin-top:8px">이 신고 빼기</button></div>`;});
+  const rep=buildBugReport(ids);
+  h+=`<div class="dh">자동 생성된 버그 신고서 (개발자에게 전달)</div>
+    <textarea class="prompt" id="bugOut" style="min-height:200px" readonly>${esc(rep)}</textarea>
+    <button class="btn" id="copyBug" style="width:100%;margin-top:10px">신고서 복사</button>
+    <div class="hint">복사해서 채팅에 붙여넣으면, 적힌 코드 경로부터 원인을 찾아 고쳐드려요.</div>`;
+  sideBody.innerHTML=h;
+  document.querySelectorAll("[data-bug]").forEach(t=>t.onchange=ev=>{const id=ev.target.dataset.bug,f=ev.target.dataset.f;state.bugs[id]=state.bugs[id]||{};state.bugs[id][f]=ev.target.value.trim();save();const o=document.getElementById("bugOut");if(o)o.value=buildBugReport(Object.keys(state.bugs));});
+  document.querySelectorAll("[data-rmbug]").forEach(b=>b.onclick=()=>{delete state.bugs[b.dataset.rmbug];save();updateEditCount();renderBug();});
+  document.getElementById("copyBug").onclick=()=>navigator.clipboard.writeText(rep).then(()=>{const b=document.getElementById("copyBug");b.textContent="복사됨 ✓";setTimeout(()=>b.textContent="신고서 복사",1200);});
+}
+
+/* ---------- toolbar ---------- */
+document.getElementById("search").oninput=e=>{searchTerm=e.target.value.trim();render();};
+document.getElementById("aiOnly").onclick=e=>{aiOnly=!aiOnly;e.target.classList.toggle("on",aiOnly);render();};
+document.getElementById("expandAll").onclick=()=>{screens.forEach(s=>{if(groupOn(s.group)){expanded.add(s.id);state.expanded[s.id]=true;}});save();render();};
+document.getElementById("collapseAll").onclick=()=>{expanded.clear();state.expanded={};save();render();};
+document.getElementById("autoArrange").onclick=()=>{state.pos={};save();render();fit();};
+document.getElementById("resetAll").onclick=()=>{if(confirm("위치·펼침·수정·필터를 모두 초기화할까요?")){localStorage.removeItem(LSKEY);location.reload();}};
+function renderChips(){document.getElementById("chips").innerHTML=GROUP_ORDER.map(g=>`<div class="chip ${groupOn(g)?"":"off"}" data-g="${g}"><span class="gd" style="background:${GROUP_COLOR[g]}"></span>${GROUP_LABEL[g]}</div>`).join("");
+  document.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{const g=c.dataset.g;state.groupsOff[g]=groupOn(g);save();renderChips();render();});}
+
+renderChips();render();renderDetail();updateEditCount();
+</script>
+</body>
+</html>

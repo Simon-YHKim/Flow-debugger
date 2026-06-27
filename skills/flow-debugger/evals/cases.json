@@ -1,0 +1,25 @@
+{
+  "skill": "flow-debugger",
+  "version": "0.1.0",
+  "cases": [
+    {
+      "id": "nondev-flow-debug-ko",
+      "prompt": "비개발자도 알아보게 우리 앱 화면 흐름도 만들어서 어디서 막히는지 디버깅하게 해줘",
+      "assertions": [
+        { "id": "precheck-screen-code", "text": "Requires real screen code and stops to ask for the path if none is found" },
+        { "id": "screen-action-api-map", "text": "Maps each screen to its user actions, data/server calls (db/rpc/edge/storage/auth) and AI calls with file:line" },
+        { "id": "debug-annotations", "text": "Adds per-action risk markers, plain-Korean diagnostic checklists, and failure modes" },
+        { "id": "self-contained-html", "text": "Produces one self-contained interactive flow-debugger.html and verifies the embedded script parses" }
+      ]
+    },
+    {
+      "id": "bug-report-from-symptom-en",
+      "prompt": "make a visual flow debugger so a non-developer can report why a screen is broken",
+      "assertions": [
+        { "id": "plain-language", "text": "Uses plain Korean labels and hides code identifiers under a separate dev-info section" },
+        { "id": "bug-report-generator", "text": "Includes a bug-report generator that turns a vague symptom into a precise file:line report with dependency path and risk flags" },
+        { "id": "editable-loop", "text": "Supports drag-and-drop, connection editing, and a copy-paste prompt to send fixes back to the assistant" }
+      ]
+    }
+  ]
+}
