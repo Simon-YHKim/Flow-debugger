@@ -3,6 +3,12 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.1.1] - 2026-06-28
+
+### Added
+- README preview screenshots (`docs/overview.png`, `docs/debug-detail.png`) showing
+  the grouped screen map and the per-action diagnostic panel.
+
 ## [0.1.0] - 2026-06-28
 
 ### Added
