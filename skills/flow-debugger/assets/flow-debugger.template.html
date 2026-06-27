@@ -140,6 +140,7 @@
   <div class="ctrl">
     <input class="search" id="search" placeholder="화면·기능 검색">
     <button class="btn" id="aiOnly">AI 기능만</button>
+    <button class="btn" id="harnessBtn" title="AI가 어떻게 엮여 도는지 (게이트웨이·안전검사·티어·프록시·모델·감사)">AI 하네스</button>
     <button class="btn" id="expandAll">전체 펼치기</button>
     <button class="btn" id="collapseAll">모두 접기</button>
     <button class="btn" id="linkMode" title="카드의 점을 끌어 연결을 잇고, 선을 눌러 끊기">연결 편집</button>
@@ -255,8 +256,8 @@ function scrTitle(s){return s.titleKo||s.title||s.route;}
 function actLabel(a){return a.actionKo||a.action;}
 function apiKo(t){return(GAPI[t]&&GAPI[t].ko)||t;}
 function aiKo(p){return(GAI[p]&&GAI[p].ko)||p;}
-function dispLabel(n){return n.type==="screen"?scrTitle(n.data):n.type==="action"?actLabel(n.data):n.type==="api"?apiKo(n.data.tag):aiKo(n.data.purpose);}
-function codeRef(n){return n.type==="screen"?n.data.route:n.type==="action"?((n.data.feature||"")+(n.data.file?" @ "+n.data.file:"")):n.type==="api"?n.data.tag:n.data.purpose;}
+function dispLabel(n){if(n.type==="h")return n.label;return n.type==="screen"?scrTitle(n.data):n.type==="action"?actLabel(n.data):n.type==="api"?apiKo(n.data.tag):aiKo(n.data.purpose);}
+function codeRef(n){if(n.type==="h")return "";return n.type==="screen"?n.data.route:n.type==="action"?((n.data.feature||"")+(n.data.file?" @ "+n.data.file:"")):n.type==="api"?n.data.tag:n.data.purpose;}
 
 /* ---------- state ---------- */
 const LSKEY="2ndb-flowmap-v3";
@@ -278,11 +279,43 @@ function matchSearch(n){ if(!searchTerm)return true;const t=searchTerm.toLowerCa
   if(n.type==="screen")return(n.data.actions||[]).some(a=>(actLabel(a)+(a.plain||"")).toLowerCase().includes(t))||(n.data.summaryKo||"").toLowerCase().includes(t);
   if(n.type==="action")return((n.data.plain||"")+(n.data.feature||"")).toLowerCase().includes(t); return false; }
 function visibleNodes(){ const vis=new Set();
+  if(harnessMode){ HARNESS.nodes.forEach(n=>vis.add(n.id)); return vis; }
   screens.forEach(s=>{if(groupOn(s.group)&&matchSearch(nodes.get(s.id)))vis.add(s.id);});
   screens.forEach(s=>{ if(!vis.has(s.id)||!expanded.has(s.id))return;
     (s.actions||[]).forEach((a,i)=>{const aid=actId(s,i);if(aiOnly&&!a.ai)return;vis.add(aid);
       if(!aiOnly)(a.apis||[]).forEach(tag=>vis.add(apiId(tag))); if(a.ai)vis.add(aiId(a.ai.purpose));}); });
   return vis; }
+
+/* ---------- AI 하네스 (앱 안 AI가 어떻게 엮여 도는지 + 각 역할) ---------- */
+let harnessMode=false;
+const HARNESS={ nodes:[
+  {id:"h:input",hx:0,hy:80,color:"#8b93ff",label:"사용자 입력 → AI 기능",role:"화면의 어떤 동작이 AI를 부르면 여기서 시작돼요. 어떤 목적(15종)인지 정해집니다.",detail:"PromptPurpose 15종. 호출부=각 동작의 feature(예: classifyClipper, sendChatMessage)."},
+  {id:"h:safein",hx:215,hy:80,color:"#e8896f",label:"① 안전검사 (입력)",role:"모델을 부르기 전에 위기·금지어를 먼저 검사. 위기면 모델 없이 바로 상담 핫라인을 보여줘요.",detail:"C9: classifyInput(렉시콘, 동기) + classifySafety(Gemini-flash, C-SSRS). 위기=KR 109/1388·EN 988. src/lib/safety/*, src/lib/llm/safety.ts"},
+  {id:"h:gw",hx:430,hy:80,color:"#8b93ff",label:"② callGemini 게이트웨이",role:"앱의 모든 AI 호출이 반드시 지나는 단 하나의 창구예요.",detail:"C1: src/lib/llm/gemini.ts 만 @google/genai import(ESLint 강제). callGemini/callAdvisor/embedTexts/transcribeAudio."},
+  {id:"h:tlite",hx:660,hy:-20,color:"#7fd1b9",label:"lite 티어",role:"분류·태그처럼 가볍고 양이 많은 작업.",detail:"capture_classify, clipper_classify"},
+  {id:"h:tflash",hx:660,hy:70,color:"#6fb6ff",label:"flash 티어",role:"대화·요약·추출 등 대부분의 실시간 작업.",detail:"secondb_chat, persona_chat, ocr, voice, ops_recommend, knowledge_lookup, import_ingest, persona_synthesis, audit_qa, inbox phase1/2, format_propose, crisis"},
+  {id:"h:tpro",hx:660,hy:160,color:"#b89cff",label:"pro 티어 (추론)",role:"깊은 추론이 필요한 무거운 작업.",detail:"advisor, journal_reflect, interview_probe, imagine + reasoning effort(low/high/xhigh/max)"},
+  {id:"h:tembed",hx:660,hy:250,color:"#9a9ab2",label:"임베딩",role:"글을 숫자(벡터)로 바꿔 비슷한 기록을 찾는 데 써요.",detail:"text-embedding-004(768d). 레드존 텍스트는 영벡터."},
+  {id:"h:gproxy",hx:905,hy:55,color:"#e0a35c",label:"gemini-proxy (엣지 함수)",role:"키를 숨긴 서버 함수로 호출. 로그인 확인·비용 상한·서버측 위기검사·권한확인을 한 번 더 막아요.",detail:"supabase/functions/gemini-proxy: JWT role=authenticated, bump_gemini_spend, hasCrisisTerm→422, SAFETY_PREAMBLE, PREMIUM_PURPOSES{advisor,planner}=brain, sub-brain pro→flash 다운그레이드"},
+  {id:"h:cproxy",hx:905,hy:185,color:"#e0a35c",label:"claude-proxy (예약)",role:"Claude로 추론을 돌릴 수 있는 예약 경로(현재 비활성).",detail:"supabase/functions/claude-proxy: gemini-proxy 미러, 기본 claude-sonnet-4-6, EXPO_PUBLIC_REASONING_PROVIDER=claude일 때만"},
+  {id:"h:spend",hx:905,hy:300,color:"#e8896f",label:"스펜드 캡 (비용 상한)",role:"하루에 부를 수 있는 AI 횟수 상한 — 비용 폭주를 막아요.",detail:"RPC bump_gemini_spend: free 200 / sub 350 / brain 500 per day. 초과=429"},
+  {id:"h:mlite",hx:1155,hy:-20,color:"#7fd1b9",label:"gemini-2.5-flash-lite",role:"가벼운 분류 모델.",detail:"EXPO_PUBLIC_MODEL_LITE"},
+  {id:"h:mflash",hx:1155,hy:60,color:"#6fb6ff",label:"gemini-2.5-flash",role:"기본 실시간 모델.",detail:"EXPO_PUBLIC_MODEL_FLASH (전략문서 목표=gemini-3.5-flash)"},
+  {id:"h:mpro",hx:1155,hy:150,color:"#b89cff",label:"gemini-2.5-pro",role:"추론용 모델.",detail:"EXPO_PUBLIC_MODEL_PRO (전략문서 목표=3.x-pro/Opus 4.8)"},
+  {id:"h:mclaude",hx:1155,hy:235,color:"#d8a657",label:"claude-sonnet-4-6",role:"예약된 Claude 모델.",detail:"claude-proxy ANTHROPIC_MODEL"},
+  {id:"h:safeout",hx:1395,hy:50,color:"#e8896f",label:"③ 안전검사 (출력)",role:"AI 답변도 다시 검사해서, 위험하면 안전 안내문으로 바꿔요.",detail:"출력 재분류 + fixedCrisisResponse 스왑(modelUsed에 +swap 마커)"},
+  {id:"h:audit",hx:1395,hy:160,color:"#9a9ab2",label:"④ C3 감사로그",role:"모든 AI 호출을 기록으로 남겨요(내용은 해시로).",detail:"ai_audit_log via log_ai_audit RPC(SECURITY DEFINER, user_id=auth.uid()), enqueueAuditWrite 아웃박스 큐"},
+], edges:[
+  ["h:input","h:safein"],["h:safein","h:gw"],
+  ["h:gw","h:tlite"],["h:gw","h:tflash"],["h:gw","h:tpro"],["h:gw","h:tembed"],
+  ["h:tlite","h:gproxy"],["h:tflash","h:gproxy"],["h:tpro","h:gproxy"],["h:tembed","h:gproxy"],["h:gw","h:cproxy"],
+  ["h:gproxy","h:spend"],["h:cproxy","h:spend"],
+  ["h:gproxy","h:mlite"],["h:gproxy","h:mflash"],["h:gproxy","h:mpro"],["h:cproxy","h:mclaude"],
+  ["h:mlite","h:safeout"],["h:mflash","h:safeout"],["h:mpro","h:safeout"],["h:mclaude","h:safeout"],
+  ["h:safeout","h:audit"],
+]};
+HARNESS.nodes.forEach(n=>{ n.type="h"; nodes.set(n.id,n); });
+HARNESS.edges.forEach(([from,to])=>edges.push({from,to,kind:"h"}));
 
 const COLX={screen:0,action:320,api:672,ai:952};
 const colX=n=>COLX[n.type]||0;
@@ -309,18 +342,20 @@ function nodeHtml(n){
     return `<div class="node api${sel}${lit}${dim}" data-id="${n.id}"><div class="pad"><div class="t"><span class="kd" style="background:${c}"></span><span>${lab}</span></div></div></div>`;}
   if(n.type==="ai"){
     return `<div class="node ai${sel}${lit}" data-id="${n.id}"><div class="pad"><div class="t"><span>${lab}</span></div><div class="sub">${esc(n.data.model||"")}</div></div></div>`;}
+  if(n.type==="h"){const c=n.color||"#8b93ff";
+    return `<div class="node${sel}${lit}" data-id="${n.id}" style="width:208px;border-top:3px solid ${c}"><div class="pad"><div class="t">${esc(n.label)}</div><div class="sub">${esc(n.role)}</div></div></div>`;}
   return "";
 }
 let connected={has:()=>false};
 function render(){
   const vis=visibleNodes();
   nodesEl.innerHTML="";els={};
-  for(const [id,n] of nodes){ if(!vis.has(id))continue; n.x=state.pos[id]?state.pos[id].x:colX(n); n.y=state.pos[id]?state.pos[id].y:0;
+  for(const [id,n] of nodes){ if(!vis.has(id))continue; n.x=state.pos[id]?state.pos[id].x:(n.type==="h"?n.hx:colX(n)); n.y=state.pos[id]?state.pos[id].y:(n.type==="h"?n.hy:0);
     const wrap=document.createElement("div");wrap.innerHTML=nodeHtml(n);const el=wrap.firstElementChild;el.style.left=n.x+"px";el.style.top=n.y+"px";
     const port=document.createElement("span");port.className="port";port.dataset.port=id;el.appendChild(port);
     nodesEl.appendChild(el);els[id]=el; }
   for(const id in els)nodes.get(id).h=els[id].offsetHeight;
-  packColumns(vis);
+  if(harnessMode){groupLabelPos=[];}else{packColumns(vis);}
   for(const id in els){const n=nodes.get(id);els[id].style.left=n.x+"px";els[id].style.top=n.y+"px";}
   drawEdges(vis);drawGroupLabels();applyView();updateStat(vis);drawMinimap(vis);
 }
@@ -444,6 +479,17 @@ const TYPETAG={screen:["화면","#8b93ff"],action:["사용자 동작","#8b93ff"]
 function renderDetail(){
   if(!selected){sideBody.innerHTML=`<div class="empty">왼쪽에서 <b>화면 카드</b>를 눌러보세요.<br>아이콘·썸네일로 어떤 화면인지<br>알아볼 수 있어요.<br><br>누르면 그 화면의 동작과<br>AI·데이터 작업이 펼쳐지고<br>여기에 쉬운 설명이 나옵니다.</div>`;return;}
   const n=nodes.get(selected),ed=state.edits[selected]||{},tt=TYPETAG[n.type]||["",""];
+  if(n.type==="h"){
+    const ins=[...new Set(edges.filter(e=>e.to===n.id).map(e=>nodes.get(e.from)).filter(Boolean).map(x=>x.label))];
+    const outs=[...new Set(edges.filter(e=>e.from===n.id).map(e=>nodes.get(e.to)).filter(Boolean).map(x=>x.label))];
+    sideBody.innerHTML=`<span class="typetag" style="background:${n.color}22;color:${n.color}">AI 하네스 단계</span>
+      <div class="ed-label" style="cursor:default">${esc(n.label)}</div>
+      <div class="plainbox">${esc(n.role)}</div>
+      ${ins.length?`<div class="dh">받는 입력</div>${ins.map(x=>`<div class="kv">← ${esc(x)}</div>`).join("")}`:""}
+      ${outs.length?`<div class="dh">다음 단계</div>${outs.map(x=>`<div class="kv">→ ${esc(x)}</div>`).join("")}`:""}
+      ${n.detail?`<details class="dev" open><summary></summary><div class="kv">${esc(n.detail)}</div></details>`:""}`;
+    return;
+  }
   let h="";
   if(n.type==="screen"){const s=n.data,ty=screenType(s),gc=GROUP_COLOR[s.group];
     h+=`<div class="dtitle"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><div><span class="typetag" style="background:${gc}22;color:${gc}">화면 · ${TYPE_KO[ty]||""}</span></div></div>
@@ -550,6 +596,8 @@ function renderBug(){
 /* ---------- toolbar ---------- */
 document.getElementById("search").oninput=e=>{searchTerm=e.target.value.trim();render();};
 document.getElementById("aiOnly").onclick=e=>{aiOnly=!aiOnly;e.target.classList.toggle("on",aiOnly);render();};
+document.getElementById("harnessBtn").onclick=e=>{harnessMode=!harnessMode;e.target.classList.toggle("on",harnessMode);selected=null;hoverId=null;connected={has:()=>false};render();fit();renderDetail();
+  document.getElementById("stat").textContent = harnessMode ? "AI 하네스 보기 — 입력 → 안전검사 → 게이트웨이 → 티어 → 프록시 → 모델 → 출력검사 → 감사" : document.getElementById("stat").textContent;};
 document.getElementById("expandAll").onclick=()=>{screens.forEach(s=>{if(groupOn(s.group)){expanded.add(s.id);state.expanded[s.id]=true;}});save();render();};
 document.getElementById("collapseAll").onclick=()=>{expanded.clear();state.expanded={};save();render();};
 document.getElementById("autoArrange").onclick=()=>{state.pos={};save();render();fit();};

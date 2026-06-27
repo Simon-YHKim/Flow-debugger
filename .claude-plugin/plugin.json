@@ -2,7 +2,7 @@
   "name": "flow-debugger",
   "displayName": "Flow Debugger",
   "description": "Visual workflow debugger for non-developers: maps every app screen to its user actions, data/server/AI calls, with risk markers, diagnostic checklists, connection editing, and a file:line bug-report generator. Produces one self-contained interactive HTML.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "author": { "name": "Simon Kim" },
   "homepage": "https://github.com/Simon-YHKim/Flow-debugger",
   "repository": "https://github.com/Simon-YHKim/Flow-debugger",

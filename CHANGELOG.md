@@ -3,6 +3,17 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.1.2] - 2026-06-28
+
+### Added
+- "AI 하네스" view (toolbar toggle): a left-to-right pipeline showing how the
+  app's AI is wired (input -> safety check -> callGemini gateway -> tier ->
+  edge proxy + spend cap -> model -> output safety -> audit) with a plain-Korean
+  role description for each stage on click.
+
+### Fixed
+- dispLabel/codeRef now handle harness nodes (no data field) instead of throwing.
+
 ## [0.1.1] - 2026-06-28
 
 ### Added
