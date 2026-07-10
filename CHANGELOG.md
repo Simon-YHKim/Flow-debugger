@@ -3,6 +3,25 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.1.3] - 2026-07-10
+
+### Fixed
+- **Layout no longer overlaps.** The old column packer only placed screens whose
+  group id was in a hard-coded list, so a scan using any other group taxonomy left
+  every screen stacked at the origin. Groups are now derived from the scan data
+  (any group ids work), and each screen owns a vertical band that also holds its
+  own actions, so nodes never overlap — verified 0 overlaps with all 82 screens /
+  490 nodes expanded.
+- **Connector lines no longer hide behind nodes.** `api` and `ai` were separate
+  columns, so an action->ai edge crossed over the api column. They are now one
+  adjacent "capability" sink column, so every edge travels an empty gutter and
+  never crosses a node. The sink is ordered by the barycenter of the actions that
+  use each capability to reduce edge crossings.
+- **Group filter chips** now reflect the actual scan groups (were hard-coded to a
+  fixed set that didn't match arbitrary data, making the toggles no-ops).
+- Bumped the localStorage key so stale saved positions from the old layout are
+  discarded on first open.
+
 ## [0.1.2] - 2026-06-28
 
 ### Added

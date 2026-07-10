@@ -259,8 +259,20 @@ function aiKo(p){return(GAI[p]&&GAI[p].ko)||p;}
 function dispLabel(n){if(n.type==="h")return n.label;return n.type==="screen"?scrTitle(n.data):n.type==="action"?actLabel(n.data):n.type==="api"?apiKo(n.data.tag):aiKo(n.data.purpose);}
 function codeRef(n){if(n.type==="h")return "";return n.type==="screen"?n.data.route:n.type==="action"?((n.data.feature||"")+(n.data.file?" @ "+n.data.file:"")):n.type==="api"?n.data.tag:n.data.purpose;}
 
+/* ---------- dynamic groups (works for ANY group names, not just the 2nd-B set) ---------- */
+/* The scan data can use any group ids; derive order/label/color from what actually
+   appears so screens are never left unplaced (the old hard-coded GROUP_ORDER left
+   unknown-group screens stacked at the origin). Known ids keep their curated
+   label/color; unknown ids get a prettified label + a palette colour. */
+const GPALETTE=["#8b93ff","#6fb6ff","#7fd1b9","#b89cff","#d8a657","#e8896f","#9fd0e0","#c0a0c8","#8fd694","#e0a35c","#7aa0ff","#d78fb8"];
+const GROUPS=[...new Set(screens.map(s=>s.group))];
+GROUPS.forEach((g,i)=>{
+  if(!(g in GROUP_LABEL))GROUP_LABEL[g]=String(g).replace(/[-_]+/g," ").replace(/\b\w/g,c=>c.toUpperCase());
+  if(!(g in GROUP_COLOR))GROUP_COLOR[g]=GPALETTE[i%GPALETTE.length];
+});
+
 /* ---------- state ---------- */
-const LSKEY="2ndb-flowmap-v3";
+const LSKEY="flowdbg-v4";
 let state={pos:{},edits:{},expanded:{},groupsOff:{},globalNote:"",addedEdges:[],removedEdges:[],bugs:{}};
 try{state={...state,...JSON.parse(localStorage.getItem(LSKEY)||"{}")};}catch(e){}
 const save=()=>localStorage.setItem(LSKEY,JSON.stringify(state));
@@ -317,7 +329,10 @@ const HARNESS={ nodes:[
 HARNESS.nodes.forEach(n=>{ n.type="h"; nodes.set(n.id,n); });
 HARNESS.edges.forEach(([from,to])=>edges.push({from,to,kind:"h"}));
 
-const COLX={screen:0,action:320,api:672,ai:952};
+/* 3 columns only: screen(0) -> action(320) -> capability(680, api+ai merged).
+   Merging api+ai into ONE adjacent sink column means every edge (screen->action,
+   action->capability) travels a single empty gutter and never crosses over a node. */
+const COLX={screen:0,action:320,api:680,ai:680};
 const colX=n=>COLX[n.type]||0;
 
 /* ---------- render (measure -> pack -> no overlap) ---------- */
@@ -359,13 +374,33 @@ function render(){
   for(const id in els){const n=nodes.get(id);els[id].style.left=n.x+"px";els[id].style.top=n.y+"px";}
   drawEdges(vis);drawGroupLabels();applyView();updateStat(vis);drawMinimap(vis);
 }
-function packColumns(vis){const GAP=16,HEAD=28,GG=18;groupLabelPos=[];
-  let y=8; for(const g of GROUP_ORDER){const scrs=screens.filter(s=>s.group===g&&vis.has(s.id));if(!scrs.length)continue;groupLabelPos.push({g,x:COLX.screen,y});y+=HEAD;
-    for(const s of scrs){const n=nodes.get(s.id);if(state.pos[s.id])continue;n.x=COLX.screen;n.y=y;y+=(n.h||120)+GAP;}y+=GG;}
-  let y1=8;for(const g of GROUP_ORDER)for(const s of screens.filter(s=>s.group===g&&vis.has(s.id)&&expanded.has(s.id))){
-    (s.actions||[]).forEach((a,i)=>{const id=actId(s,i);if(!vis.has(id)||state.pos[id])return;const n=nodes.get(id);n.x=COLX.action;n.y=y1;y1+=(n.h||56)+GAP;});}
-  let y2=8,y3=8;for(const [id,n] of nodes){if(!vis.has(id)||state.pos[id])continue;
-    if(n.type==="api"){n.x=COLX.api;n.y=y2;y2+=(n.h||40)+GAP;}if(n.type==="ai"){n.x=COLX.ai;n.y=y3;y3+=(n.h||46)+GAP;}}
+/* Layout: each screen owns a vertical BAND that also holds its own actions, so
+   actions sit beside their screen and can never overlap another screen's actions.
+   Capabilities (api+ai) are a single shared sink column ordered by the average y
+   of the actions that use them (barycenter) to minimise edge crossings. Dragged
+   nodes (state.pos) keep their manual position and drop out of the auto flow. */
+function packColumns(vis){const GAP=16,HEAD=30,GG=26,BANDGAP=20;groupLabelPos=[];
+  const actCy={}; // action id -> centre y, for capability barycenter ordering
+  let y=8;
+  for(const g of GROUPS){
+    const scrs=screens.filter(s=>s.group===g&&vis.has(s.id)); if(!scrs.length)continue;
+    groupLabelPos.push({g,x:COLX.screen,y}); y+=HEAD;
+    for(const s of scrs){
+      const sn=nodes.get(s.id), dragged=!!state.pos[s.id];
+      const top=dragged?state.pos[s.id].y:y;
+      if(!dragged){sn.x=COLX.screen;sn.y=top;}
+      let ay=top, hasAct=false;
+      if(expanded.has(s.id))(s.actions||[]).forEach((a,i)=>{const id=actId(s,i);if(!vis.has(id))return;const an=nodes.get(id);
+        const adr=!!state.pos[id]; if(!adr){an.x=COLX.action;an.y=ay;}
+        actCy[id]=(adr?state.pos[id].y:ay)+((an.h||56)/2); ay+=(an.h||56)+GAP; hasAct=true;});
+      if(!dragged){const bandH=Math.max(sn.h||120, hasAct?(ay-top-GAP):0); y=top+bandH+BANDGAP;}
+    }
+    y+=GG;
+  }
+  const caps=[...nodes.values()].filter(n=>(n.type==="api"||n.type==="ai")&&vis.has(n.id));
+  const bary=n=>{let s=0,c=0;effEdges().forEach(e=>{if(e.to===n.id&&actCy[e.from]!=null){s+=actCy[e.from];c++;}});return c?s/c:1e9;};
+  caps.sort((p,q)=>bary(p)-bary(q));
+  let cy=8;for(const n of caps){if(state.pos[n.id])continue;n.x=COLX.api;n.y=cy;cy+=(n.h||44)+GAP;}
 }
 function drawEdges(vis){let svg="";effEdges().forEach(e=>{if(!vis.has(e.from)||!vis.has(e.to))return;const a=nodes.get(e.from),b=nodes.get(e.to);
   const x1=a.x+(els[a.id]?els[a.id].offsetWidth:260),y1=a.y+(a.h||60)/2,x2=b.x,y2=b.y+(b.h||40)/2,mx=(x1+x2)/2;
@@ -602,7 +637,7 @@ document.getElementById("expandAll").onclick=()=>{screens.forEach(s=>{if(groupOn
 document.getElementById("collapseAll").onclick=()=>{expanded.clear();state.expanded={};save();render();};
 document.getElementById("autoArrange").onclick=()=>{state.pos={};save();render();fit();};
 document.getElementById("resetAll").onclick=()=>{if(confirm("위치·펼침·수정·필터를 모두 초기화할까요?")){localStorage.removeItem(LSKEY);location.reload();}};
-function renderChips(){document.getElementById("chips").innerHTML=GROUP_ORDER.map(g=>`<div class="chip ${groupOn(g)?"":"off"}" data-g="${g}"><span class="gd" style="background:${GROUP_COLOR[g]}"></span>${GROUP_LABEL[g]}</div>`).join("");
+function renderChips(){document.getElementById("chips").innerHTML=GROUPS.map(g=>`<div class="chip ${groupOn(g)?"":"off"}" data-g="${g}"><span class="gd" style="background:${GROUP_COLOR[g]}"></span>${GROUP_LABEL[g]}</div>`).join("");
   document.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{const g=c.dataset.g;state.groupsOff[g]=groupOn(g);save();renderChips();render();});}
 
 renderChips();render();renderDetail();updateEditCount();
