@@ -25,10 +25,13 @@
 >   "actions":[{"action":"Submit clip","feature":"classifyClipper",
 >     "apis":["edge:gemini-proxy","db:sources:insert","rpc:bump_gemini_spend","storage:raw-clippings:upload"],
 >     "ai":{"purpose":"capture_classify","model":"gemini-2.5-flash","via":"proxy"},
->     "file":"src/app/capture.tsx:1155","detail":"무슨 일이 일어나는지 1-2문장"}]}]
+>     "file":"src/app/capture.tsx:1155","detail":"무슨 일이 일어나는지 1-2문장",
+>     "to":null}]}]
 > ```
 > 태그 형식: db:<table>:<select|insert|update|delete>, rpc:<name>, edge:<fn>,
 > storage:<bucket>:<op>, auth:<op>. ai 없으면 null. 유효한 JSON(쌍따옴표, trailing comma 금지).
+> **`to`**: 그 동작이 버튼/링크/router(push/replace/navigate/Link href)로 **다른 화면으로 이동**시키면
+> 대상 route(예 "/capture-full"), 이동이 아니면 null. (화면 흐름 뷰가 이 값으로 화면→화면 화살표를 그린다.)
 
 ## ENRICH
 

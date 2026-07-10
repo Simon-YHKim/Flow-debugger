@@ -40,6 +40,9 @@
   #world{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
   svg.edges{position:absolute;top:0;left:0;overflow:visible;pointer-events:none}
   .edge{fill:none;stroke:rgba(255,255,255,.14);stroke-width:1.4;pointer-events:none}
+  .navedge{fill:none;stroke:rgba(139,147,255,.4);stroke-width:1.6;pointer-events:none}
+  .navedge.hot{stroke:var(--accent);stroke-width:2.6}
+  .navlbl{fill:var(--text);font-size:11px;font-weight:600;paint-order:stroke;stroke:var(--bg);stroke-width:3.5px}
   .edge.hot{stroke:var(--accent);stroke-width:2.4}.edge.aiedge{stroke:rgba(216,166,87,.5)}.edge.aiedge.hot{stroke:var(--ai)}
   .edge.user{stroke:rgba(139,147,255,.6);stroke-dasharray:6 4}.edge.esel{stroke:#e8896f;stroke-width:2.8}
   .ehit{fill:none;stroke:transparent;stroke-width:16;pointer-events:stroke;cursor:pointer}
@@ -141,6 +144,7 @@
   <div class="ctrl">
     <input class="search" id="search" placeholder="화면·기능 검색">
     <button class="btn" id="aiOnly">AI 기능만</button>
+    <button class="btn" id="navFlowBtn" title="화면들이 버튼으로 어떻게 이어지는지 (버튼→다음 화면 이동 흐름)">화면 흐름</button>
     <button class="btn" id="harnessBtn" title="AI가 어떻게 엮여 도는지 (게이트웨이·안전검사·티어·프록시·모델·감사)">AI 하네스</button>
     <button class="btn" id="expandAll">전체 펼치기</button>
     <button class="btn" id="collapseAll">모두 접기</button>
@@ -255,6 +259,9 @@ screens.forEach(s=>{
 });
 function scrTitle(s){return s.titleKo||s.title||s.route;}
 function actLabel(a){return a.actionKo||a.action;}
+/* screen -> screen navigation edges: each navigating button (action.to) becomes one arrow */
+const NAV=[];
+screens.forEach(s=>{(s.actions||[]).forEach((a,i)=>{ if(a.to){const tid="s:"+a.to; if(nodes.has(tid)&&tid!==s.id)NAV.push({from:s.id,to:tid,label:actLabel(a),aid:actId(s,i)});} });});
 function apiKo(t){return(GAPI[t]&&GAPI[t].ko)||t;}
 function aiKo(p){return(GAI[p]&&GAI[p].ko)||p;}
 function dispLabel(n){if(n.type==="h")return n.label;return n.type==="screen"?scrTitle(n.data):n.type==="action"?actLabel(n.data):n.type==="api"?apiKo(n.data.tag):aiKo(n.data.purpose);}
@@ -293,6 +300,7 @@ function matchSearch(n){ if(!searchTerm)return true;const t=searchTerm.toLowerCa
   if(n.type==="action")return((n.data.plain||"")+(n.data.feature||"")).toLowerCase().includes(t); return false; }
 function visibleNodes(){ const vis=new Set();
   if(harnessMode){ HARNESS.nodes.forEach(n=>vis.add(n.id)); return vis; }
+  if(navMode){ screens.forEach(s=>{if(groupOn(s.group)&&matchSearch(nodes.get(s.id)))vis.add(s.id);}); return vis; }
   screens.forEach(s=>{if(groupOn(s.group)&&matchSearch(nodes.get(s.id)))vis.add(s.id);});
   screens.forEach(s=>{ if(!vis.has(s.id)||!expanded.has(s.id))return;
     (s.actions||[]).forEach((a,i)=>{const aid=actId(s,i);if(aiOnly&&!a.ai)return;vis.add(aid);
@@ -301,6 +309,7 @@ function visibleNodes(){ const vis=new Set();
 
 /* ---------- AI 하네스 (앱 안 AI가 어떻게 엮여 도는지 + 각 역할) ---------- */
 let harnessMode=false;
+let navMode=false;
 const HARNESS={ nodes:[
   {id:"h:input",hx:0,hy:80,color:"#8b93ff",label:"사용자 입력 → AI 기능",role:"화면의 어떤 동작이 AI를 부르면 여기서 시작돼요. 어떤 목적(15종)인지 정해집니다.",detail:"PromptPurpose 15종. 호출부=각 동작의 feature(예: classifyClipper, sendChatMessage)."},
   {id:"h:safein",hx:215,hy:80,color:"#e8896f",label:"① 안전검사 (입력)",role:"모델을 부르기 전에 위기·금지어를 먼저 검사. 위기면 모델 없이 바로 상담 핫라인을 보여줘요.",detail:"C9: classifyInput(렉시콘, 동기) + classifySafety(Gemini-flash, C-SSRS). 위기=KR 109/1388·EN 988. src/lib/safety/*, src/lib/llm/safety.ts"},
@@ -371,7 +380,7 @@ function render(){
     const port=document.createElement("span");port.className="port";port.dataset.port=id;el.appendChild(port);
     nodesEl.appendChild(el);els[id]=el; }
   for(const id in els)nodes.get(id).h=els[id].offsetHeight;
-  if(harnessMode){groupLabelPos=[];}else{packColumns(vis);}
+  if(harnessMode){groupLabelPos=[];}else if(navMode){groupLabelPos=[];packNav(vis);}else{packColumns(vis);}
   for(const id in els){const n=nodes.get(id);els[id].style.left=n.x+"px";els[id].style.top=n.y+"px";}
   drawEdges(vis);drawGroupLabels();applyView();updateStat(vis);drawMinimap(vis);
 }
@@ -407,7 +416,32 @@ function packColumns(vis){const GAP=16,HEAD=30,GG=26,BANDGAP=20,CGAP=10,AGAP=16;
     y+=GG;
   }
 }
-function drawEdges(vis){let svg="";effEdges().forEach(e=>{if(!vis.has(e.from)||!vis.has(e.to))return;const a=nodes.get(e.from),b=nodes.get(e.to);
+/* ---------- 화면 흐름(navigation) mode ---------- */
+function packNav(vis){
+  const sv=screens.filter(s=>vis.has(s.id)), idset=new Set(sv.map(s=>s.id));
+  const out={},indeg={}; sv.forEach(s=>{out[s.id]=[];indeg[s.id]=0;});
+  const seen=new Set();
+  NAV.forEach(e=>{ if(!idset.has(e.from)||!idset.has(e.to)||e.from===e.to)return; const k=e.from+">"+e.to; if(seen.has(k))return; seen.add(k); out[e.from].push(e.to); indeg[e.to]=(indeg[e.to]||0)+1; });
+  const depth={},q=[]; sv.forEach(s=>{ if((indeg[s.id]||0)===0){depth[s.id]=0;q.push(s.id);} });
+  if(!q.length&&sv.length){depth[sv[0].id]=0;q.push(sv[0].id);}
+  for(let h=0;h<q.length;h++){const id=q[h],d=depth[id];(out[id]||[]).forEach(t=>{if(depth[t]==null){depth[t]=d+1;q.push(t);}});}
+  let maxD=0; for(const id in depth)maxD=Math.max(maxD,depth[id]);
+  sv.forEach(s=>{ if(depth[s.id]==null)depth[s.id]=maxD+1; }); // unreachable -> parking column at right
+  const COLW=360,VG=20,cols={};
+  sv.forEach(s=>{(cols[depth[s.id]]=cols[depth[s.id]]||[]).push(s);});
+  Object.keys(cols).forEach(d=>{ let y=8; cols[d].forEach(s=>{const n=nodes.get(s.id); if(state.pos[s.id])return; n.x=(+d)*COLW; n.y=y; y+=(n.h||120)+VG;}); });
+}
+function drawNavEdges(vis){
+  let svg='<defs><marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs>',lbl="";
+  const seen=new Set();
+  NAV.forEach(e=>{ if(!vis.has(e.from)||!vis.has(e.to))return; const a=nodes.get(e.from),b=nodes.get(e.to); if(!a||!b)return; const k=e.from+">"+e.to; if(seen.has(k))return; seen.add(k);
+    const x1=a.x+(els[a.id]?els[a.id].offsetWidth:262),y1=a.y+(a.h||60)/2,x2=b.x,y2=b.y+(b.h||60)/2,mx=(x1+x2)/2;
+    const hot=(selected&&(e.from===selected||e.to===selected))||(hoverId&&(e.from===hoverId||e.to===hoverId));
+    svg+=`<path class="navedge${hot?" hot":""}" d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" marker-end="url(#arw)"/>`;
+    if(hot)lbl+=`<text class="navlbl" x="${mx}" y="${(y1+y2)/2-4}" text-anchor="middle">${esc(e.label)}</text>`; });
+  edgesEl.innerHTML=svg+lbl; edgesEl.style.width="14000px"; edgesEl.style.height="14000px"; edgesEl.style.pointerEvents="none";
+}
+function drawEdges(vis){if(navMode){drawNavEdges(vis);return;}let svg="";effEdges().forEach(e=>{if(!vis.has(e.from)||!vis.has(e.to))return;const a=nodes.get(e.from),b=nodes.get(e.to);
   const x1=a.x+(els[a.id]?els[a.id].offsetWidth:260),y1=a.y+(a.h||60)/2,x2=b.x,y2=b.y+(b.h||40)/2,mx=(x1+x2)/2;
   const hot=(selected&&(e.from===selected||e.to===selected))||(hoverId&&(e.from===hoverId||e.to===hoverId));
   const sel=selEdge&&selEdge.from===e.from&&selEdge.to===e.to;
@@ -465,11 +499,11 @@ nodesEl.addEventListener("pointerup",()=>{if(!drag)return;const n=nodes.get(drag
 nodesEl.addEventListener("pointerover",e=>{const el=e.target.closest(".node");if(!el)return;setHover(el.dataset.id);});
 nodesEl.addEventListener("pointerout",e=>{const el=e.target.closest(".node");if(!el)return;setHover(null);});
 function setHover(id){if(hoverId===id)return;hoverId=id;
-  connected=new Set();if(id){connected.add(id);effEdges().forEach(e=>{if(e.from===id)connected.add(e.to);if(e.to===id)connected.add(e.from);});}
+  connected=new Set();if(id){connected.add(id);(navMode?NAV:effEdges()).forEach(e=>{if(e.from===id)connected.add(e.to);if(e.to===id)connected.add(e.from);});}
   // toggle lit classes + edge hot without full re-render
   for(const nid in els)els[nid].classList.toggle("lit",!!id&&connected.has(nid)&&nid!==id);
   drawEdges(visibleNodes());}
-function onNodeClick(id){const n=nodes.get(id);if(n.type==="screen"){if(expanded.has(id)){expanded.delete(id);state.expanded[id]=false;}else{expanded.add(id);state.expanded[id]=true;}save();}selected=id;setTab("detail");render();}
+function onNodeClick(id){const n=nodes.get(id);if(n.type==="screen"&&!navMode){if(expanded.has(id)){expanded.delete(id);state.expanded[id]=false;}else{expanded.add(id);state.expanded[id]=true;}save();}selected=id;setTab("detail");render();}
 
 /* ---------- 연결 편집 (visual programming) ---------- */
 let linkMode=false, pending=null, selEdge=null;
@@ -638,8 +672,10 @@ function renderBug(){
 /* ---------- toolbar ---------- */
 document.getElementById("search").oninput=e=>{searchTerm=e.target.value.trim();render();};
 document.getElementById("aiOnly").onclick=e=>{aiOnly=!aiOnly;e.target.classList.toggle("on",aiOnly);render();};
-document.getElementById("harnessBtn").onclick=e=>{harnessMode=!harnessMode;e.target.classList.toggle("on",harnessMode);selected=null;hoverId=null;connected={has:()=>false};render();fit();renderDetail();
+document.getElementById("harnessBtn").onclick=e=>{harnessMode=!harnessMode;if(harnessMode&&navMode){navMode=false;document.getElementById("navFlowBtn").classList.remove("on");}e.target.classList.toggle("on",harnessMode);selected=null;hoverId=null;connected={has:()=>false};render();fit();renderDetail();
   document.getElementById("stat").textContent = harnessMode ? "AI 하네스 보기 — 입력 → 안전검사 → 게이트웨이 → 티어 → 프록시 → 모델 → 출력검사 → 감사" : document.getElementById("stat").textContent;};
+document.getElementById("navFlowBtn").onclick=e=>{navMode=!navMode;if(navMode&&harnessMode){harnessMode=false;document.getElementById("harnessBtn").classList.remove("on");}e.target.classList.toggle("on",navMode);selected=null;hoverId=null;connected={has:()=>false};render();fit();renderDetail();
+  if(navMode)document.getElementById("stat").textContent = "화면 흐름 보기 — 화살표는 버튼으로 이어지는 화면 이동 · "+NAV.length+"개 연결 (화면 클릭=자세히, 마우스 올리면 버튼 이름)";};
 document.getElementById("expandAll").onclick=()=>{screens.forEach(s=>{if(groupOn(s.group)){expanded.add(s.id);state.expanded[s.id]=true;}});save();render();};
 document.getElementById("collapseAll").onclick=()=>{expanded.clear();state.expanded={};save();render();};
 document.getElementById("autoArrange").onclick=()=>{state.pos={};save();render();fit();};

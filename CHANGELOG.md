@@ -3,6 +3,17 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.1.6] - 2026-07-10
+
+### Added
+- **"화면 흐름" (navigation flow) mode.** A toolbar toggle (like "AI 하네스") that
+  lays screens out left-to-right by navigation depth (BFS layers) and draws an
+  arrow for every button that opens another screen — so you see how screens
+  connect, not just a vertical catalog. Hovering a screen highlights its links and
+  shows the button labels; clicking a screen opens its detail (with its capture).
+  Powered by a new per-action `to` field (target route). The SCAN prompt now emits
+  `to`, so any future scan gets the flow view automatically.
+
 ## [0.1.5] - 2026-07-10
 
 ### Added
