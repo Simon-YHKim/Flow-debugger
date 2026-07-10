@@ -108,6 +108,7 @@
   .shotbig{width:100%;border-radius:10px;border:1px solid var(--line);margin-top:10px;display:block}
   .ed-label{width:100%;font-size:16px;font-weight:700;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 11px;color:var(--text);font-family:inherit;margin-top:10px}
   .plainbox{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:13.5px;color:#e3e3ef;line-height:1.6;margin-top:8px}
+  .exbox{background:rgba(139,147,255,.08);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:10px;padding:10px 13px;font-size:13px;color:#dcdcea;line-height:1.6;margin-top:8px;word-break:keep-all}.exbox::before{content:"예: ";color:var(--accent);font-weight:700}
   textarea.note{width:100%;min-height:60px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--text);font-family:inherit;font-size:12.5px;resize:vertical}
   textarea.note::placeholder{color:var(--faint)}
   .flags{display:flex;gap:6px;margin-top:8px}
@@ -534,15 +535,17 @@ function renderDetail(){
     h+=`<div class="dtitle"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><div><span class="typetag" style="background:${gc}22;color:${gc}">화면 · ${TYPE_KO[ty]||""}</span></div></div>
       <input class="ed-label" id="edLabel" value="${esc(curLabel(n))}">`;
     if(SHOTS[s.route])h+=`<img class="shotbig" src="${SHOTS[s.route]}" alt=""><div class="kv" style="color:var(--faint);font-size:11px">실제 화면 캡처 (참고용 · 다를 수 있어요)</div>`;
-    h+=`<div class="plainbox">${esc(s.summaryKo||s.summary||"")}</div>
-      <div class="dh">이 화면에서 할 수 있는 일 (${(s.actions||[]).length})</div>`;
+    h+=`<div class="plainbox">${esc(s.summaryKo||s.summary||"")}</div>`;
+    if(s.example)h+=`<div class="dh">이럴 때 써요</div><div class="exbox">${esc(s.example)}</div>`;
+    h+=`<div class="dh">이 화면에서 할 수 있는 일 (${(s.actions||[]).length})</div>`;
     (s.actions||[]).forEach((a,i)=>{h+=`<div class="actrow" data-go="${actId(s,i)}"><div class="an">${esc(actLabel(a))}${a.ai?' <span class="pill ai">AI</span>':''}</div><div class="ap">${esc(a.plain||"")}</div></div>`;});
     h+=`<details class="dev"><summary></summary><div class="kv">route: ${esc(s.route)}</div><div class="kv">group: ${esc(s.group)}</div></details>`;
   }else if(n.type==="action"){const a=n.data;
     h+=`<span class="typetag" style="background:#8b93ff22;color:#8b93ff">사용자 동작</span><input class="ed-label" id="edLabel" value="${esc(curLabel(n))}">
       <div class="plainbox">${esc(a.plain||a.detail||"")}</div>`;
-    if(a.ai)h+=`<div class="dh">사용하는 AI 기능</div><div class="item" data-go="${aiId(a.ai.purpose)}"><span class="kd" style="background:var(--ai)"></span><div><div>${esc(aiKo(a.ai.purpose))}</div><div class="sm">${esc(a.ai.model||"")} · ${esc(a.ai.via||"")}</div></div></div>`;
-    if((a.apis||[]).length){h+=`<div class="dh">데이터·서버 작업 (${a.apis.length})</div>`;a.apis.forEach(tag=>{const k=tag.split(":")[0];h+=`<div class="item" data-go="${apiId(tag)}"><span class="kd" style="background:${API_KIND_COLOR[k]||'var(--misc)'}"></span><div><div>${esc(apiKo(tag))}</div><div class="sm">${esc(KIND_KO[k]||k)}</div></div></div>`;});}
+    if(a.example)h+=`<div class="dh">사용 예시</div><div class="exbox">${esc(a.example)}</div>`;
+    if(a.ai)h+=`<div class="dh">사용하는 AI 기능</div><div class="item" data-go="${n.id}::ai"><span class="kd" style="background:var(--ai)"></span><div><div>${esc(aiKo(a.ai.purpose))}</div><div class="sm">${esc(a.ai.model||"")} · ${esc(a.ai.via||"")}</div></div></div>`;
+    if((a.apis||[]).length){h+=`<div class="dh">데이터·서버 작업 (${a.apis.length})</div>`;a.apis.forEach((tag,j)=>{const k=tag.split(":")[0];h+=`<div class="item" data-go="${n.id}::api:${j}"><span class="kd" style="background:${API_KIND_COLOR[k]||'var(--misc)'}"></span><div><div>${esc(apiKo(tag))}</div><div class="sm">${esc(KIND_KO[k]||k)}</div></div></div>`;});}
     if((a.risks||[]).length){h+=`<div class="dh">이 동작의 조건·약점</div><div>`+a.risks.map(r=>`<span class="rchip" style="background:${RISK_COLOR[r]||'#888'}">${RISK_KO[r]||r}</span>`).join("")+`</div>`;}
     if((a.checklist||[]).length){h+=`<div class="dh">안 될 때 확인하세요</div>`+a.checklist.map(c=>`<div class="kv">· ${esc(c)}</div>`).join("");}
     if((a.failureModes||[]).length){h+=`<div class="dh">이렇게 안 될 수 있어요</div>`+a.failureModes.map(c=>`<div class="kv" style="color:var(--muted)">· ${esc(c)}</div>`).join("");}

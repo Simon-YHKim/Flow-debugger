@@ -3,6 +3,20 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.1.5] - 2026-07-10
+
+### Added
+- **Usage examples in the detail panel.** Each screen now shows an "이럴 때 써요"
+  box (a concrete situation for using the screen) and each action shows a
+  "사용 예시" box (a concrete example of doing that action), styled with an accent
+  border and an automatic "예: " prefix. The scan ENRICH prompt now generates an
+  `example` field per screen and per action.
+
+### Fixed
+- Detail-panel "used AI / data·server" list items now navigate to the correct
+  per-action capability node — a v0.1.4 regression where they pointed at the old
+  de-duplicated node ids and silently did nothing on click.
+
 ## [0.1.4] - 2026-07-10
 
 ### Changed
