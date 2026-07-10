@@ -3,6 +3,57 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.2.0] - 2026-07-11
+
+Audit + comparable-tool research release: 2 code auditors (24 findings) + 3
+researchers (Overflow/FlowMapp/Figma flows, n8n/Zapier/Node-RED canvases,
+React Flow/Stately/tldraw patterns) drove this batch.
+
+### Added
+- **경로 추적 + 경로 걷기 (Overflow Stories pattern).** In 화면 흐름 mode, pick
+  "🚩 여기서 출발" on one screen and "🎯 여기까지 경로" on another → BFS shortest
+  button-path is highlighted (everything else dims), listed step-by-step in the
+  panel, and "▶ 경로 걷기" opens a walkthrough overlay that shows each screen's
+  real capture with "press 『button』 → next screen" instructions.
+- **Search that finds things (n8n/Node-RED pattern).** Matching screens
+  virtually expand while searching (a hit inside a collapsed screen used to be
+  invisible), api tags are searchable, Enter jumps to + centres the first match,
+  and the stat bar shows the match count. 150ms debounce (every keystroke used
+  to re-serialize 2MB of embedded captures).
+- **Copy as Mermaid (Whimsical pattern)** in the 수정 요청 tab — exports the
+  screen-navigation graph as a flowchart for wikis/issues/AI chats.
+- Keyboard: Esc (staged: walkthrough→path→selection→search→link-mode), +/- zoom,
+  0 = fit, double-click = zoom to card. Click empty canvas = deselect.
+- Selection now keeps its neighbourhood lit (was hover-only), and an empty
+  filter/search state shows a hint instead of a silently blank canvas.
+
+### Fixed
+- **Mode-scoped drag positions (P0).** Dragging a screen in 화면 흐름 mode used
+  to permanently corrupt the catalog layout (and vice versa) because both modes
+  shared one position store. Nav drags now save to their own store; 자동 정렬
+  resets only the current mode.
+- **localStorage collision (P0).** The storage key is now namespaced by a
+  fingerprint of the dataset, so two different apps' flow-debugger HTMLs no
+  longer clobber each other's saved positions/edits/bug reports.
+- **화면 흐름 layout.** Isolated screens (no nav edges) get their own labelled
+  parking grid instead of bloating the entry column; cycle-only clusters are
+  seeded properly (tab-bar style mutual navigation now layers instead of piling
+  into the parking column); columns are barycenter-ordered (fewer crossings);
+  layer-skipping edges bow around intermediate columns; backward edges route
+  left-side to right-side instead of stabbing through their source card;
+  parallel edges (several buttons to the same target) merge their labels.
+- Link editing is disabled in 화면 흐름/하네스 modes (ports hid, button dimmed) —
+  it used to silently record invisible edits; harness pipeline edges can no
+  longer be cut. aiOnly/펼치기 buttons dim in modes where they do nothing.
+- Detail-panel item clicks now actually update the panel, expand the target's
+  parent screen, and centre the canvas on it (was a silent no-op half the time).
+- Hover no longer rebuilds the full edge SVG on every child-element crossing;
+  node drags redraw edges via rAF. Minimap viewport rectangle clamps correctly
+  and hides when nothing is visible. Injected GRAPH/GLOSSARY/SHOTS are
+  null-guarded. Edit-count badges ignore orphaned entries from older scans.
+- Screen cards no longer collapse when re-clicked to read their detail —
+  collapse is the ▾ arrow only.
+
 ## [0.1.6] - 2026-07-10
 
 ### Added
