@@ -88,6 +88,7 @@
   .node.api .kd{width:10px;height:10px;border-radius:3px;flex:0 0 auto;margin-top:3px}
   .node.ai{width:232px;border-color:rgba(216,166,87,.5);background:linear-gradient(180deg,rgba(216,166,87,.12),var(--panel))}
   .node.navchip{width:240px;border-style:dashed;border-color:rgba(139,147,255,.55);background:linear-gradient(180deg,rgba(139,147,255,.08),var(--panel))}
+  .node.navscr{border-style:dashed;opacity:.96}
   .node.navchip .t{display:flex;align-items:center;gap:7px;font-size:12.5px}
   .node.navchip .sicon{width:20px;height:20px;border-radius:5px;flex:0 0 auto}.node.navchip .sicon svg{width:13px;height:13px}
   .edge.navlink{stroke:rgba(139,147,255,.45);stroke-dasharray:5 4}.edge.navlink.hot{stroke:var(--accent)}
@@ -267,8 +268,10 @@ screens.forEach(s=>{
       edges.push({from:aid,to:id,kind:"ac"}); if(!capUsers.has(apiId(tag)))capUsers.set(apiId(tag),new Set()); capUsers.get(apiId(tag)).add(scrTitle(s)+" · "+actLabel(a)); });
     if(a.ai){ const id=aid+"::ai"; addNode({id,type:"ai",parent:aid,data:a.ai});
       edges.push({from:aid,to:id,kind:"ai"}); if(!capUsers.has(aiId(a.ai.purpose)))capUsers.set(aiId(a.ai.purpose),new Set()); capUsers.get(aiId(a.ai.purpose)).add(scrTitle(s)+" · "+actLabel(a)); }
-    // navigating action -> "이동 대상" chip in the capability column (카탈로그에서도 화면 연계가 보이도록)
-    if(a.to&&a.to!==s.route){ const id=aid+"::nav"; addNode({id,type:"nav",parent:aid,group:s.group,data:{to:"s:"+a.to,route:a.to}}); edges.push({from:aid,to:id,kind:"nav"}); }
+    // navigating action -> "이동 대상" chip + inline preview card of the target screen
+    // (chip click toggles the preview open in place, to the right — no viewport jump)
+    if(a.to&&a.to!==s.route){ const id=aid+"::nav"; addNode({id,type:"nav",parent:aid,group:s.group,data:{to:"s:"+a.to,route:a.to}}); edges.push({from:aid,to:id,kind:"nav"});
+      const pid=aid+"::navscr"; addNode({id:pid,type:"navscreen",parent:id,group:s.group,data:{sid:"s:"+a.to,route:a.to}}); edges.push({from:id,to:pid,kind:"nav"}); }
   });
 });
 function scrTitle(s){return s.titleKo||s.title||s.route;}
@@ -278,8 +281,8 @@ const NAV=[];
 screens.forEach(s=>{(s.actions||[]).forEach((a,i)=>{ if(a.to){const tid="s:"+a.to; if(nodes.has(tid)&&tid!==s.id)NAV.push({from:s.id,to:tid,label:actLabel(a),aid:actId(s,i)});} });});
 function apiKo(t){return(GAPI[t]&&GAPI[t].ko)||t;}
 function aiKo(p){return(GAI[p]&&GAI[p].ko)||p;}
-function dispLabel(n){if(n.type==="h")return n.label;if(n.type==="nav"){const t=nodes.get(n.data.to);return "이동: "+(t?scrTitle(t.data):n.data.route);}return n.type==="screen"?scrTitle(n.data):n.type==="action"?actLabel(n.data):n.type==="api"?apiKo(n.data.tag):aiKo(n.data.purpose);}
-function codeRef(n){if(n.type==="h")return "";if(n.type==="nav")return n.data.route;return n.type==="screen"?n.data.route:n.type==="action"?((n.data.feature||"")+(n.data.file?" @ "+n.data.file:"")):n.type==="api"?n.data.tag:n.data.purpose;}
+function dispLabel(n){if(n.type==="h")return n.label;if(n.type==="nav"){const t=nodes.get(n.data.to);return "이동: "+(t?scrTitle(t.data):n.data.route);}if(n.type==="navscreen"){const t=nodes.get(n.data.sid);return(t?scrTitle(t.data):n.data.route)+" (미리보기)";}return n.type==="screen"?scrTitle(n.data):n.type==="action"?actLabel(n.data):n.type==="api"?apiKo(n.data.tag):aiKo(n.data.purpose);}
+function codeRef(n){if(n.type==="h")return "";if(n.type==="nav"||n.type==="navscreen")return n.data.route;return n.type==="screen"?n.data.route:n.type==="action"?((n.data.feature||"")+(n.data.file?" @ "+n.data.file:"")):n.type==="api"?n.data.tag:n.data.purpose;}
 
 /* ---------- dynamic groups (works for ANY group names, not just the 2nd-B set) ---------- */
 /* The scan data can use any group ids; derive order/label/color from what actually
@@ -300,7 +303,7 @@ GROUPS.forEach((g,i)=>{
 const LSKEY="flowdbg-v5:"+(()=>{let h=0;const s=GRAPH.map(x=>(x&&x.route)||"").join("|");for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0;return(h>>>0).toString(36);})();
 /* pos = catalog-mode drag positions, navPos = 화면 흐름-mode drag positions —
    separate maps so dragging in one mode never corrupts the other's layout. */
-let state={pos:{},navPos:{},edits:{},expanded:{},groupsOff:{},globalNote:"",addedEdges:[],removedEdges:[],bugs:{}};
+let state={pos:{},navPos:{},edits:{},expanded:{},groupsOff:{},globalNote:"",addedEdges:[],removedEdges:[],bugs:{},navOpen:{}};
 try{state={...state,...JSON.parse(localStorage.getItem(LSKEY)||"{}")};}catch(e){}
 const save=()=>localStorage.setItem(LSKEY,JSON.stringify(state));
 let selected=null,hoverId=null,aiOnly=false,searchTerm="",tab="detail";
@@ -329,7 +332,8 @@ function visibleNodes(){ const vis=new Set();
     if(!expanded.has(s.id)&&!(searchTerm&&matchSearch(nodes.get(s.id))))return;
     (s.actions||[]).forEach((a,i)=>{const aid=actId(s,i);if(aiOnly&&!a.ai)return;vis.add(aid);
       if(!aiOnly)(a.apis||[]).forEach((tag,j)=>vis.add(aid+"::api:"+j)); if(a.ai)vis.add(aid+"::ai");
-      if(!aiOnly&&nodes.has(aid+"::nav")&&nodes.has("s:"+a.to))vis.add(aid+"::nav");}); });
+      if(!aiOnly&&nodes.has(aid+"::nav")&&nodes.has("s:"+a.to)){vis.add(aid+"::nav");
+        if((state.navOpen||{})[aid+"::nav"])vis.add(aid+"::navscr");}}); });
   return vis; }
 
 /* ---------- AI 하네스 (앱 안 AI가 어떻게 엮여 도는지 + 각 역할) ---------- */
@@ -367,7 +371,7 @@ HARNESS.edges.forEach(([from,to])=>edges.push({from,to,kind:"h"}));
 /* 3 columns only: screen(0) -> action(320) -> capability(680, api+ai merged).
    Merging api+ai into ONE adjacent sink column means every edge (screen->action,
    action->capability) travels a single empty gutter and never crosses over a node. */
-const COLX={screen:0,action:320,api:680,ai:680};
+const COLX={screen:0,action:320,api:680,ai:680,nav:680,navscreen:1000};
 const colX=n=>COLX[n.type]||0;
 
 /* ---------- render (measure -> pack -> no overlap) ---------- */
@@ -393,7 +397,15 @@ function nodeHtml(n){
   if(n.type==="ai"){
     return `<div class="node ai${sel}${lit}" data-id="${n.id}"><div class="pad"><div class="t"><span>${lab}</span></div><div class="sub">${esc(n.data.model||"")}</div></div></div>`;}
   if(n.type==="nav"){const t=nodes.get(n.data.to),s2=t&&t.data,gc=s2?(GROUP_COLOR[s2.group]||"var(--accent)"):"var(--accent)",ty=s2?screenType(s2):"detail";
-    return `<div class="node navchip${sel}${lit}" data-id="${n.id}" style="--gc:${gc}"><div class="pad"><div class="t"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><span style="color:var(--muted);font-size:11px;flex:0 0 auto">이동 →</span><span style="font-weight:650">${esc(s2?scrTitle(s2):n.data.route)}</span></div><div class="sub">누르면 그 화면 카드로 이동해요</div></div></div>`;}
+    const open=!!(state.navOpen||{})[n.id];
+    return `<div class="node navchip${sel}${lit}" data-id="${n.id}" style="--gc:${gc}"><div class="pad"><div class="t"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><span style="color:var(--muted);font-size:11px;flex:0 0 auto">이동 →</span><span style="font-weight:650;flex:1">${esc(s2?scrTitle(s2):n.data.route)}</span><span class="ex">${open?"▾":"▸"}</span></div><div class="sub">${open?"누르면 미리보기를 접어요":"누르면 옆에 그 화면을 펼쳐 보여줘요"}</div></div></div>`;}
+  if(n.type==="navscreen"){const t=nodes.get(n.data.sid);if(!t)return "";const s2=t.data,ty=screenType(s2),gc=GROUP_COLOR[s2.group]||"var(--accent)";
+    const sel2=(selected===n.id||selected===n.data.sid)?" sel":"";
+    const shot=SHOTS[s2.route]?`<img class="thumb" src="${SHOTS[s2.route]}" alt="">`:"";
+    const nAct=(s2.actions||[]).length,nAi=(s2.actions||[]).filter(a=>a.ai).length;
+    return `<div class="node screen navscr${sel2}${lit}" data-id="${n.id}" style="--gc:${gc}">
+      <div class="shead"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><div class="stitle">${esc(scrTitle(s2))}</div><span class="stype" style="--gc:${gc}">${TYPE_KO[ty]||""}</span></div>
+      ${shot}<div class="pad"><div class="sub">${esc(s2.summaryKo||"")}</div><div class="badges"><span class="pill">${nAct}개 동작</span>${nAi?`<span class="pill ai">AI ${nAi}</span>`:""}<span class="pill" style="color:var(--accent);border-color:rgba(139,147,255,.45)">미리보기</span></div></div></div>`;}
   if(n.type==="h"){const c=n.color||"#8b93ff";
     return `<div class="node${sel}${lit}" data-id="${n.id}" style="width:208px;border-top:3px solid ${c}"><div class="pad"><div class="t">${esc(n.label)}</div><div class="sub">${esc(n.role)}</div></div></div>`;}
   return "";
@@ -443,7 +455,10 @@ function packColumns(vis){const GAP=16,HEAD=30,GG=26,BANDGAP=20,CGAP=10,AGAP=16;
         const adr=!!state.pos[aid]; if(!adr){an.x=COLX.action;an.y=ay;}
         const aTop=adr?state.pos[aid].y:ay;
         let cyc=aTop; caps.forEach(cn=>{if(!state.pos[cn.id]){cn.x=COLX.api;cn.y=cyc;} cyc+=(cn.h||44)+CGAP;});
-        const capsH=caps.length?(cyc-aTop-CGAP):0, blockH=Math.max(an.h||56, capsH);
+        // opened nav preview card: top-aligned to its chip, one more column to the right
+        let extraB=0; const chip=nodes.get(aid+"::nav"), nscr=nodes.get(aid+"::navscr");
+        if(chip&&nscr&&vis.has(nscr.id)){ if(!state.pos[nscr.id]){nscr.x=COLX.navscreen;nscr.y=chip.y;} extraB=(chip.y-aTop)+(nscr.h||210); }
+        const capsH=caps.length?(cyc-aTop-CGAP):0, blockH=Math.max(an.h||56, capsH, extraB);
         if(!adr)ay=aTop+blockH+AGAP;
       });
       if(!dragged){const bandH=Math.max(sn.h||120, ay>top?(ay-top-AGAP):0); y=top+bandH+BANDGAP;}
@@ -605,8 +620,11 @@ function setHover(id){if(hoverId===id)return;hoverId=id;
 /* card click: expand if collapsed, but never collapse (re-clicking to read the
    detail used to fold the tree away — collapse is now the ▾ arrow only). */
 function onNodeClick(id){const n=nodes.get(id);
-  if(n.type==="nav"){ // 이동 대상 칩: 그 화면 카드로 점프 (펼치고 센터링)
-    const t=nodes.get(n.data.to); if(t){ if(!navMode&&!expanded.has(t.id)){expanded.add(t.id);state.expanded[t.id]=true;} save(); selected=t.id; setTab("detail"); render(); fitToNode(t.id); return; } }
+  if(n.type==="nav"){ // 이동 대상 칩: 오른쪽에 미리보기 카드 펼침/접기 (시점 이동 없음)
+    state.navOpen=state.navOpen||{}; state.navOpen[id]=!state.navOpen[id]; save();
+    selected=state.navOpen[id]?n.parent+"::navscr":id; // 펼치면 미리보기 선택, 접으면 칩 선택
+    setTab("detail"); render(); return; }
+  if(n.type==="navscreen"){ selected=id; setTab("detail"); render(); return; }
   if(n.type==="screen"&&!navMode&&!expanded.has(id)){expanded.add(id);state.expanded[id]=true;save();}selected=id;setTab("detail");render();}
 function fitToNode(id){const n=nodes.get(id);if(!n)return;const w=els[id]?els[id].offsetWidth:262,h=n.h||100;const r=stage.getBoundingClientRect();
   view.k=Math.min(1.4,Math.max(view.k,.9));
@@ -660,7 +678,7 @@ function updateEditCount(){ // count only entries whose nodes still exist (stale
     +((state.removedEdges||[]).filter(k=>{const p=k.split(">>");return nodes.has(p[0])&&nodes.has(p[1]);}).length),
     b=document.getElementById("editCount");b.style.display=n?"inline-block":"none";b.textContent=n;
   const bn=Object.keys(state.bugs||{}).filter(id=>nodes.has(id)).length,bb=document.getElementById("bugCount");if(bb){bb.style.display=bn?"inline-block":"none";bb.textContent=bn;}}
-const TYPETAG={screen:["화면","#8b93ff"],action:["사용자 동작","#8b93ff"],api:["데이터·서버 작업","#6fb6ff"],ai:["AI 기능","#d8a657"],nav:["화면 이동","#8b93ff"],h:["AI 하네스 단계","#8b93ff"]};
+const TYPETAG={screen:["화면","#8b93ff"],action:["사용자 동작","#8b93ff"],api:["데이터·서버 작업","#6fb6ff"],ai:["AI 기능","#d8a657"],nav:["화면 이동","#8b93ff"],navscreen:["화면 미리보기","#8b93ff"],h:["AI 하네스 단계","#8b93ff"]};
 
 /* ---------- 경로 걷기 (Overflow Stories식 워크스루: 캡처 보며 한 단계씩) ---------- */
 let walkIdx=0;
@@ -712,9 +730,27 @@ function renderDetail(){
   if(n.type==="nav"){const t=nodes.get(n.data.to);
     sideBody.innerHTML=`<span class="typetag" style="background:#8b93ff22;color:#8b93ff">화면 이동</span>
       <div class="ed-label" style="cursor:default">이동 → ${esc(t?scrTitle(t.data):n.data.route)}</div>
-      <div class="plainbox">이 동작을 하면 <b>${esc(t?scrTitle(t.data):n.data.route)}</b> 화면으로 이동해요. 칩을 누르면 그 화면 카드로 점프합니다.</div>
-      ${t?`<div class="dh">이동하는 화면</div><div class="item" data-go="${t.id}"><span class="kd" style="background:${GROUP_COLOR[t.data.group]||'#8b93ff'}"></span><div><div>${esc(scrTitle(t.data))}</div><div class="sm">${esc(n.data.route)}</div></div></div>`:""}`;
+      <div class="plainbox">이 동작을 하면 <b>${esc(t?scrTitle(t.data):n.data.route)}</b> 화면으로 이동해요. 칩을 누르면 <b>오른쪽에 미리보기</b>가 펼쳐져요.</div>
+      ${t?`<div class="dh">원본 카드</div><div class="item" data-go="${t.id}"><span class="kd" style="background:${GROUP_COLOR[t.data.group]||'#8b93ff'}"></span><div><div>${esc(scrTitle(t.data))} 원본으로 가기</div><div class="sm">${esc(n.data.route)}</div></div></div>`:""}`;
     document.querySelectorAll("#sideBody [data-go]").forEach(r=>r.onclick=()=>{const go=r.dataset.go;if(nodes.get(go)){selected=go;setTab("detail");render();fitToNode(go);}});
+    return;
+  }
+  if(n.type==="navscreen"){const t=nodes.get(n.data.sid);
+    if(!t){sideBody.innerHTML='<div class="empty">화면 정보를 찾을 수 없어요.</div>';return;}
+    const s=t.data,ty=screenType(s),gc=GROUP_COLOR[s.group];
+    let hh=`<div class="dtitle"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><div><span class="typetag" style="background:${gc}22;color:${gc}">화면 미리보기 · ${TYPE_KO[ty]||""}</span></div></div>
+      <div class="ed-label" style="cursor:default;margin-top:10px">${esc(scrTitle(s))}</div>`;
+    if(SHOTS[s.route])hh+=`<img class="shotbig" src="${SHOTS[s.route]}" alt="">`;
+    hh+=`<div class="plainbox">${esc(s.summaryKo||s.summary||"")}</div>`;
+    if(s.example)hh+=`<div class="dh">이럴 때 써요</div><div class="exbox">${esc(s.example)}</div>`;
+    hh+=`<div class="dh">이 화면에서 할 수 있는 일 (${(s.actions||[]).length})</div>`;
+    (s.actions||[]).forEach((a,i)=>{hh+=`<div class="actrow" data-go="${actId(s,i)}"><div class="an">${esc(actLabel(a))}${a.ai?' <span class="pill ai">AI</span>':''}</div><div class="ap">${esc(a.plain||"")}</div></div>`;});
+    hh+=`<div class="dh">원본 카드</div><div class="item" data-go="${t.id}"><span class="kd" style="background:${gc}"></span><div><div>${esc(scrTitle(s))} 원본으로 가기</div><div class="sm">${esc(s.route)}</div></div></div>`;
+    sideBody.innerHTML=hh;
+    document.querySelectorAll("#sideBody [data-go]").forEach(r=>r.onclick=()=>{const go=r.dataset.go;const gn=nodes.get(go);if(!gn)return;
+      let scr2=gn.type==="action"?gn.screen:(gn.type==="screen"?gn:null);
+      if(scr2&&!navMode&&!expanded.has(scr2.id||scr2)){const sid2=scr2.id||go;expanded.add(sid2);state.expanded[sid2]=true;save();}
+      selected=go;setTab("detail");render();fitToNode(go);});
     return;
   }
   let h="";

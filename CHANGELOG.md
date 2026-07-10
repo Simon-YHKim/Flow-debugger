@@ -3,6 +3,18 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.2.2] - 2026-07-11
+
+### Changed
+- **Nav chips now expand an inline preview instead of jumping.** Clicking an
+  "이동 → <화면>" chip no longer moves the viewport to the target's card; it
+  toggles a dashed *preview card* of the target screen right beside the chip
+  (thumbnail, summary, action count, "미리보기" badge), so the flow keeps reading
+  left-to-right in place. Clicking the preview shows the full screen detail
+  (actions, examples, capture) with a "원본으로 가기" link when a jump is wanted.
+  Open/closed state persists. Verified: 12 previews open simultaneously,
+  791 nodes, 0 overlaps, 0 misalignments.
+
 ## [0.2.1] - 2026-07-11
 
 ### Added
