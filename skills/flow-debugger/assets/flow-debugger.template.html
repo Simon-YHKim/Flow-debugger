@@ -42,7 +42,13 @@
   .edge{fill:none;stroke:rgba(255,255,255,.14);stroke-width:1.4;pointer-events:none}
   .navedge{fill:none;stroke:rgba(139,147,255,.4);stroke-width:1.6;pointer-events:none}
   .navedge.hot{stroke:var(--accent);stroke-width:2.6}
+  .navedge.path{stroke:#7fd1b9;stroke-width:3;filter:drop-shadow(0 0 4px rgba(127,209,185,.45))}
+  .navedge.dimm{stroke:rgba(255,255,255,.05)}
   .navlbl{fill:var(--text);font-size:11px;font-weight:600;paint-order:stroke;stroke:var(--bg);stroke-width:3.5px}
+  .navlbl.pl{fill:#7fd1b9}
+  .node.pdim{opacity:.15}
+  body.navmode .port{display:none!important}
+  .btn.dis{opacity:.35;pointer-events:none}
   .edge.hot{stroke:var(--accent);stroke-width:2.4}.edge.aiedge{stroke:rgba(216,166,87,.5)}.edge.aiedge.hot{stroke:var(--ai)}
   .edge.user{stroke:rgba(139,147,255,.6);stroke-dasharray:6 4}.edge.esel{stroke:#e8896f;stroke-width:2.8}
   .ehit{fill:none;stroke:transparent;stroke-width:16;pointer-events:stroke;cursor:pointer}
@@ -199,9 +205,9 @@
 </div>
 
 <script>
-const GRAPH = __GRAPH_JSON__;
-const GLOSSARY = __GLOSSARY_JSON__;
-const SHOTS = __SHOTS_JSON__;
+const GRAPH = (__GRAPH_JSON__)||[];
+const GLOSSARY = (__GLOSSARY_JSON__)||{};
+const SHOTS = (__SHOTS_JSON__)||{};
 const GAPI = GLOSSARY.apis||{}, GAI = GLOSSARY.ai||{};
 
 const GROUP_ORDER=["auth","capture","knowledge","identity","assistant","ops","deepspace","settings"];
@@ -280,11 +286,18 @@ GROUPS.forEach((g,i)=>{
 });
 
 /* ---------- state ---------- */
-const LSKEY="flowdbg-v4";
-let state={pos:{},edits:{},expanded:{},groupsOff:{},globalNote:"",addedEdges:[],removedEdges:[],bugs:{}};
+/* LSKEY is namespaced by a fingerprint of the dataset (route list), so two
+   different apps' flow-debugger HTMLs opened from the same origin (file://)
+   don't clobber each other's saved positions/edits. */
+const LSKEY="flowdbg-v5:"+(()=>{let h=0;const s=GRAPH.map(x=>(x&&x.route)||"").join("|");for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0;return(h>>>0).toString(36);})();
+/* pos = catalog-mode drag positions, navPos = 화면 흐름-mode drag positions —
+   separate maps so dragging in one mode never corrupts the other's layout. */
+let state={pos:{},navPos:{},edits:{},expanded:{},groupsOff:{},globalNote:"",addedEdges:[],removedEdges:[],bugs:{}};
 try{state={...state,...JSON.parse(localStorage.getItem(LSKEY)||"{}")};}catch(e){}
 const save=()=>localStorage.setItem(LSKEY,JSON.stringify(state));
 let selected=null,hoverId=null,aiOnly=false,searchTerm="",tab="detail";
+let pathFrom=null,navPath=null;
+function clearNavPath(){pathFrom=null;navPath=null;}
 const expanded=new Set(Object.keys(state.expanded).filter(k=>state.expanded[k]));
 
 const stage=document.getElementById("stage"),world=document.getElementById("world");
@@ -296,13 +309,16 @@ let view={x:30,y:16,k:1},els={},groupLabelPos=[];
 const groupOn=g=>!state.groupsOff[g];
 function matchSearch(n){ if(!searchTerm)return true;const t=searchTerm.toLowerCase();
   if(dispLabel(n).toLowerCase().includes(t))return true;
-  if(n.type==="screen")return(n.data.actions||[]).some(a=>(actLabel(a)+(a.plain||"")).toLowerCase().includes(t))||(n.data.summaryKo||"").toLowerCase().includes(t);
-  if(n.type==="action")return((n.data.plain||"")+(n.data.feature||"")).toLowerCase().includes(t); return false; }
+  if(n.type==="screen")return(n.data.actions||[]).some(a=>(actLabel(a)+(a.plain||"")+(a.apis||[]).join(" ")).toLowerCase().includes(t))||(n.data.summaryKo||"").toLowerCase().includes(t);
+  if(n.type==="action")return((n.data.plain||"")+(n.data.feature||"")+(n.data.apis||[]).join(" ")).toLowerCase().includes(t); return false; }
 function visibleNodes(){ const vis=new Set();
   if(harnessMode){ HARNESS.nodes.forEach(n=>vis.add(n.id)); return vis; }
   if(navMode){ screens.forEach(s=>{if(groupOn(s.group)&&matchSearch(nodes.get(s.id)))vis.add(s.id);}); return vis; }
   screens.forEach(s=>{if(groupOn(s.group)&&matchSearch(nodes.get(s.id)))vis.add(s.id);});
-  screens.forEach(s=>{ if(!vis.has(s.id)||!expanded.has(s.id))return;
+  screens.forEach(s=>{ if(!vis.has(s.id))return;
+    // virtual expand: while searching, a matched screen shows its actions even if collapsed —
+    // otherwise a hit inside a collapsed screen is invisible ("검색했는데 아무것도 없음").
+    if(!expanded.has(s.id)&&!(searchTerm&&matchSearch(nodes.get(s.id))))return;
     (s.actions||[]).forEach((a,i)=>{const aid=actId(s,i);if(aiOnly&&!a.ai)return;vis.add(aid);
       if(!aiOnly)(a.apis||[]).forEach((tag,j)=>vis.add(aid+"::api:"+j)); if(a.ai)vis.add(aid+"::ai");}); });
   return vis; }
@@ -348,7 +364,7 @@ const colX=n=>COLX[n.type]||0;
 /* ---------- render (measure -> pack -> no overlap) ---------- */
 const applyView=()=>{world.style.transform=`translate(${view.x}px,${view.y}px) scale(${view.k})`;document.getElementById("zpct").textContent=Math.round(view.k*100)+"%";drawMinimapVP();var cb=document.getElementById("cutbtn");if(cb)cb.style.display="none";};
 function nodeHtml(n){
-  const sel=selected===n.id?" sel":""; const lit=(hoverId&&connected.has&&connected.has(n.id))?" lit":"";
+  const sel=selected===n.id?" sel":""; const lit=((hoverId||selected)&&connected.has&&connected.has(n.id)&&n.id!==hoverId&&n.id!==selected)?" lit":"";
   const ed=state.edits[n.id];const flag=ed&&ed.flag?`<span class="flag">${ed.flag}</span>`:"";
   const dim=(aiOnly&&n.type==="api")?" dim":"";
   const lab=esc(curLabel(n));
@@ -372,18 +388,26 @@ function nodeHtml(n){
   return "";
 }
 let connected={has:()=>false};
+function neighborsOf(id){const c=new Set([id]);(navMode?NAV:effEdges()).forEach(e=>{if(e.from===id)c.add(e.to);if(e.to===id)c.add(e.from);});return c;}
 function render(){
   const vis=visibleNodes();
+  if(selected&&!hoverId)connected=neighborsOf(selected); // selection keeps its neighbourhood lit (not hover-only)
   nodesEl.innerHTML="";els={};
-  for(const [id,n] of nodes){ if(!vis.has(id))continue; n.x=state.pos[id]?state.pos[id].x:(n.type==="h"?n.hx:colX(n)); n.y=state.pos[id]?state.pos[id].y:(n.type==="h"?n.hy:0);
+  const P=navMode?(state.navPos||{}):state.pos; // mode-scoped drag positions
+  for(const [id,n] of nodes){ if(!vis.has(id))continue; n.x=P[id]?P[id].x:(n.type==="h"?n.hx:colX(n)); n.y=P[id]?P[id].y:(n.type==="h"?n.hy:0);
     const wrap=document.createElement("div");wrap.innerHTML=nodeHtml(n);const el=wrap.firstElementChild;el.style.left=n.x+"px";el.style.top=n.y+"px";
     const port=document.createElement("span");port.className="port";port.dataset.port=id;el.appendChild(port);
     nodesEl.appendChild(el);els[id]=el; }
   for(const id in els)nodes.get(id).h=els[id].offsetHeight;
-  if(harnessMode){groupLabelPos=[];}else if(navMode){groupLabelPos=[];packNav(vis);}else{packColumns(vis);}
-  for(const id in els){const n=nodes.get(id);els[id].style.left=n.x+"px";els[id].style.top=n.y+"px";}
-  drawEdges(vis);drawGroupLabels();applyView();updateStat(vis);drawMinimap(vis);
+  if(harnessMode){groupLabelPos=[];}else if(navMode){packNav(vis);}else{packColumns(vis);}
+  for(const id in els){const n=nodes.get(id);els[id].style.left=n.x+"px";els[id].style.top=n.y+"px";
+    if(navMode)els[id].classList.toggle("pdim",!!navPath&&!navPath.nodes.has(id));}
+  drawEdges(vis);drawGroupLabels();applyView();updateStat(vis);drawMinimap(vis);emptyHint(vis);
 }
+function emptyHint(vis){let e=document.getElementById("emptyHint");
+  if(vis.size){if(e)e.remove();return;}
+  if(!e){e=document.createElement("div");e.id="emptyHint";e.style.cssText="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:14px;pointer-events:none;text-align:center;line-height:1.8;z-index:3";stage.appendChild(e);}
+  e.innerHTML="표시할 화면이 없어요.<br>위의 그룹 칩을 켜거나 검색어를 지워보세요.";}
 /* Strict mother-aligned tree. Each screen owns a vertical BAND; inside it every
    action owns a sub-block, and that action's OWN capability nodes (api+ai) sit in
    the capability column top-aligned to the action. So a data/server node always
