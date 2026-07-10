@@ -3,6 +3,21 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.2.3] - 2026-07-11
+
+### Added
+- **"원본 노드로 이동하기" button on every preview card.** The inline preview
+  keeps the in-place reading flow, and the button jumps (select + auto-expand +
+  centre) to the real target card when you want to continue exploring there.
+
+### Verified (full coverage)
+- All 112 navigating actions across all 82 screens have a chip + preview + jump
+  button. Every preview's title and capture were programmatically compared to
+  its linked screen's real card: 0 title mismatches, 0 thumbnail mismatches,
+  0 missing targets (100/112 previews carry a real capture; the rest fall back
+  to type icons because the target screen itself has no capture yet).
+  All 112 previews open at once: 891 nodes, 0 overlaps, 0 page errors.
+
 ## [0.2.2] - 2026-07-11
 
 ### Changed
