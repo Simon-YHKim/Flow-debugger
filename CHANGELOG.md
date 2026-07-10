@@ -3,6 +3,17 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.2.1] - 2026-07-11
+
+### Added
+- **Navigation target chips in catalog mode.** A navigating action (e.g. "첫
+  통찰 → 시작하기를 누른다") now shows a dashed "이동 → <화면>" chip to its right
+  in the capability column, top-aligned to its mother action — so screen-to-screen
+  connectivity is visible in the default view, not only in 화면 흐름 mode.
+  Clicking the chip jumps to (selects, expands, centres) the target screen card;
+  the action detail panel gains an "이동하는 화면" item. Verified: 112 chips,
+  779 nodes expanded, 0 overlaps.
+
 ## [0.2.0] - 2026-07-11
 
 Audit + comparable-tool research release: 2 code auditors (24 findings) + 3

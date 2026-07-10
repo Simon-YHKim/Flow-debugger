@@ -87,6 +87,10 @@
   .node.api .t{font-size:12.5px;font-weight:600;display:flex;align-items:flex-start;gap:8px}
   .node.api .kd{width:10px;height:10px;border-radius:3px;flex:0 0 auto;margin-top:3px}
   .node.ai{width:232px;border-color:rgba(216,166,87,.5);background:linear-gradient(180deg,rgba(216,166,87,.12),var(--panel))}
+  .node.navchip{width:240px;border-style:dashed;border-color:rgba(139,147,255,.55);background:linear-gradient(180deg,rgba(139,147,255,.08),var(--panel))}
+  .node.navchip .t{display:flex;align-items:center;gap:7px;font-size:12.5px}
+  .node.navchip .sicon{width:20px;height:20px;border-radius:5px;flex:0 0 auto}.node.navchip .sicon svg{width:13px;height:13px}
+  .edge.navlink{stroke:rgba(139,147,255,.45);stroke-dasharray:5 4}.edge.navlink.hot{stroke:var(--accent)}
   .node.ai .t{color:var(--ai);display:flex;align-items:flex-start;gap:7px}.node.ai .t::before{content:"◆";font-size:10px;margin-top:3px}
   .node .flag{position:absolute;left:-7px;top:-8px;font-size:10px;background:var(--ai);color:#000;border-radius:99px;padding:0 6px;font-weight:700;z-index:2}
 
@@ -263,6 +267,8 @@ screens.forEach(s=>{
       edges.push({from:aid,to:id,kind:"ac"}); if(!capUsers.has(apiId(tag)))capUsers.set(apiId(tag),new Set()); capUsers.get(apiId(tag)).add(scrTitle(s)+" · "+actLabel(a)); });
     if(a.ai){ const id=aid+"::ai"; addNode({id,type:"ai",parent:aid,data:a.ai});
       edges.push({from:aid,to:id,kind:"ai"}); if(!capUsers.has(aiId(a.ai.purpose)))capUsers.set(aiId(a.ai.purpose),new Set()); capUsers.get(aiId(a.ai.purpose)).add(scrTitle(s)+" · "+actLabel(a)); }
+    // navigating action -> "이동 대상" chip in the capability column (카탈로그에서도 화면 연계가 보이도록)
+    if(a.to&&a.to!==s.route){ const id=aid+"::nav"; addNode({id,type:"nav",parent:aid,group:s.group,data:{to:"s:"+a.to,route:a.to}}); edges.push({from:aid,to:id,kind:"nav"}); }
   });
 });
 function scrTitle(s){return s.titleKo||s.title||s.route;}
@@ -272,8 +278,8 @@ const NAV=[];
 screens.forEach(s=>{(s.actions||[]).forEach((a,i)=>{ if(a.to){const tid="s:"+a.to; if(nodes.has(tid)&&tid!==s.id)NAV.push({from:s.id,to:tid,label:actLabel(a),aid:actId(s,i)});} });});
 function apiKo(t){return(GAPI[t]&&GAPI[t].ko)||t;}
 function aiKo(p){return(GAI[p]&&GAI[p].ko)||p;}
-function dispLabel(n){if(n.type==="h")return n.label;return n.type==="screen"?scrTitle(n.data):n.type==="action"?actLabel(n.data):n.type==="api"?apiKo(n.data.tag):aiKo(n.data.purpose);}
-function codeRef(n){if(n.type==="h")return "";return n.type==="screen"?n.data.route:n.type==="action"?((n.data.feature||"")+(n.data.file?" @ "+n.data.file:"")):n.type==="api"?n.data.tag:n.data.purpose;}
+function dispLabel(n){if(n.type==="h")return n.label;if(n.type==="nav"){const t=nodes.get(n.data.to);return "이동: "+(t?scrTitle(t.data):n.data.route);}return n.type==="screen"?scrTitle(n.data):n.type==="action"?actLabel(n.data):n.type==="api"?apiKo(n.data.tag):aiKo(n.data.purpose);}
+function codeRef(n){if(n.type==="h")return "";if(n.type==="nav")return n.data.route;return n.type==="screen"?n.data.route:n.type==="action"?((n.data.feature||"")+(n.data.file?" @ "+n.data.file:"")):n.type==="api"?n.data.tag:n.data.purpose;}
 
 /* ---------- dynamic groups (works for ANY group names, not just the 2nd-B set) ---------- */
 /* The scan data can use any group ids; derive order/label/color from what actually
@@ -322,7 +328,8 @@ function visibleNodes(){ const vis=new Set();
     // otherwise a hit inside a collapsed screen is invisible ("검색했는데 아무것도 없음").
     if(!expanded.has(s.id)&&!(searchTerm&&matchSearch(nodes.get(s.id))))return;
     (s.actions||[]).forEach((a,i)=>{const aid=actId(s,i);if(aiOnly&&!a.ai)return;vis.add(aid);
-      if(!aiOnly)(a.apis||[]).forEach((tag,j)=>vis.add(aid+"::api:"+j)); if(a.ai)vis.add(aid+"::ai");}); });
+      if(!aiOnly)(a.apis||[]).forEach((tag,j)=>vis.add(aid+"::api:"+j)); if(a.ai)vis.add(aid+"::ai");
+      if(!aiOnly&&nodes.has(aid+"::nav")&&nodes.has("s:"+a.to))vis.add(aid+"::nav");}); });
   return vis; }
 
 /* ---------- AI 하네스 (앱 안 AI가 어떻게 엮여 도는지 + 각 역할) ---------- */
@@ -385,6 +392,8 @@ function nodeHtml(n){
     return `<div class="node api${sel}${lit}${dim}" data-id="${n.id}"><div class="pad"><div class="t"><span class="kd" style="background:${c}"></span><span>${lab}</span></div></div></div>`;}
   if(n.type==="ai"){
     return `<div class="node ai${sel}${lit}" data-id="${n.id}"><div class="pad"><div class="t"><span>${lab}</span></div><div class="sub">${esc(n.data.model||"")}</div></div></div>`;}
+  if(n.type==="nav"){const t=nodes.get(n.data.to),s2=t&&t.data,gc=s2?(GROUP_COLOR[s2.group]||"var(--accent)"):"var(--accent)",ty=s2?screenType(s2):"detail";
+    return `<div class="node navchip${sel}${lit}" data-id="${n.id}" style="--gc:${gc}"><div class="pad"><div class="t"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><span style="color:var(--muted);font-size:11px;flex:0 0 auto">이동 →</span><span style="font-weight:650">${esc(s2?scrTitle(s2):n.data.route)}</span></div><div class="sub">누르면 그 화면 카드로 이동해요</div></div></div>`;}
   if(n.type==="h"){const c=n.color||"#8b93ff";
     return `<div class="node${sel}${lit}" data-id="${n.id}" style="width:208px;border-top:3px solid ${c}"><div class="pad"><div class="t">${esc(n.label)}</div><div class="sub">${esc(n.role)}</div></div></div>`;}
   return "";
@@ -430,7 +439,7 @@ function packColumns(vis){const GAP=16,HEAD=30,GG=26,BANDGAP=20,CGAP=10,AGAP=16;
       let ay=top;
       if(expanded.has(s.id))(s.actions||[]).forEach((a,i)=>{
         const aid=actId(s,i); if(!vis.has(aid))return; const an=nodes.get(aid);
-        const caps=[]; (a.apis||[]).forEach((t,j)=>{const id=aid+"::api:"+j;if(vis.has(id))caps.push(nodes.get(id));}); if(a.ai&&vis.has(aid+"::ai"))caps.push(nodes.get(aid+"::ai"));
+        const caps=[]; (a.apis||[]).forEach((t,j)=>{const id=aid+"::api:"+j;if(vis.has(id))caps.push(nodes.get(id));}); if(a.ai&&vis.has(aid+"::ai"))caps.push(nodes.get(aid+"::ai")); if(vis.has(aid+"::nav"))caps.push(nodes.get(aid+"::nav"));
         const adr=!!state.pos[aid]; if(!adr){an.x=COLX.action;an.y=ay;}
         const aTop=adr?state.pos[aid].y:ay;
         let cyc=aTop; caps.forEach(cn=>{if(!state.pos[cn.id]){cn.x=COLX.api;cn.y=cyc;} cyc+=(cn.h||44)+CGAP;});
@@ -520,7 +529,7 @@ function drawEdges(vis){if(navMode){drawNavEdges(vis);return;}let svg="";effEdge
   const sel=selEdge&&selEdge.from===e.from&&selEdge.to===e.to;
   const d=`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
   if(linkMode&&e.kind!=="h")svg+=`<path class="ehit" data-from="${e.from}" data-to="${e.to}" data-user="${e.user?1:0}" d="${d}"/>`; // harness pipeline edges are educational — not cuttable
-  svg+=`<path class="edge${e.kind==="ai"?" aiedge":""}${e.user?" user":""}${hot?" hot":""}${sel?" esel":""}" d="${d}"/>`;});
+  svg+=`<path class="edge${e.kind==="ai"?" aiedge":""}${e.kind==="nav"?" navlink":""}${e.user?" user":""}${hot?" hot":""}${sel?" esel":""}" d="${d}"/>`;});
   edgesEl.innerHTML=svg;edgesEl.style.width="9000px";edgesEl.style.height="9000px";edgesEl.style.pointerEvents=linkMode?"auto":"none";}
 function drawGroupLabels(){glabelsEl.innerHTML=groupLabelPos.map(h=>`<div class="glabel" style="left:${h.x}px;top:${h.y}px"><span class="gd" style="background:${h.color||GROUP_COLOR[h.g]}"></span>${esc(h.label||GROUP_LABEL[h.g])}</div>`).join("");}
 function esc(s){return(s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
@@ -595,7 +604,10 @@ function setHover(id){if(hoverId===id)return;hoverId=id;
   drawEdges(visibleNodes());}
 /* card click: expand if collapsed, but never collapse (re-clicking to read the
    detail used to fold the tree away — collapse is now the ▾ arrow only). */
-function onNodeClick(id){const n=nodes.get(id);if(n.type==="screen"&&!navMode&&!expanded.has(id)){expanded.add(id);state.expanded[id]=true;save();}selected=id;setTab("detail");render();}
+function onNodeClick(id){const n=nodes.get(id);
+  if(n.type==="nav"){ // 이동 대상 칩: 그 화면 카드로 점프 (펼치고 센터링)
+    const t=nodes.get(n.data.to); if(t){ if(!navMode&&!expanded.has(t.id)){expanded.add(t.id);state.expanded[t.id]=true;} save(); selected=t.id; setTab("detail"); render(); fitToNode(t.id); return; } }
+  if(n.type==="screen"&&!navMode&&!expanded.has(id)){expanded.add(id);state.expanded[id]=true;save();}selected=id;setTab("detail");render();}
 function fitToNode(id){const n=nodes.get(id);if(!n)return;const w=els[id]?els[id].offsetWidth:262,h=n.h||100;const r=stage.getBoundingClientRect();
   view.k=Math.min(1.4,Math.max(view.k,.9));
   view.x=r.width/2-(n.x+w/2)*view.k; view.y=r.height/2-(n.y+h/2)*view.k; applyView();}
@@ -648,7 +660,7 @@ function updateEditCount(){ // count only entries whose nodes still exist (stale
     +((state.removedEdges||[]).filter(k=>{const p=k.split(">>");return nodes.has(p[0])&&nodes.has(p[1]);}).length),
     b=document.getElementById("editCount");b.style.display=n?"inline-block":"none";b.textContent=n;
   const bn=Object.keys(state.bugs||{}).filter(id=>nodes.has(id)).length,bb=document.getElementById("bugCount");if(bb){bb.style.display=bn?"inline-block":"none";bb.textContent=bn;}}
-const TYPETAG={screen:["화면","#8b93ff"],action:["사용자 동작","#8b93ff"],api:["데이터·서버 작업","#6fb6ff"],ai:["AI 기능","#d8a657"],h:["AI 하네스 단계","#8b93ff"]};
+const TYPETAG={screen:["화면","#8b93ff"],action:["사용자 동작","#8b93ff"],api:["데이터·서버 작업","#6fb6ff"],ai:["AI 기능","#d8a657"],nav:["화면 이동","#8b93ff"],h:["AI 하네스 단계","#8b93ff"]};
 
 /* ---------- 경로 걷기 (Overflow Stories식 워크스루: 캡처 보며 한 단계씩) ---------- */
 let walkIdx=0;
@@ -697,6 +709,14 @@ function renderDetail(){
       ${n.detail?`<details class="dev" open><summary></summary><div class="kv">${esc(n.detail)}</div></details>`:""}`;
     return;
   }
+  if(n.type==="nav"){const t=nodes.get(n.data.to);
+    sideBody.innerHTML=`<span class="typetag" style="background:#8b93ff22;color:#8b93ff">화면 이동</span>
+      <div class="ed-label" style="cursor:default">이동 → ${esc(t?scrTitle(t.data):n.data.route)}</div>
+      <div class="plainbox">이 동작을 하면 <b>${esc(t?scrTitle(t.data):n.data.route)}</b> 화면으로 이동해요. 칩을 누르면 그 화면 카드로 점프합니다.</div>
+      ${t?`<div class="dh">이동하는 화면</div><div class="item" data-go="${t.id}"><span class="kd" style="background:${GROUP_COLOR[t.data.group]||'#8b93ff'}"></span><div><div>${esc(scrTitle(t.data))}</div><div class="sm">${esc(n.data.route)}</div></div></div>`:""}`;
+    document.querySelectorAll("#sideBody [data-go]").forEach(r=>r.onclick=()=>{const go=r.dataset.go;if(nodes.get(go)){selected=go;setTab("detail");render();fitToNode(go);}});
+    return;
+  }
   let h="";
   if(n.type==="screen"){const s=n.data,ty=screenType(s),gc=GROUP_COLOR[s.group];
     h+=`<div class="dtitle"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><div><span class="typetag" style="background:${gc}22;color:${gc}">화면 · ${TYPE_KO[ty]||""}</span></div></div>
@@ -722,6 +742,7 @@ function renderDetail(){
     if(a.example)h+=`<div class="dh">사용 예시</div><div class="exbox">${esc(a.example)}</div>`;
     if(a.ai)h+=`<div class="dh">사용하는 AI 기능</div><div class="item" data-go="${n.id}::ai"><span class="kd" style="background:var(--ai)"></span><div><div>${esc(aiKo(a.ai.purpose))}</div><div class="sm">${esc(a.ai.model||"")} · ${esc(a.ai.via||"")}</div></div></div>`;
     if((a.apis||[]).length){h+=`<div class="dh">데이터·서버 작업 (${a.apis.length})</div>`;a.apis.forEach((tag,j)=>{const k=tag.split(":")[0];h+=`<div class="item" data-go="${n.id}::api:${j}"><span class="kd" style="background:${API_KIND_COLOR[k]||'var(--misc)'}"></span><div><div>${esc(apiKo(tag))}</div><div class="sm">${esc(KIND_KO[k]||k)}</div></div></div>`;});}
+    if(a.to&&nodes.has("s:"+a.to)){const tn=nodes.get("s:"+a.to);h+=`<div class="dh">이동하는 화면</div><div class="item" data-go="s:${esc(a.to)}"><span class="kd" style="background:${GROUP_COLOR[tn.data.group]||'#8b93ff'}"></span><div><div>${esc(scrTitle(tn.data))}</div><div class="sm">${esc(a.to)}</div></div></div>`;}
     if((a.risks||[]).length){h+=`<div class="dh">이 동작의 조건·약점</div><div>`+a.risks.map(r=>`<span class="rchip" style="background:${RISK_COLOR[r]||'#888'}">${RISK_KO[r]||r}</span>`).join("")+`</div>`;}
     if((a.checklist||[]).length){h+=`<div class="dh">안 될 때 확인하세요</div>`+a.checklist.map(c=>`<div class="kv">· ${esc(c)}</div>`).join("");}
     if((a.failureModes||[]).length){h+=`<div class="dh">이렇게 안 될 수 있어요</div>`+a.failureModes.map(c=>`<div class="kv" style="color:var(--muted)">· ${esc(c)}</div>`).join("");}
