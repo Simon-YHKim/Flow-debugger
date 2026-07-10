@@ -245,11 +245,11 @@ screens.forEach(s=>{
   addNode({id:s.id,type:"screen",group:s.group,data:s});
   (s.actions||[]).forEach((a,i)=>{
     const aid=actId(s,i); addNode({id:aid,type:"action",group:s.group,data:a,screen:s}); edges.push({from:s.id,to:aid,kind:"sa"});
-    (a.apis||[]).forEach(tag=>{ const id=apiId(tag),kind=tag.split(":")[0];
-      if(!nodes.has(id))addNode({id,type:"api",kind,data:{tag,kind}});
-      edges.push({from:aid,to:id,kind:"ac"}); if(!capUsers.has(id))capUsers.set(id,new Set()); capUsers.get(id).add(scrTitle(s)+" · "+actLabel(a)); });
-    if(a.ai){ const id=aiId(a.ai.purpose); if(!nodes.has(id))addNode({id,type:"ai",data:a.ai});
-      edges.push({from:aid,to:id,kind:"ai"}); if(!capUsers.has(id))capUsers.set(id,new Set()); capUsers.get(id).add(scrTitle(s)+" · "+actLabel(a)); }
+    (a.apis||[]).forEach((tag,j)=>{ const kind=tag.split(":")[0], id=aid+"::api:"+j;
+      addNode({id,type:"api",kind,parent:aid,data:{tag,kind}}); // per-action instance (aligned to its mother action, not a shared sink)
+      edges.push({from:aid,to:id,kind:"ac"}); if(!capUsers.has(apiId(tag)))capUsers.set(apiId(tag),new Set()); capUsers.get(apiId(tag)).add(scrTitle(s)+" · "+actLabel(a)); });
+    if(a.ai){ const id=aid+"::ai"; addNode({id,type:"ai",parent:aid,data:a.ai});
+      edges.push({from:aid,to:id,kind:"ai"}); if(!capUsers.has(aiId(a.ai.purpose)))capUsers.set(aiId(a.ai.purpose),new Set()); capUsers.get(aiId(a.ai.purpose)).add(scrTitle(s)+" · "+actLabel(a)); }
   });
 });
 function scrTitle(s){return s.titleKo||s.title||s.route;}
@@ -295,7 +295,7 @@ function visibleNodes(){ const vis=new Set();
   screens.forEach(s=>{if(groupOn(s.group)&&matchSearch(nodes.get(s.id)))vis.add(s.id);});
   screens.forEach(s=>{ if(!vis.has(s.id)||!expanded.has(s.id))return;
     (s.actions||[]).forEach((a,i)=>{const aid=actId(s,i);if(aiOnly&&!a.ai)return;vis.add(aid);
-      if(!aiOnly)(a.apis||[]).forEach(tag=>vis.add(apiId(tag))); if(a.ai)vis.add(aiId(a.ai.purpose));}); });
+      if(!aiOnly)(a.apis||[]).forEach((tag,j)=>vis.add(aid+"::api:"+j)); if(a.ai)vis.add(aid+"::ai");}); });
   return vis; }
 
 /* ---------- AI 하네스 (앱 안 AI가 어떻게 엮여 도는지 + 각 역할) ---------- */
@@ -374,13 +374,15 @@ function render(){
   for(const id in els){const n=nodes.get(id);els[id].style.left=n.x+"px";els[id].style.top=n.y+"px";}
   drawEdges(vis);drawGroupLabels();applyView();updateStat(vis);drawMinimap(vis);
 }
-/* Layout: each screen owns a vertical BAND that also holds its own actions, so
-   actions sit beside their screen and can never overlap another screen's actions.
-   Capabilities (api+ai) are a single shared sink column ordered by the average y
-   of the actions that use them (barycenter) to minimise edge crossings. Dragged
-   nodes (state.pos) keep their manual position and drop out of the auto flow. */
-function packColumns(vis){const GAP=16,HEAD=30,GG=26,BANDGAP=20;groupLabelPos=[];
-  const actCy={}; // action id -> centre y, for capability barycenter ordering
+/* Strict mother-aligned tree. Each screen owns a vertical BAND; inside it every
+   action owns a sub-block, and that action's OWN capability nodes (api+ai) sit in
+   the capability column top-aligned to the action. So a data/server node always
+   sits next to the action that uses it — it can never fly to the top of a shared
+   column. Nothing overlaps because each block reserves max(node, children) height.
+   Capabilities are per-action instances (a shared table shows once per action; the
+   detail panel still lists every action that uses it). Dragged nodes keep their
+   manual position and drop out of the auto flow. */
+function packColumns(vis){const GAP=16,HEAD=30,GG=26,BANDGAP=20,CGAP=10,AGAP=16;groupLabelPos=[];
   let y=8;
   for(const g of GROUPS){
     const scrs=screens.filter(s=>s.group===g&&vis.has(s.id)); if(!scrs.length)continue;
@@ -389,18 +391,20 @@ function packColumns(vis){const GAP=16,HEAD=30,GG=26,BANDGAP=20;groupLabelPos=[]
       const sn=nodes.get(s.id), dragged=!!state.pos[s.id];
       const top=dragged?state.pos[s.id].y:y;
       if(!dragged){sn.x=COLX.screen;sn.y=top;}
-      let ay=top, hasAct=false;
-      if(expanded.has(s.id))(s.actions||[]).forEach((a,i)=>{const id=actId(s,i);if(!vis.has(id))return;const an=nodes.get(id);
-        const adr=!!state.pos[id]; if(!adr){an.x=COLX.action;an.y=ay;}
-        actCy[id]=(adr?state.pos[id].y:ay)+((an.h||56)/2); ay+=(an.h||56)+GAP; hasAct=true;});
-      if(!dragged){const bandH=Math.max(sn.h||120, hasAct?(ay-top-GAP):0); y=top+bandH+BANDGAP;}
+      let ay=top;
+      if(expanded.has(s.id))(s.actions||[]).forEach((a,i)=>{
+        const aid=actId(s,i); if(!vis.has(aid))return; const an=nodes.get(aid);
+        const caps=[]; (a.apis||[]).forEach((t,j)=>{const id=aid+"::api:"+j;if(vis.has(id))caps.push(nodes.get(id));}); if(a.ai&&vis.has(aid+"::ai"))caps.push(nodes.get(aid+"::ai"));
+        const adr=!!state.pos[aid]; if(!adr){an.x=COLX.action;an.y=ay;}
+        const aTop=adr?state.pos[aid].y:ay;
+        let cyc=aTop; caps.forEach(cn=>{if(!state.pos[cn.id]){cn.x=COLX.api;cn.y=cyc;} cyc+=(cn.h||44)+CGAP;});
+        const capsH=caps.length?(cyc-aTop-CGAP):0, blockH=Math.max(an.h||56, capsH);
+        if(!adr)ay=aTop+blockH+AGAP;
+      });
+      if(!dragged){const bandH=Math.max(sn.h||120, ay>top?(ay-top-AGAP):0); y=top+bandH+BANDGAP;}
     }
     y+=GG;
   }
-  const caps=[...nodes.values()].filter(n=>(n.type==="api"||n.type==="ai")&&vis.has(n.id));
-  const bary=n=>{let s=0,c=0;effEdges().forEach(e=>{if(e.to===n.id&&actCy[e.from]!=null){s+=actCy[e.from];c++;}});return c?s/c:1e9;};
-  caps.sort((p,q)=>bary(p)-bary(q));
-  let cy=8;for(const n of caps){if(state.pos[n.id])continue;n.x=COLX.api;n.y=cy;cy+=(n.h||44)+GAP;}
 }
 function drawEdges(vis){let svg="";effEdges().forEach(e=>{if(!vis.has(e.from)||!vis.has(e.to))return;const a=nodes.get(e.from),b=nodes.get(e.to);
   const x1=a.x+(els[a.id]?els[a.id].offsetWidth:260),y1=a.y+(a.h||60)/2,x2=b.x,y2=b.y+(b.h||40)/2,mx=(x1+x2)/2;
@@ -413,7 +417,7 @@ function drawEdges(vis){let svg="";effEdges().forEach(e=>{if(!vis.has(e.from)||!
 function drawGroupLabels(){glabelsEl.innerHTML=groupLabelPos.map(h=>`<div class="glabel" style="left:${h.x}px;top:${h.y}px"><span class="gd" style="background:${GROUP_COLOR[h.g]}"></span>${GROUP_LABEL[h.g]}</div>`).join("");}
 function esc(s){return(s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 function origLabel(n){return dispLabel(n);}function curLabel(n){const e=state.edits[n.id];return(e&&e.label!=null)?e.label:origLabel(n);}
-function updateStat(vis){const c=t=>[...nodes.values()].filter(n=>n.type===t).length;document.getElementById("stat").textContent=`${screens.length}개 화면 · 동작 ${c("action")} · 데이터/서버 ${c("api")} · AI ${c("ai")}종 · 표시 ${vis.size}`;}
+function updateStat(vis){const acts=[...nodes.values()].filter(n=>n.type==="action").length;const ua=new Set(),ui=new Set();for(const n of nodes.values()){if(n.type==="api"&&n.data)ua.add(n.data.tag);if(n.type==="ai"&&n.data)ui.add(n.data.purpose);}document.getElementById("stat").textContent=`${screens.length}개 화면 · 동작 ${acts} · 데이터/서버 ${ua.size} · AI ${ui.size}종 · 표시 ${vis.size}`;}
 
 /* ---------- minimap ---------- */
 const mm=document.getElementById("minimap"),mmc=document.getElementById("mmcanvas"),mmvp=document.getElementById("mmvp");
@@ -544,12 +548,12 @@ function renderDetail(){
     if((a.failureModes||[]).length){h+=`<div class="dh">이렇게 안 될 수 있어요</div>`+a.failureModes.map(c=>`<div class="kv" style="color:var(--muted)">· ${esc(c)}</div>`).join("");}
     h+=`<button class="btn" id="reportBug" style="width:100%;margin-top:14px;background:rgba(232,137,111,.14);border-color:#e8896f;color:#e8896f;font-weight:600">이 동작이 안 돼요 → 신고서 만들기</button>`;
     h+=`<details class="dev"><summary></summary><div class="kv">기능: ${esc(a.feature||"")}</div><div class="kv">파일: ${esc(a.file||"")}</div><div class="kv">${esc(a.detail||"")}</div></details>`;
-  }else if(n.type==="api"){const d=n.data,users=[...(capUsers.get(selected)||[])],k=d.kind;
+  }else if(n.type==="api"){const d=n.data,users=[...(capUsers.get(apiId(d.tag))||[])],k=d.kind;
     h+=`<span class="typetag" style="background:${(API_KIND_COLOR[k]||'#888')}22;color:${API_KIND_COLOR[k]||'#888'}">${KIND_KO[k]||k}</span><input class="ed-label" id="edLabel" value="${esc(curLabel(n))}">
       <div class="plainbox">${esc(apiKo(d.tag))}</div>
       <div class="dh">이 작업을 쓰는 동작 (${users.length})</div><div class="kv">${users.map(esc).join("<br>")||"-"}</div>
       <details class="dev"><summary></summary><div class="kv">${esc(d.tag)}</div></details>`;
-  }else if(n.type==="ai"){const d=n.data,users=[...(capUsers.get(selected)||[])],g=GAI[d.purpose]||{};
+  }else if(n.type==="ai"){const d=n.data,users=[...(capUsers.get(aiId(d.purpose))||[])],g=GAI[d.purpose]||{};
     h+=`<span class="typetag" style="background:#d8a65722;color:#d8a657">AI 기능</span><input class="ed-label" id="edLabel" value="${esc(curLabel(n))}">
       <div class="plainbox">${esc(g.desc||aiKo(d.purpose))}</div>
       <div class="dh">동작 방식</div><div class="kv" style="color:var(--muted)">앱의 단일 AI 창구(callGemini)를 거칩니다. 먼저 <b>안전 검사</b>(위기·금지어)를 한 뒤 AI 모델을 부르고 기록을 남겨요. '서버 경유'면 키를 숨긴 서버 함수로 호출됩니다.</div>

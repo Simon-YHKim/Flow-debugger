@@ -3,6 +3,19 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.1.4] - 2026-07-10
+
+### Changed
+- **Capabilities now align to their mother node (strict tree).** Previously api/ai
+  nodes were de-duplicated into one shared sink column ordered by barycenter, which
+  pulled shared data/server nodes (e.g. "데이터 저장·조회") to the top, away from the
+  screens that actually use them. Each action now owns its OWN capability nodes,
+  placed in the capability column top-aligned to that action, so a data/server/AI
+  node always sits right next to the action that uses it and never flies to the top.
+  A shared table therefore appears once per action; the detail panel still lists
+  every action that uses it. Verified 0 overlaps and 0 capabilities above their
+  mother across all 82 screens / 667 nodes expanded.
+
 ## [0.1.3] - 2026-07-10
 
 ### Fixed
