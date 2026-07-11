@@ -367,7 +367,14 @@ function apiKo(t){return(GAPI[t]&&GAPI[t].ko)||t;}
 function aiKo(p){return(GAI[p]&&GAI[p].ko)||p;}
 const UKIND={screen:"화면",action:"동작",note:"메모"};
 function dispLabel(n){if(n.type==="h")return n.label;if(n.type==="user")return n.data.label||"(이름 없음)";if(n.type==="nav"){const t=nodes.get(n.data.to);return "이동: "+(t?scrTitle(t.data):n.data.route);}if(n.type==="navscreen"){const t=nodes.get(n.data.sid);return(t?scrTitle(t.data):n.data.route)+" (미리보기)";}return n.type==="screen"?scrTitle(n.data):n.type==="action"?actLabel(n.data):n.type==="api"?apiKo(n.data.tag):aiKo(n.data.purpose);}
-function codeRef(n){if(n.type==="h"||n.type==="user")return "";if(n.type==="nav"||n.type==="navscreen")return n.data.route;return n.type==="screen"?n.data.route:n.type==="action"?((n.data.feature||"")+(n.data.file?" @ "+n.data.file:"")):n.type==="api"?n.data.tag:n.data.purpose;}
+/* codeRef = the code hint shown for a node. For actions we prefer `impl` (the real
+   handler/hook location the scan traced to) over `file` (often the screen-mount line),
+   and append `renders` (the file that actually renders in production when a screen
+   delegates to a variant) — both backward-compatible: absent → old behaviour. */
+function codeRef(n){if(n.type==="h"||n.type==="user")return "";if(n.type==="nav"||n.type==="navscreen")return n.data.route;
+  if(n.type==="screen")return n.data.route+(n.data.renders?` (렌더: ${n.data.renders})`:"");
+  if(n.type==="action"){const d=n.data,loc=d.impl||d.file;return (d.feature||"")+(loc?" @ "+loc:"")+(d.renders?` (렌더: ${d.renders})`:"");}
+  return n.type==="api"?n.data.tag:n.data.purpose;}
 
 /* ---------- dynamic groups (works for ANY group names, not just the 2nd-B set) ---------- */
 /* The scan data can use any group ids; derive order/label/color from what actually
@@ -937,9 +944,10 @@ function renderDetail(){
   var rb=document.getElementById("reportBug"); if(rb)rb.onclick=()=>{state.bugs=state.bugs||{};if(!state.bugs[selected])state.bugs[selected]={};save();updateEditCount();setTab("bug");};
 }
 function renderPrompt(){
-  const lines=["아래는 2nd-B 기능 흐름도에서 내가 요청하는 수정사항이야. 각 항목을 검토해서 (1) 흐름도 설명이 틀렸으면 정정하고 (2) 코드 변경이 필요하면 제안/적용해줘.\n"];
+  const lines=["아래는 기능 흐름도에서 내가 요청하는 수정사항이야. 각 항목을 검토해서 (1) 흐름도 설명이 틀렸으면 정정하고 (2) 코드 변경이 필요하면 제안/적용해줘.",
+    "단, '코드 힌트'는 흐름도가 추정한 시작점일 뿐이야 — 바로 고치지 말고 실제 로직 위치를 확인하고(같은 화면의 여러 버전 중 실제로 렌더되는 파일을 확인), 이름 바꾸기는 화면에 보이는 글자만(다국어면 모든 언어 함께) 바꿔줘.\n"];
   for(const [id,ed] of Object.entries(state.edits)){const n=nodes.get(id);if(!n)continue;const tt=(TYPETAG[n.type]||[""])[0];
-    const ctx=n.type==="action"&&n.screen?`[${scrTitle(n.screen)}] `:"";const ref=`${tt} "${origLabel(n)}"`;const code=codeRef(n)?` (코드: ${codeRef(n)})`:"";
+    const ctx=n.type==="action"&&n.screen?`[${scrTitle(n.screen)}] `:"";const ref=`${tt} "${origLabel(n)}"`;const code=codeRef(n)?` (코드 힌트: ${codeRef(n)})`:"";
     const p=[];if(ed.label&&ed.label!==origLabel(n))p.push(`이름을 "${ed.label}"(으)로 변경`);if(ed.flag)p.push(`[${ed.flag}]`);if(ed.note)p.push(`메모: ${ed.note}`);
     if(p.length)lines.push(`- ${ctx}${ref}${code} → ${p.join(" / ")}`);}
   const ae=state.addedEdges||[],re=state.removedEdges||[];
@@ -971,16 +979,20 @@ function mermaidText(){
   if(L.length===1)L.push("  A[이동 연결이 아직 없어요]");
   return L.join("\n");}
 function buildBugReport(ids){
-  const out=["[버그 신고서] 2nd-B — 비개발자가 작성했어요. 아래 '코드' 경로와 '점검 포인트'부터 원인을 찾아 고쳐줘.\n"];
+  const out=["[버그 신고서] 비개발자가 작성했어요.","",
+    "[작업 규칙 — 먼저 읽어줘]",
+    "· 아래 '코드 힌트'는 흐름도가 추정한 시작점일 뿐이야. 바로 고치지 말고 먼저 증상을 재현하고 실제 원인 함수를 추적해줘(화면 진입 지점이 가리켜진 경우가 많고, 같은 화면의 여러 버전 중 실제로 렌더되는 파일을 확인해야 해).",
+    "· '바란 것'이 실제로 관찰되면 완료야. 그 범위 밖은 건드리지 말고, 애매하면 추측하지 말고 물어봐.",""];
   ids.forEach(id=>{const n=nodes.get(id);if(!n)return;const a=n.data,b=(state.bugs||{})[id]||{};
     out.push(`■ 안 되는 동작: ${dispLabel(n)}${n.screen?"  (화면: "+scrTitle(n.screen)+" "+(n.screen.route||"")+")":""}`);
-    if(a.feature||a.file)out.push(`  코드: ${a.feature||""}${a.file?" @ "+a.file:""}`);
+    if(a.feature||a.file)out.push(`  코드 힌트(검증 후 사용): ${a.feature||""}${a.file?" @ "+a.file:""}`);
     if(b.symptom)out.push(`  무슨 일이: ${b.symptom}`);
-    if(b.expected)out.push(`  바란 것: ${b.expected}`);
-    if(b.repro)out.push(`  하던 중: ${b.repro}`);
-    if(a.ai)out.push(`  의존 AI: ${aiKo(a.ai.purpose)} (${a.ai.purpose}${a.ai.model?", "+a.ai.model:""}${a.ai.via?", "+a.ai.via:""})`);
-    if((a.apis||[]).length)out.push(`  의존 작업: ${a.apis.map(t=>apiKo(t)+" ["+t+"]").join(", ")}`);
+    if(b.expected)out.push(`  바란 것(완료 기준): ${b.expected}`);
+    if(b.repro)out.push(`  하던 중(재현): ${b.repro}`);
+    if(a.ai)out.push(`  의존 AI(함께 점검): ${aiKo(a.ai.purpose)} (${a.ai.purpose}${a.ai.model?", "+a.ai.model:""}${a.ai.via?", "+a.ai.via:""})`);
+    if((a.apis||[]).length)out.push(`  의존 작업(함께 점검): ${a.apis.map(t=>apiKo(t)+" ["+t+"]").join(", ")}`);
     if((a.risks||[]).length)out.push(`  점검 포인트(약점): ${a.risks.map(r=>RISK_KO[r]||r).join(", ")}`);
+    out.push(`  작업: 위 증상을 재현 → 실제 원인 추적 → 최소 수정 → '바란 것'이 관찰되는지 재현으로 확인.`);
     out.push("");});
   return out.join("\n");
 }
@@ -1064,37 +1076,62 @@ function renderChips(){document.getElementById("chips").innerHTML=GROUPS.map(g=>
 /* ---------- 프롬프트 스택 독 ---------- */
 /* 노드에 남긴 메모·이름수정·표시(틀림/삭제/추가)·버그신고·연결변경·직접입력을
    AI가 바로 작업할 수 있는 문장(+코드 근거)으로 변환해 하단에 쌓는다. */
+/* Each entry: {kind,title,code,text} for the on-screen card (kept short & non-dev
+   readable) PLUS optional {accept,guard} that only surface in the *copied* prompt —
+   accept = "완료 기준"(done-when the AI can check), guard = "주의·범위"(scope + the
+   anchor-is-a-hint rule). This is what lifts the export from a vague wish to an
+   actionable, bounded request. */
+const HINT_GUARD="표시된 코드 위치는 흐름도가 추정한 시작 힌트야 — 바로 고치지 말고 먼저 증상을 재현한 뒤 실제 원인 코드를 추적해줘(화면 진입 지점이 가리켜진 경우가 많아 실제 로직은 다른 파일일 수 있고, 같은 화면의 여러 버전 중 실제로 렌더되는 파일을 확인해야 해).";
 function stackEntries(){
   const E=[];
   for(const [id,ed] of Object.entries(state.edits||{})){const n=nodes.get(id);if(!n)continue;
     const tt=(TYPETAG[n.type]||[""])[0],title=`${tt} "${origLabel(n)}"`,code=codeRef(n);
-    const parts=[];
-    if(ed.label&&ed.label!==origLabel(n))parts.push(`이름(라벨)을 "${ed.label}"(으)로 바꿔줘`);
+    const parts=[];let accept="",guard="";
+    if(ed.label&&ed.label!==origLabel(n)){parts.push(`이름(라벨)을 "${ed.label}"(으)로 바꿔줘`);
+      guard=`화면에 보이는 글자(UI 라벨)만 바꿔 — 코드 식별자·라우트 이름은 그대로. 다국어(i18n)를 쓰면 모든 언어의 같은 항목을 함께 바꾸고, 같은 글자가 탭·버튼·제목 등 여러 곳에 있으면 이 화면의 그 항목만.`;
+      accept=`이 화면에서 라벨이 "${ed.label}"로 보이고, 다른 화면·다른 언어 표기가 깨지지 않음.`;}
     if(ed.flag==="틀림")parts.push("이 설명이 실제 코드와 다른지 검토하고 정정해줘");
     if(ed.flag==="삭제")parts.push("이 항목은 실제와 다르거나 불필요하니 흐름도에서 빼줘");
     if(ed.flag==="추가")parts.push("이 주변에 누락된 동작·연결이 없는지 코드에서 더 확인해줘");
     if(ed.note)parts.push(ed.note);
-    if(parts.length)E.push({kind:"메모",color:"#8b93ff",nodeId:id,title,code,text:parts.join(" / ")});}
+    if(parts.length)E.push({kind:"메모",color:"#8b93ff",nodeId:id,title,code,text:parts.join(" / "),accept,guard});}
   for(const [id,bg] of Object.entries(state.bugs||{})){const n=nodes.get(id);if(!n)continue;const a=n.data||{};
     const t=[];if(bg.symptom)t.push("증상: "+bg.symptom);if(bg.expected)t.push("기대: "+bg.expected);if(bg.repro)t.push("재현: "+bg.repro);
-    t.push("코드 경로부터 원인을 찾아 고쳐줘");
     const dep=[];if(a.ai&&a.ai.purpose)dep.push("AI: "+a.ai.purpose);if((a.apis||[]).length)dep.push("의존: "+a.apis.join(", "));if((a.risks||[]).length)dep.push("점검: "+a.risks.map(r=>RISK_KO[r]||r).join(","));
-    E.push({kind:"버그",color:"#e8896f",nodeId:id,title:`동작 "${dispLabel(n)}"${n.screen?` — 화면 ${scrTitle(n.screen)}`:""}`,code:codeRef(n),text:t.join(" · ")+(dep.length?"  ["+dep.join(" · ")+"]":"")});}
-  (state.addedNodes||[]).forEach((u,i)=>{const link=(state.addedEdges||[]).find(e=>e.to===u.id&&nodes.get(e.from));const lf=link?nodes.get(link.from):null;
-    E.push({kind:"추가",color:"#8b93ff",addNode:i,nodeId:u.id,title:`새 ${UKIND[u.kind]||"노드"} "${u.label||"(이름 없음)"}"${lf?` — ${origLabel(lf)}에 연결`:""}`,code:"",
-      text:(u.kind==="note"?"이 메모를 반영해줘":`이런 ${UKIND[u.kind]||"노드"}이 새로 필요해 — 만들어줘`)+(u.desc?": "+u.desc:"")});});
+    E.push({kind:"버그",color:"#e8896f",nodeId:id,title:`동작 "${dispLabel(n)}"${n.screen?` — 화면 ${scrTitle(n.screen)}`:""}`,code:codeRef(n),
+      text:t.join(" · ")+(dep.length?"  ["+dep.join(" · ")+"]":""),
+      accept:(bg.expected?`기대한 동작이 실제로 관찰되면 완료: ${bg.expected}`:"기대한 정상 동작이 실제로 관찰되면 완료(재현 절차로 확인).")+" · 증상이 사라졌는지 재현으로 검증.",
+      guard:HINT_GUARD+(dep.length?` 관련 의존[${dep.join(" · ")}]도 함께 점검. `:" ")+"완료 기준에 없는 범위는 건드리지 말고, 애매하면 추측하지 말고 물어봐."});}
+  (state.addedNodes||[]).forEach((u,i)=>{const link=(state.addedEdges||[]).find(e=>e.to===u.id&&nodes.get(e.from));const lf=link?nodes.get(link.from):null;const uk=UKIND[u.kind]||"노드";
+    E.push({kind:"추가",color:"#8b93ff",addNode:i,nodeId:u.id,title:`새 ${uk} "${u.label||"(이름 없음)"}"${lf?` — ${origLabel(lf)}에 연결`:""}`,code:"",
+      text:(u.kind==="note"?"이 메모를 반영해줘":`이런 ${uk}이 새로 필요해 — 만들어줘`)+(u.desc?": "+u.desc:""),
+      accept:u.kind==="note"?"":`"${u.label||"이 "+uk}"에서 요청한 내용이 실제로 동작하고, 앱의 다른 화면과 이질감 없이 네비게이션으로 연결됨.`,
+      guard:u.kind==="note"?"":`먼저 같은 기능이 이미 있는지 코드에서 확인해줘 — 있으면 새로 만들지 말고 알려줘. 없으면 기존 화면들과 같은 디자인·구조·네비게이션 규칙을 따라 만들고${lf?` ${origLabel(lf)}에서 들어가게 연결`:""}. 서버·푸시·결제 등 새 비용/외부 연동이 필요하면 만들기 전에 알려줘.`});});
   (state.addedEdges||[]).forEach((e,i)=>{const f=nodes.get(e.from),t=nodes.get(e.to);if(!f||!t)return; if(t.type==="user")return; // user-node link is covered by its 추가 entry
-    E.push({kind:"연결",color:"#7fd1b9",edge:{type:"add",i},nodeId:e.from,title:`연결 추가: ${origLabel(f)} → ${origLabel(t)}`,code:[codeRef(f),codeRef(t)].filter(Boolean).join(" → "),text:"이 연결이 실제 코드에 있는지 확인하고 흐름도에 반영해줘"});});
-  (state.removedEdges||[]).forEach((k,i)=>{const p=k.split(">>"),f=nodes.get(p[0]),t=nodes.get(p[1]);if(f&&t)E.push({kind:"연결",color:"#e8896f",edge:{type:"del",i},nodeId:p[0],title:`연결 끊기: ${origLabel(f)} → ${origLabel(t)}`,code:"",text:"이 연결은 실제로 없는 것 같으니 확인 후 흐름도에서 제거해줘"});});
+    E.push({kind:"연결",color:"#7fd1b9",edge:{type:"add",i},nodeId:e.from,title:`연결 추가: ${origLabel(f)} → ${origLabel(t)}`,code:[codeRef(f),codeRef(t)].filter(Boolean).join(" → "),
+      text:`흐름도에 표시한 이동: ${origLabel(f)} → ${origLabel(t)}. 실제 코드에 이 이동 경로가 있는지 확인해줘.`,
+      accept:"흐름도 설명이 실제 코드와 일치함(있으면 확인만, 없으면 어떻게 연결할지 합의 후 반영).",
+      guard:"이미 코드에 있으면 흐름도 설명만 맞는지 확인하고 코드는 건드리지 마. 없는데 있어야 하면 어디에 버튼/이동을 넣을지 먼저 알려줘 — 임의로 두 번째 경로를 만들지 마."});});
+  (state.removedEdges||[]).forEach((k,i)=>{const p=k.split(">>"),f=nodes.get(p[0]),t=nodes.get(p[1]);if(f&&t)E.push({kind:"연결",color:"#e8896f",edge:{type:"del",i},nodeId:p[0],title:`연결 끊기: ${origLabel(f)} → ${origLabel(t)}`,code:"",
+    text:`흐름도에서 ${origLabel(f)} → ${origLabel(t)} 이동은 실제로 없는 것 같아 — 확인해줘.`,
+    guard:"코드가 실제로 그 이동을 하면 지우지 말고 알려줘. 정말 없을 때만 흐름도에서 제거."});});
   if(state.globalNote)E.push({kind:"전체",color:"#d8a657",global:true,title:"전체 메모",code:"",text:state.globalNote});
   (state.promptExtra||[]).forEach((x,i)=>E.push({kind:"요청",color:"#9fd0e0",extra:i,nodeId:x.id||null,title:x.label||"직접 추가한 요청",code:x.code||"",text:x.t}));
   return E;
 }
 function buildStackPrompt(){
   const E=stackEntries();
-  const L=["아래는 기능 흐름도(flow-debugger)에서 내가 수집한 작업 요청 목록이야.",
-    "각 항목의 코드 근거(route, file:line, api 태그)를 참고해서 — 흐름도 설명이 틀렸으면 정정하고, 코드 수정이 필요하면 고쳐줘.",""];
-  E.forEach((e,i)=>{L.push(`${i+1}. [${e.kind}] ${e.title}${e.code?`  (코드: ${e.code})`:""}`);L.push(`   → ${e.text}`);});
+  const L=["아래는 기능 흐름도(flow-debugger)에서 비개발자가 수집한 작업 요청이야.","",
+    "[작업 규칙 — 먼저 읽어줘]",
+    "1) 각 항목의 '코드 힌트'는 흐름도가 추정한 시작점일 뿐이야. 바로 고치지 말고, 먼저 증상을 재현하고 실제 로직이 있는 함수/파일을 추적해서 확인해줘.",
+    "2) 같은 화면에 여러 버전의 파일이 있으면 실제로 프로덕션에서 렌더되는 파일을 찾아 고쳐줘 — 안 그러면 빌드는 통과해도 실제 화면은 안 바뀔 수 있어.",
+    "3) 각 항목의 '완료 기준'을 충족하면 끝. 기준에 없는 범위는 건드리지 말고, 애매하면 추측하지 말고 한 줄로 물어봐.",
+    "4) 새 비용/외부 연동(서버·푸시·결제 등)이 필요해지면 만들기 전에 알려줘.",
+    "5) 흐름도 설명 자체가 틀렸으면 그 점도 정정해줘.",""];
+  E.forEach((e,i)=>{L.push(`${i+1}. [${e.kind}] ${e.title}${e.code?`  (코드 힌트: ${e.code})`:""}`);
+    L.push(`   · 요청: ${e.text}`);
+    if(e.accept)L.push(`   · 완료 기준: ${e.accept}`);
+    if(e.guard)L.push(`   · 주의: ${e.guard}`);});
   if(!E.length)L.push("(아직 항목이 없어요)");
   return L.join("\n");
 }

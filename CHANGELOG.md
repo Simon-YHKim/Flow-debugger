@@ -3,6 +3,36 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.6.0] - 2026-07-11
+
+### Changed
+- **The exported prompt is now measured, not asserted — and hardened.** Prompt quality
+  went from **28/60 (46.7%) → 53/60 (88.3%)** on a 6-criteria rubric (grounding, single
+  intent, acceptance criteria, constraints, context framing, ambiguity removal), judged
+  by an independent 3-lens panel; "safely executable by a coding agent" rose from **1/5
+  to 4/5**. See `evals/prompt-quality.md`.
+- **`buildStackPrompt` / `buildBugReport` / the 수정 요청 export now carry a contract.**
+  A "작업 규칙" preamble tells the coding AI to treat the code anchor as a *hint to
+  verify* (reproduce first, trace the real handler, confirm the file that actually
+  renders in production), honor a per-item **완료 기준**, respect scope, flag new
+  cost/external dependencies, and ask instead of guessing. Per-kind hardening: rename
+  now scopes to UI label vs identifier + all locales; add-node checks for an existing
+  feature and follows the app's nav/design; connection items disambiguate verify-doc vs
+  edit-code and forbid a duplicate path. On-screen cards stay short (non-developer
+  readable); the richer 완료 기준/주의 only appear in the copied prompt.
+- **Anchor accuracy fixed at the source (the one thing templates can't).** `SCAN` in
+  `references/scan-prompts.md` now requires anchoring `file` to the real handler (not the
+  screen-mount line), adds optional `impl` (real logic location) and `renders` (the
+  production-rendered variant when a screen delegates), and captures a `stack` line.
+  `codeRef` shows `impl`/`renders` when present (backward-compatible).
+
+### Verified
+- Blind re-score on the identical 5 fixtures: 46.7% → 88.3%. Ground-truth A/B on the real
+  target repo (login-bug "misleading anchor" trap): the old prompt shipped a speculative
+  auth diff; the hardened prompt reproduced-then-asked and avoided a wrong change to a
+  possibly-non-bug. Regression: left 설명 panel + 2-tab layout, expand-all 891/0 overlaps,
+  화면 흐름 82/0, node-add lane 0, 0 page errors.
+
 ## [0.5.0] - 2026-07-11
 
 ### Added

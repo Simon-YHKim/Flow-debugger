@@ -19,17 +19,27 @@
 > (callGemini/callAdvisor/embedTexts/transcribe/classify*)을 찾는다. lib 헬퍼를
 > 거치면 실제 api(table/rpc/edge/storage)까지 따라간다.
 > 각 화면마다 PRIMARY 동작만(최대 ~6), 화면 로드 데이터 패치는 "On load" 동작으로.
-> JSON 배열만 출력:
+>
+> **앵커 정확도(중요 — 흐름도가 개발자에게 넘길 신고서의 신뢰도를 좌우한다):**
+> - `file` 은 **동작의 실제 로직이 있는 줄**을 가리켜야 한다 — 화면 진입(mount)/import/렌더 가드 줄이 아니라, 그 동작을 처리하는 **핸들러 함수의 줄**. (예: 로그인 버튼이면 `<Pressable>` 렌더 줄이 아니라 `handleSubmit`/`signInWithPassword` 호출 줄.)
+> - 실제 로직이 **다른 파일의 훅/헬퍼**(예: `useSignInForm.ts`, `lib/…`)에 있으면 그 위치를 **`impl`** 에 적는다(`file` 은 화면 파일, `impl` 은 진짜 로직 위치).
+> - 화면이 조건에 따라 **다른 컴포넌트에 위임**하면(예: `if (isDeepSpaceUI()) return <XxxDesignScreen/>`, `Platform.select`, 실험 플래그) **프로덕션에서 실제로 렌더되는 파일**을 **`renders`** 에 적는다. 이게 없으면 개발자가 안 보이는 legacy 파일을 고쳐 "빌드는 초록인데 화면은 그대로"가 된다.
+> - 확실치 않으면 추정하지 말고 `impl`/`renders` 를 생략한다(빈 값이 틀린 값보다 낫다).
+>
+ JSON 배열만 출력(배열 요소는 전부 화면 객체 — 다른 종류의 객체를 섞지 말 것):
 > ```json
-> [{"route":"/capture","title":"Capture","group":"<GROUP>","summary":"...",
->   "actions":[{"action":"Submit clip","feature":"classifyClipper",
->     "apis":["edge:gemini-proxy","db:sources:insert","rpc:bump_gemini_spend","storage:raw-clippings:upload"],
->     "ai":{"purpose":"capture_classify","model":"gemini-2.5-flash","via":"proxy"},
->     "file":"src/app/capture.tsx:1155","detail":"무슨 일이 일어나는지 1-2문장",
->     "to":null}]}]
+> [{"route":"/sign-in","title":"Sign in","group":"<GROUP>","summary":"...",
+>   "renders":"src/screens/deepspace/dds-auth-screens.tsx:149",
+>   "actions":[{"action":"Sign in","feature":"handleSubmit",
+>     "apis":["auth:signInWithPassword","db:users:select"],
+>     "ai":null,
+>     "file":"src/app/(auth)/sign-in.tsx:198","impl":"src/lib/auth/useSignInForm.ts:154",
+>     "renders":"src/screens/deepspace/dds-auth-screens.tsx:305",
+>     "detail":"무슨 일이 일어나는지 1-2문장","to":"/"}]}]
 > ```
 > 태그 형식: db:<table>:<select|insert|update|delete>, rpc:<name>, edge:<fn>,
 > storage:<bucket>:<op>, auth:<op>. ai 없으면 null. 유효한 JSON(쌍따옴표, trailing comma 금지).
+> `impl`/`renders` 는 해당 없으면 생략(선택 필드 — 흐름도가 있으면 '코드 힌트'에 "@ impl (렌더: renders)"로 더한다). **stack 한 줄**(프레임워크·백엔드·화면변형 메커니즘)은 배열에 섞지 말고 ENRICH 의 앱 최상위 요약/전체 메모로 따로 전달한다(화면 객체 배열을 오염시키면 흐름도에 유령 노드가 생긴다).
 > **`to`**: 그 동작이 버튼/링크/router(push/replace/navigate/Link href)로 **다른 화면으로 이동**시키면
 > 대상 route(예 "/capture-full"), 이동이 아니면 null. (화면 흐름 뷰가 이 값으로 화면→화면 화살표를 그린다.)
 
