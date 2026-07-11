@@ -973,8 +973,13 @@ document.getElementById("navFlowBtn").onclick=e=>{navMode=!navMode;
   if(navMode&&linkMode)setLinkMode(false);
   if(!navMode)clearNavPath();
   syncModeButtons();e.target.classList.toggle("on",navMode);selected=null;hoverId=null;connected={has:()=>false};render();fit();renderDetail();};
-document.getElementById("expandAll").onclick=()=>{screens.forEach(s=>{if(groupOn(s.group)){expanded.add(s.id);state.expanded[s.id]=true;}});save();render();};
-document.getElementById("collapseAll").onclick=()=>{expanded.clear();state.expanded={};save();render();};
+document.getElementById("expandAll").onclick=()=>{ if(navMode||harnessMode)return;
+  state.navOpen=state.navOpen||{};
+  screens.forEach(s=>{if(!groupOn(s.group))return;expanded.add(s.id);state.expanded[s.id]=true;
+    // also open every nav preview so 화면 이동까지 다 펼쳐짐
+    (s.actions||[]).forEach((a,i)=>{const cid=actId(s,i)+"::nav";if(nodes.has(cid))state.navOpen[cid]=true;});});
+  save();render();};
+document.getElementById("collapseAll").onclick=()=>{if(navMode||harnessMode)return;expanded.clear();state.expanded={};state.navOpen={};save();render();};
 document.getElementById("autoArrange").onclick=()=>{if(navMode)state.navPos={};else state.pos={};save();render();fit();}; // resets only the CURRENT mode's manual positions
 document.getElementById("resetAll").onclick=()=>{if(confirm("위치·펼침·수정·필터를 모두 초기화할까요?")){localStorage.removeItem(LSKEY);location.reload();}};
 function renderChips(){document.getElementById("chips").innerHTML=GROUPS.map(g=>`<div class="chip ${groupOn(g)?"":"off"}" data-g="${g}"><span class="gd" style="background:${GROUP_COLOR[g]}"></span>${GROUP_LABEL[g]}</div>`).join("");

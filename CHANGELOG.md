@@ -3,6 +3,15 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.3.1] - 2026-07-11
+
+### Changed
+- **전체 펼치기 now also opens every navigation preview.** It used to expand only
+  the screens' action trees; the "이동 → <화면>" chips stayed collapsed. It now
+  opens all nav previews too, so one click reveals screens → actions → data/AI →
+  and the linked screen previews. 모두 접기 closes them back. Verified: 82 screens
+  + 112 previews open, 891 nodes, 0 overlaps.
+
 ## [0.3.0] - 2026-07-11
 
 ### Added
