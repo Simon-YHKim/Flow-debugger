@@ -1,11 +1,12 @@
 # flow-debugger — Session Handoff
 
-## Latest — 2026-07-11 / Task A 완료: framework-aware 재스캔으로 impl/renders/stack 실채움 (v0.7.0)
+## Latest — 2026-07-11 / v0.8.0 노드추가=탭 전환 · v0.7.0 Task A(앵커 재스캔) 완료
 
 ### 어디까지 왔나
-- main HEAD: `1e634c0` (origin == local, working tree clean)
+- main HEAD: v0.8.0 (아래 커밋). origin == local, working tree clean.
 - 이번 세션 머지된 커밋(직접 push to main):
-  - `1e634c0` **v0.7.0** — 2nd-B 재스캔으로 0.6.0이 비워둔 앵커 정확도 필드 실채움 + apply-anchors.js + 버그신고서 codeRef 픽스 + stack 주입
+  - **v0.8.0** — `＋ 노드 추가`를 모달 다이얼로그 → **우측 패널 탭**(버그신고/수정요청 옆)으로 이동. 폼+추가노드 목록(흐름도에서 보기/삭제), 툴바 버튼은 탭 오픈, 입력값 재렌더 보존, 배지 카운트, 옛 .adlg 모달 제거. playwright PASS(탭 3개·add→캔버스+목록·삭제·overlap0·pageerror0).
+  - `1e634c0` **v0.7.0** — 2nd-B 재스캔으로 0.6.0이 비워둔 앵커 정확도 필드 실채움 + apply-anchors.js + 버그신고서 codeRef 픽스 + stack 주입 + A'(divergent 4화면 액션SET prod 재도출)
 - 직전: `869829b` v0.6.0(프롬프트 품질 측정·강화 46.7%→88.3%), `6dc7e62` v0.5.0.
 - 테스트 상태: CI 없음. `build.js`가 `new Function`으로 JS 구문 자가검증 + playwright 라이브검증(pageerror0·overlap0·export 내용확인).
 

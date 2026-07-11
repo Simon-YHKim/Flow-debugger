@@ -94,13 +94,11 @@
   .node.usernode .t{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
   .ubadge{font-size:10px;padding:1px 7px;border-radius:99px;font-weight:700;background:var(--accent);color:#0c0c12}
   .node.usernode.note .ubadge{background:#d8a657}
-  .adlg{position:fixed;inset:0;background:rgba(8,8,12,.72);z-index:60;display:flex;align-items:center;justify-content:center}
-  .adlg .box{width:min(380px,92vw);background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:16px;box-shadow:0 16px 48px rgba(0,0,0,.5)}
-  .adlg .seg{display:flex;gap:6px;margin:8px 0}
-  .adlg .seg button{flex:1;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--muted);cursor:pointer;font-family:inherit;font-size:12.5px}
-  .adlg .seg button.on{background:var(--accent);color:#0c0c12;border-color:var(--accent);font-weight:700}
-  .adlg input,.adlg textarea{width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 11px;color:var(--text);font-family:inherit;font-size:13px;margin-top:8px}
-  .adlg label{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted);margin-top:10px;cursor:pointer}
+  .seg{display:flex;gap:6px;margin:8px 0}
+  .seg button{flex:1;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--muted);cursor:pointer;font-family:inherit;font-size:12.5px}
+  .seg button.on{background:var(--accent);color:#0c0c12;border-color:var(--accent);font-weight:700}
+  input.note{width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 11px;color:var(--text);font-family:inherit;font-size:13px;margin-top:8px}
+  .adlink{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted);margin-top:10px;cursor:pointer}
   .unote{width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--text);font-family:inherit;font-size:12.5px;min-height:60px;resize:vertical;margin-top:2px}
   .gobtn{width:100%;margin-top:9px;padding:6px 8px;border-radius:8px;border:1px solid rgba(139,147,255,.5);background:rgba(139,147,255,.12);color:var(--accent);cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:650}
   .gobtn:hover{background:rgba(139,147,255,.22)}
@@ -241,6 +239,7 @@
     <div class="tabs">
       <div class="tab on" data-tab="bug">버그 신고<span class="countbadge" id="bugCount" style="display:none">0</span></div>
       <div class="tab" data-tab="prompt">수정 요청<span class="countbadge" id="editCount" style="display:none">0</span></div>
+      <div class="tab" data-tab="addnode">노드 추가<span class="countbadge" id="addCount" style="display:none">0</span></div>
     </div>
     <div class="body" id="sideBody"></div>
   </div>
@@ -781,10 +780,10 @@ edgesEl.addEventListener("pointerdown",e=>{ if(!linkMode)return; const p=e.targe
 cutbtn.onclick=()=>{ if(selEdge)removeEdge(selEdge); };
 
 /* ---------- side ---------- */
-function setTab(t){ if(t==="detail"){renderDetail();return;} // 설명은 좌측 고정 패널 — 노드 선택 시 좌측만 갱신
+function setTab(t){ if(t==="detail"){renderDetail();if(tab==="addnode")renderSide();return;} // 설명은 좌측 고정 패널 — 노드 선택 시 좌측만 갱신(노드추가 탭이면 '선택 카드에 연결'도 갱신)
   tab=t;document.querySelectorAll(".side .tab").forEach(x=>x.classList.toggle("on",x.dataset.tab===t));renderSide();}
 document.querySelectorAll(".tab").forEach(x=>x.onclick=()=>setTab(x.dataset.tab));
-function renderSide(){if(tab==="bug")renderBug();else renderPrompt();} // 우측 패널 = 버그신고/수정요청 (설명은 renderDetail로 좌측 고정)
+function renderSide(){if(tab==="bug")renderBug();else if(tab==="addnode")renderAddNode();else renderPrompt();} // 우측 패널 = 버그신고/수정요청/노드추가 (설명은 renderDetail로 좌측 고정)
 function setEdit(id,f,v){if(!state.edits[id])state.edits[id]={};state.edits[id][f]=v;if(v===""||v==null)delete state.edits[id][f];if(state.edits[id]&&!Object.keys(state.edits[id]).length)delete state.edits[id];save();updateEditCount();}
 function updateEditCount(){ // count only entries whose nodes still exist (stale ids from an old scan otherwise inflate the badge)
   const n=Object.keys(state.edits).filter(id=>nodes.has(id)).length+(state.globalNote?1:0)
@@ -793,6 +792,7 @@ function updateEditCount(){ // count only entries whose nodes still exist (stale
     +((state.removedEdges||[]).filter(k=>{const p=k.split(">>");return nodes.has(p[0])&&nodes.has(p[1]);}).length),
     b=document.getElementById("editCount");b.style.display=n?"inline-block":"none";b.textContent=n;
   const bn=Object.keys(state.bugs||{}).filter(id=>nodes.has(id)).length,bb=document.getElementById("bugCount");if(bb){bb.style.display=bn?"inline-block":"none";bb.textContent=bn;}
+  const an=(state.addedNodes||[]).length,ab=document.getElementById("addCount");if(ab){ab.style.display=an?"inline-block":"none";ab.textContent=an;}
   updateDock();}
 const TYPETAG={screen:["화면","#8b93ff"],action:["사용자 동작","#8b93ff"],api:["데이터·서버 작업","#6fb6ff"],ai:["AI 기능","#d8a657"],nav:["화면 이동","#8b93ff"],navscreen:["화면 미리보기","#8b93ff"],h:["AI 하네스 단계","#8b93ff"]};
 
@@ -1184,7 +1184,8 @@ function pdockAddNow(){const inp=document.getElementById("pdockInput");const v=i
 document.getElementById("pdockAdd").onclick=e=>{e.stopPropagation();pdockAddNow();};
 document.getElementById("pdockInput").addEventListener("keydown",e=>{if(e.key==="Enter"){e.stopPropagation();pdockAddNow();}});
 
-/* ---------- 노드 추가 ("이런 게 있어야 해요") ---------- */
+/* ---------- 노드 추가 ("이런 게 있어야 해요") — 우측 '노드 추가' 탭 ---------- */
+let addForm={kind:"screen",label:"",desc:""}; // 탭 재렌더(카드 선택 등) 사이에 입력값 보존
 function injectAddedNodes(){(state.addedNodes||[]).forEach(u=>{if(!nodes.has(u.id))nodes.set(u.id,{id:u.id,type:"user",data:u});});}
 function nextUserId(){let m=0;(state.addedNodes||[]).forEach(u=>{const mt=/^user:(\d+)$/.exec(u.id);if(mt)m=Math.max(m,+mt[1]);});return "user:"+(m+1);}
 function deleteUserNode(id){
@@ -1206,38 +1207,39 @@ function addUserNode(kind,label,desc,linkFrom){
   state.pos[id]={x,y};
   if(linkFrom&&nodes.get(linkFrom)){state.addedEdges=state.addedEdges||[];state.addedEdges.push({from:linkFrom,to:id});}
   nodes.set(id,{id,type:"user",data:u});
-  selected=id;save();render();setTab("detail");updateEditCount();fitToNode(id);
+  addForm.label="";addForm.desc="";  // keep kind for quick repeat-adds; clear the entered fields
+  selected=id;save();render();renderDetail();renderSide();updateEditCount();fitToNode(id);
 }
-function openAddDialog(){
+// 우측 '노드 추가' 탭: 새 노드 얹기 폼 + 추가한 노드 목록(삭제). 옛 모달 대신 탭에서 작업.
+function renderAddNode(){
   const cur=selected&&nodes.get(selected);
   const canLink=!!cur&&["screen","action","user","navscreen"].includes(cur.type);
-  const dlg=document.createElement("div");dlg.className="adlg";
-  dlg.innerHTML=`<div class="box">
-    <div style="font-weight:700;font-size:14px;margin-bottom:2px">＋ 노드 추가</div>
-    <div style="color:var(--muted);font-size:12px;line-height:1.5">여기 <b>이런 화면·기능이 있어야 해요</b> 하고 새 노드를 얹으면, 아래 프롬프트 창에 <b>"만들어줘" 요청</b>으로 자동으로 담겨요.</div>
-    <div class="seg" id="adKind">
-      <button data-k="screen" class="on">🖼 화면</button><button data-k="action">☝ 동작</button><button data-k="note">📝 메모</button></div>
-    <input id="adLabel" placeholder="이름 (예: 알림 설정 화면)" autofocus>
-    <textarea id="adDesc" placeholder="설명 (선택) — 어떤 화면·기능인지, 왜 필요한지"></textarea>
-    ${canLink?`<label><input type="checkbox" id="adLink" checked> <b>${esc(dispLabel(cur))}</b> 에 연결해서 추가</label>`:""}
-    <div style="display:flex;gap:8px;margin-top:14px">
-      <button class="btn" id="adCancel" style="flex:1">취소</button>
-      <button class="btn" id="adOk" style="flex:1.4;background:var(--accent);color:#0c0c12;border-color:var(--accent);font-weight:700">추가</button></div>
-  </div>`;
-  document.body.appendChild(dlg);
-  let kind="screen";
-  dlg.querySelectorAll("#adKind button").forEach(b=>b.onclick=()=>{kind=b.dataset.k;dlg.querySelectorAll("#adKind button").forEach(x=>x.classList.toggle("on",x===b));});
-  const close=()=>dlg.remove();
-  dlg.onclick=e=>{if(e.target===dlg)close();};
-  dlg.querySelector("#adCancel").onclick=close;
-  const ok=()=>{const lb=dlg.querySelector("#adLabel").value.trim();if(!lb){dlg.querySelector("#adLabel").focus();return;}
-    const ds=dlg.querySelector("#adDesc").value.trim();const lk=canLink&&dlg.querySelector("#adLink").checked?selected:null;
-    close();addUserNode(kind,lb,ds,lk);};
-  dlg.querySelector("#adOk").onclick=ok;
-  dlg.querySelector("#adLabel").addEventListener("keydown",e=>{if(e.key==="Enter")ok();});
-  setTimeout(()=>dlg.querySelector("#adLabel").focus(),30);
+  const KIND=[["screen","🖼 화면"],["action","☝ 동작"],["note","📝 메모"]];
+  const added=state.addedNodes||[];
+  let h=`<div class="dh">＋ 노드 추가</div>
+    <div class="hint"><b>이런 화면·기능이 있어야 해요</b> 하고 새 노드를 얹으면, 오른쪽 <b>수정 요청</b>과 아래 프롬프트에 <b>"만들어줘"</b> 요청으로 담겨요.</div>
+    <div class="seg" id="adKind">${KIND.map(k=>`<button data-k="${k[0]}" class="${addForm.kind===k[0]?"on":""}">${k[1]}</button>`).join("")}</div>
+    <input id="adLabel" class="note" placeholder="이름 (예: 알림 설정 화면)">
+    <textarea id="adDesc" class="note" placeholder="설명 (선택) — 어떤 화면·기능인지, 왜 필요한지"></textarea>
+    ${canLink?`<label class="adlink"><input type="checkbox" id="adLink" checked> <b>${esc(dispLabel(cur))}</b> 에 연결해서 추가</label>`:`<div class="hint">화면·동작 카드를 먼저 선택하면 거기에 연결해서 추가할 수 있어요.</div>`}
+    <button class="btn" id="adOk" style="width:100%;margin-top:12px;background:var(--accent);color:#0c0c12;border-color:var(--accent);font-weight:700">＋ 추가하기</button>
+    <div class="dh" style="margin-top:18px">추가한 노드 (${added.length})</div>`;
+  if(!added.length)h+=`<div class="empty" style="margin-top:14px">아직 추가한 노드가 없어요.<br>위에서 새 노드를 얹어 보세요.</div>`;
+  else added.forEach(u=>{const uk=UKIND[u.kind]||"노드";const link=(state.addedEdges||[]).find(e=>e.to===u.id&&nodes.get(e.from));const lf=link?nodes.get(link.from):null;
+    h+=`<div class="actrow" style="cursor:default"><div class="an"><span class="ubadge">＋ ${uk}</span> ${esc(u.label||"(이름 없음)")}</div>${u.desc?`<div class="ap">${esc(u.desc)}</div>`:""}${lf?`<div class="ap">↳ ${esc(dispLabel(lf))} 에 연결됨</div>`:""}<div style="display:flex;gap:6px;margin-top:7px"><button class="btn" data-usel="${u.id}">흐름도에서 보기</button><button class="btn" data-udel="${u.id}">삭제</button></div></div>`;});
+  sideBody.innerHTML=h;
+  const seg=document.getElementById("adKind");
+  seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{addForm.kind=b.dataset.k;seg.querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));});
+  const lab=document.getElementById("adLabel"),des=document.getElementById("adDesc");
+  lab.value=addForm.label;des.value=addForm.desc;
+  lab.oninput=e=>addForm.label=e.target.value;des.oninput=e=>addForm.desc=e.target.value;
+  const doAdd=()=>{const lb=(addForm.label||"").trim();if(!lb){lab.focus();return;}const lk=canLink&&document.getElementById("adLink")&&document.getElementById("adLink").checked?selected:null;addUserNode(addForm.kind,lb,(addForm.desc||"").trim(),lk);};
+  document.getElementById("adOk").onclick=doAdd;
+  lab.addEventListener("keydown",e=>{if(e.key==="Enter")doAdd();});
+  sideBody.querySelectorAll("[data-udel]").forEach(b=>b.onclick=()=>deleteUserNode(b.dataset.udel));
+  sideBody.querySelectorAll("[data-usel]").forEach(b=>b.onclick=()=>{const id=b.dataset.usel;if(nodes.get(id)){selected=id;render();renderDetail();fitToNode(id);renderAddNode();}});
 }
-document.getElementById("addNode").onclick=openAddDialog;
+document.getElementById("addNode").onclick=()=>setTab("addnode");
 
 injectAddedNodes();
 renderChips();render();renderDetail();renderSide();updateEditCount();

@@ -3,6 +3,17 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.8.0] - 2026-07-11
+
+### Changed
+- **Node add/remove is now a tab in the right panel, not a modal.** The `＋ 노드 추가`
+  work (propose a should-exist screen/action/note and optionally connect it to a card)
+  moved from a pop-up dialog into a third tab alongside 버그 신고 / 수정 요청. The tab
+  holds the add form plus a live list of everything you have added, each row with
+  흐름도에서 보기 / 삭제 (remove). The toolbar `＋ 노드 추가` button now opens this tab.
+  Typed input is preserved across re-renders (e.g. when you select a card to link to), the
+  tab badge shows the added-node count, and the old modal overlay code/CSS is removed.
+
 ## [0.7.0] - 2026-07-11
 
 ### Added
