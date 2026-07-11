@@ -1,23 +1,22 @@
 # flow-debugger — Session Handoff
 
-## Latest — 2026-07-11 / node-add + 설명 좌패널 분리(v0.5.0), 프롬프트 품질 측정·강화 46.7%→88.3%(v0.6.0)
+## Latest — 2026-07-11 / Task A 완료: framework-aware 재스캔으로 impl/renders/stack 실채움 (v0.7.0)
 
 ### 어디까지 왔나
-- main HEAD: `869829b`
-- 이번 세션 머지된 커밋(직접 push to main, Simon 승인):
-  - `6dc7e62` **v0.5.0** — 노드 추가 기능 + 설명(detail) 탭을 좌측 고정 패널로 분리
-  - `869829b` **v0.6.0** — 내보내는 프롬프트 품질을 **측정+강화**(46.7%→88.3%) + 스캔 앵커 정확도 수정
-- 테스트 상태: CI 없음. `build.js`가 `new Function`으로 JS 구문 자가검증 + playwright 수동검증(겹침0·pageerror0).
-- working tree: clean (0 files), origin/main == local.
+- main HEAD: `1e634c0` (origin == local, working tree clean)
+- 이번 세션 머지된 커밋(직접 push to main):
+  - `1e634c0` **v0.7.0** — 2nd-B 재스캔으로 0.6.0이 비워둔 앵커 정확도 필드 실채움 + apply-anchors.js + 버그신고서 codeRef 픽스 + stack 주입
+- 직전: `869829b` v0.6.0(프롬프트 품질 측정·강화 46.7%→88.3%), `6dc7e62` v0.5.0.
+- 테스트 상태: CI 없음. `build.js`가 `new Function`으로 JS 구문 자가검증 + playwright 라이브검증(pageerror0·overlap0·export 내용확인).
 
-### 이번 세션에 한 일 (요약)
-1. **v0.5.0 노드 추가** — 툴바 `＋ 노드 추가` → 다이얼로그(화면/동작/메모) → 캔버스 우측 전용 레인에 점선 카드(겹침0 보장, drag/delete). `state.addedNodes[]` 영속, 프롬프트 스택에 "만들어줘" 자동기록. `injectAddedNodes/addUserNode/deleteUserNode/openAddDialog`.
-2. **v0.5.0 설명 패널 분리** — 우측 3탭(설명/버그신고/수정요청)에서 **설명을 좌측 고정 `.dpanel#detailBody`**로 분리(순서 설명|흐름도|신고요청). 우측=버그신고+수정요청 2탭. `renderDetail→detailBody`, `setTab("detail")`=좌측만 갱신.
-3. **v0.6.0 프롬프트 품질 측정** — 6기준 루브릭 + 3렌즈 심판패널(실2ndB 코드 읽음)로 **28/60(46.7%)→53/60(88.3%)**, 코딩에이전트 "안전실행" 1/5→4/5. 최악결함=앵커가 mount줄+legacy파일 지목("틀린 정밀함").
-4. **v0.6.0 템플릿 강화** — `buildStackPrompt/buildBugReport/renderPrompt`에 작업규칙 계약(앵커=검증할 힌트·재현먼저·프로덕션 렌더파일 확인·완료기준·범위잠금·비용게이트·추측대신질문) + kind별 강화. 화면카드는 짧게, `accept`/`guard`는 복사 프롬프트에만.
-5. **v0.6.0 스캔 앵커 수정(데이터레벨)** — `references/scan-prompts.md` SCAN이 실핸들러 앵커 + optional `impl`(진짜 로직위치)/`renders`(프로덕션 변형)/`stack` 요구. `codeRef`가 impl/renders 소비(하위호환).
-6. **ground-truth A/B** — 로그인버그를 실2ndB에 코딩에이전트로 태움: naive=추측성 auth diff 출하, hardened=재현후 질문(버그아닐수도). 근거 `evals/prompt-quality.md` + fixtures + `scripts/extract-prompt.js`.
-7. 리포트: `E:\2ndB\Output\flow-debugger\prompt-quality-report.html` (Simon에 전달).
+### 이번 세션에 한 일 (요약) — Task A "honest completion"
+1. **문제 확인** — 0.6.0이 스키마·템플릿엔 impl/renders/stack을 추가했지만 **실데이터(screenmap.debug.json, 07-10 스캔)엔 0개**였다: 82화면/310동작 중 impl=0·renders=0·screen.renders=0. 앵커가 `src/app/*.tsx` legacy 위임파일을 가리켜 "빌드 초록인데 화면 그대로"의 원흉.
+2. **framework-aware 재스캔(Workflow, 8병렬 Opus)** — 그룹당 1에이전트가 실2nd-B 소스를 읽어 `isDeepSpaceUI()` 위임을 해소 → `screenRenders`(프로덕션 렌더 파일), 핸들러 추적 → `file`/`impl`, DeepSpace 렌더위치 → `renders`. 화면별 **컴팩트 패치**만 반환(한글 enrichment·annotation 보존).
+3. **`scripts/apply-anchors.js`(신규)** — 패치를 base에 route+exact-action 키로 병합, 나머지 필드 전부 보존. **결정적 환각가드**: 모든 path:line을 실트리에 존재+범위검증→불통과는 드롭("빈 값 > 틀린 값"). 결과: 82/82화면·310/310동작 매칭, impl=128·action.renders=38·screen.renders=79, **드롭 0(환각 0)**. 158동작이 이제 deepspace 프로덕션 파일을 직접 가리킴.
+4. **버그신고서 codeRef 픽스** — `buildBugReport`가 raw `file`로 코드힌트를 만들어 impl/renders가 **최중요 산출물에 안 닿던** 버그. 이제 `codeRef()` 사용 + 화면 프로덕션 렌더파일 라인 별도 노출.
+5. **stack 주입** — `build.js`가 sibling `<graph>.stack.txt`를 `STACK` 상수로 임베드, `buildBugReport`/`buildStackPrompt`가 `[앱 스택]` 프리앰블 추가(코딩에이전트가 프레임워크·위임 메커니즘을 먼저 인지).
+6. **라이브검증 PASS** — pageerror0·overlap0(82노드), 내보낸 버그신고서가 impl/renders/[앱 스택]/렌더파일 라인 모두 포함(sign-in·ttfv 샘플 확인).
+7. 산출물: `E:\2ndB\Output\flow-debugger\flow-debugger.html`(재빌드, 2.12MB) · `screenmap.debug.json`(v2) · `screenmap.debug.stack.txt` · 백업 `screenmap.debug.pre-anchor.json`.
 
 ### 활성 인프라
 - 레포: `github.com/Simon-YHKim/Flow-debugger` (PUBLIC, main). 로컬 정본 `E:\Coding Infra\flow-debugger`.
@@ -27,10 +26,11 @@
 ### 다음 작업 큐
 | # | 작업 | 크기 | 권장 |
 |---|---|---|---|
-| A | 개선된 SCAN으로 **2nd-B 재스캔** → impl/renders/stack 필드 실제 채우기 → 흐름도 재빌드 | medium | ⭐ 앵커정확도(C1/C5) 잔여 갭을 근본적으로 닫음 — 이번 강화의 정직한 완결 |
+| ~~A~~ | ~~개선된 SCAN으로 2nd-B 재스캔 → impl/renders/stack 채우기 → 재빌드~~ | ~~medium~~ | ✅ **v0.7.0 완료** (1e634c0) |
+| A' | 잔여 ~7동작(theme·manual·account privacy 등) — 위임화면인데 impl 없어 힌트가 legacy 핸들러 노출(단, screen.renders로 리다이렉트됨). DeepSpace 렌더 파일에서 해당 핸들러 재추적해 impl 채우기 | small | 2% 잔여, 정밀도 마무리 |
 | B | HTML에 "AI로 다듬기" 버튼(복사 전 인앱 프롬프트 개선) | small~med | Simon이 AskUserQuestion서 ①②만 선택(③ 미채택) — 보류 |
 | C | 완료기준/주의를 화면 카드에도 선택적 노출(progressive disclosure) | small | Simon이 원하면 |
-| D | 캡처 갱신: 23개 not-found 화면(신규) 재export 후 재캡처 | small | 아이콘 폴백 중 |
+| D | 캡처 갱신: not-found 화면 재export 후 재캡처(모든 82route는 소스존재—캡처만 갭) | small | 아이콘 폴백 중 |
 
 ### 적용 중인 정책 (영구)
 1. **Flow-debugger 레포는 main 직접 push**(Simon 승인). **auto-PR·auto-merge 금지**(글로벌 정책).
@@ -45,7 +45,8 @@ E:\Coding Infra\flow-debugger\                                  정본 플러그
   .claude-plugin/plugin.json                                    버전 매니페스트(현재 0.6.0)
   skills/flow-debugger/assets/flow-debugger.template.html       단일파일 HTML 템플릿(핵심 편집 대상)
   skills/flow-debugger/references/scan-prompts.md               SCAN/ENRICH/GLOSSARY/ANNOTATE 프롬프트
-  skills/flow-debugger/scripts/{build,merge-readers,embed-shots,extract-prompt}.js
+  skills/flow-debugger/scripts/{build,merge-readers,apply-anchors,embed-shots,extract-prompt}.js
+    apply-anchors.js = 재스캔 패치를 base에 병합(route+action키) + path:line 존재검증 환각가드
   skills/flow-debugger/evals/prompt-quality.md                  프롬프트 품질 eval(루브릭·before/after·재현)
   CHANGELOG.md
 C:\Users\202502\.claude\skills\flow-debugger\                   전역 설치본(/flow-debugger 로드 — 동기화 필수)
