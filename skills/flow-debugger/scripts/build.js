@@ -12,12 +12,17 @@ else { console.error('usage: node build.js <template.html> <graph.json> [glossar
 
 const rd = (p, def) => { try { return p && fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : def; } catch (e) { return def; } };
 
+// optional app-level stack note: a sibling "<graph>.stack.txt" (one line/paragraph)
+// that gets embedded as a JS string and prepended to the exported prompts.
+const stackText = rd(graph.replace(/\.json$/, '.stack.txt'), '');
+
 let html = fs.readFileSync(tpl, 'utf8');
 html = html.replace('__GRAPH_JSON__', fs.readFileSync(graph, 'utf8'));
 html = html.replace('__GLOSSARY_JSON__', rd(glossary, '{}'));
 html = html.replace('__SHOTS_JSON__', rd(shots, '{}'));
+html = html.replace('__STACK_JSON__', JSON.stringify(stackText.trim()));
 
-for (const t of ['__GRAPH_JSON__', '__GLOSSARY_JSON__', '__SHOTS_JSON__']) {
+for (const t of ['__GRAPH_JSON__', '__GLOSSARY_JSON__', '__SHOTS_JSON__', '__STACK_JSON__']) {
   if (html.includes(t)) { console.error('token not replaced: ' + t); process.exit(1); }
 }
 fs.writeFileSync(out, html, 'utf8');

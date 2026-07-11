@@ -3,6 +3,35 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.7.0] - 2026-07-11
+
+### Added
+- **`scripts/apply-anchors.js` — a reusable anchor-correction merge.** A framework-aware
+  re-scan produces compact per-screen patches (`{route, stack, screenRenders, actions:[{action, file, impl, renders}]}`);
+  this script merges them onto an existing screenmap by `route` + exact `action` string,
+  preserving every other field (Korean enrichment, risks/checklist, glossary tags, `to`).
+  It carries a **deterministic hallucination guard**: every `path:line` an agent emits is
+  validated against the real source tree (file exists AND line in range) and dropped if it
+  fails — an empty field beats a wrong one.
+- **App-level `stack` note in the exported prompts.** `build.js` embeds an optional sibling
+  `<graph>.stack.txt` as a `STACK` constant; `buildBugReport` / `buildStackPrompt` now
+  prepend a `[앱 스택]` line so a coding agent gets framework + render-mechanism context
+  (e.g. "production UI delegates via isDeepSpaceUI() to src/screens/deepspace/**") before
+  it touches anything.
+
+### Fixed
+- **The bug report now carries `impl` / `renders`.** `buildBugReport` built its code hint
+  from the raw `file` field, bypassing `codeRef()` — so the `impl` (real logic) and
+  `renders` (production file) anchors never reached the single most important export. It
+  now uses `codeRef()` and additionally surfaces the screen's production render file line.
+
+### Changed
+- **2nd-B re-scanned with the hardened SCAN (the honest completion of 0.6.0).** An 8-agent
+  framework-aware fan-out filled the previously-empty accuracy fields across 82 screens /
+  310 actions: `impl` on 128 actions, action-`renders` on 38, screen-`renders` on 79, with
+  0 hallucinated anchors (all validated against source). 158 actions now anchor directly
+  into `src/screens/deepspace/**` production files instead of the invisible legacy bodies.
+
 ## [0.6.0] - 2026-07-11
 
 ### Changed

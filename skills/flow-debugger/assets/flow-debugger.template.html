@@ -278,6 +278,7 @@
 const GRAPH = (__GRAPH_JSON__)||[];
 const GLOSSARY = (__GLOSSARY_JSON__)||{};
 const SHOTS = (__SHOTS_JSON__)||{};
+const STACK = (__STACK_JSON__)||"";
 const GAPI = GLOSSARY.apis||{}, GAI = GLOSSARY.ai||{};
 
 const GROUP_ORDER=["auth","capture","knowledge","identity","assistant","ops","deepspace","settings"];
@@ -979,13 +980,15 @@ function mermaidText(){
   if(L.length===1)L.push("  A[이동 연결이 아직 없어요]");
   return L.join("\n");}
 function buildBugReport(ids){
-  const out=["[버그 신고서] 비개발자가 작성했어요.","",
-    "[작업 규칙 — 먼저 읽어줘]",
-    "· 아래 '코드 힌트'는 흐름도가 추정한 시작점일 뿐이야. 바로 고치지 말고 먼저 증상을 재현하고 실제 원인 함수를 추적해줘(화면 진입 지점이 가리켜진 경우가 많고, 같은 화면의 여러 버전 중 실제로 렌더되는 파일을 확인해야 해).",
-    "· '바란 것'이 실제로 관찰되면 완료야. 그 범위 밖은 건드리지 말고, 애매하면 추측하지 말고 물어봐.",""];
+  const out=["[버그 신고서] 비개발자가 작성했어요.",""];
+  if(STACK)out.push("[앱 스택] "+STACK,"");
+  out.push("[작업 규칙 — 먼저 읽어줘]",
+    "· 아래 '코드 힌트'는 흐름도가 추정한 시작점일 뿐이야. 바로 고치지 말고 먼저 증상을 재현하고 실제 원인 함수를 추적해줘. 힌트의 '@' 뒤가 진짜 로직 위치, '(렌더: …)'가 프로덕션에서 실제로 그려지는 파일이야 — 같은 화면의 legacy 본문이 아니라 렌더 파일을 고쳐야 화면이 바뀐다.",
+    "· '바란 것'이 실제로 관찰되면 완료야. 그 범위 밖은 건드리지 말고, 애매하면 추측하지 말고 물어봐.","");
   ids.forEach(id=>{const n=nodes.get(id);if(!n)return;const a=n.data,b=(state.bugs||{})[id]||{};
     out.push(`■ 안 되는 동작: ${dispLabel(n)}${n.screen?"  (화면: "+scrTitle(n.screen)+" "+(n.screen.route||"")+")":""}`);
-    if(a.feature||a.file)out.push(`  코드 힌트(검증 후 사용): ${a.feature||""}${a.file?" @ "+a.file:""}`);
+    const cr=codeRef(n);if(cr)out.push(`  코드 힌트(검증 후 사용): ${cr}`);
+    if(n.screen&&n.screen.renders)out.push(`  이 화면의 프로덕션 렌더 파일: ${n.screen.renders}`);
     if(b.symptom)out.push(`  무슨 일이: ${b.symptom}`);
     if(b.expected)out.push(`  바란 것(완료 기준): ${b.expected}`);
     if(b.repro)out.push(`  하던 중(재현): ${b.repro}`);
@@ -1121,13 +1124,14 @@ function stackEntries(){
 }
 function buildStackPrompt(){
   const E=stackEntries();
-  const L=["아래는 기능 흐름도(flow-debugger)에서 비개발자가 수집한 작업 요청이야.","",
-    "[작업 규칙 — 먼저 읽어줘]",
-    "1) 각 항목의 '코드 힌트'는 흐름도가 추정한 시작점일 뿐이야. 바로 고치지 말고, 먼저 증상을 재현하고 실제 로직이 있는 함수/파일을 추적해서 확인해줘.",
+  const L=["아래는 기능 흐름도(flow-debugger)에서 비개발자가 수집한 작업 요청이야.",""];
+  if(STACK)L.push("[앱 스택] "+STACK,"");
+  L.push("[작업 규칙 — 먼저 읽어줘]",
+    "1) 각 항목의 '코드 힌트'는 흐름도가 추정한 시작점일 뿐이야. 바로 고치지 말고, 먼저 증상을 재현하고 실제 로직이 있는 함수/파일을 추적해서 확인해줘. 힌트의 '@' 뒤가 진짜 로직 위치, '(렌더: …)'가 프로덕션 렌더 파일이야.",
     "2) 같은 화면에 여러 버전의 파일이 있으면 실제로 프로덕션에서 렌더되는 파일을 찾아 고쳐줘 — 안 그러면 빌드는 통과해도 실제 화면은 안 바뀔 수 있어.",
     "3) 각 항목의 '완료 기준'을 충족하면 끝. 기준에 없는 범위는 건드리지 말고, 애매하면 추측하지 말고 한 줄로 물어봐.",
     "4) 새 비용/외부 연동(서버·푸시·결제 등)이 필요해지면 만들기 전에 알려줘.",
-    "5) 흐름도 설명 자체가 틀렸으면 그 점도 정정해줘.",""];
+    "5) 흐름도 설명 자체가 틀렸으면 그 점도 정정해줘.","");
   E.forEach((e,i)=>{L.push(`${i+1}. [${e.kind}] ${e.title}${e.code?`  (코드 힌트: ${e.code})`:""}`);
     L.push(`   · 요청: ${e.text}`);
     if(e.accept)L.push(`   · 완료 기준: ${e.accept}`);
