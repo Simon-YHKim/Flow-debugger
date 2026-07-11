@@ -3,6 +3,33 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.5.0] - 2026-07-11
+
+### Added
+- **노드 추가 ("이런 게 있어야 해요").** A new `＋ 노드 추가` toolbar button opens a
+  small dialog to add a **화면 / 동작 / 메모** node that represents something that
+  *should* exist. The node appears on the canvas (dashed, draggable, deletable) in a
+  clean lane to the right of the map — never overlapping the auto-tree — and can be
+  linked to the currently selected node. Every added node is auto-recorded in the
+  bottom prompt stack as a **"만들어줘" 요청** (memo nodes as "반영해줘"), so a
+  non-developer can describe missing screens/features and hand the whole list to an
+  AI. Nodes are editable (name/description) from the 설명 panel and persist in
+  localStorage.
+
+### Changed
+- **설명(detail) is now a dedicated always-on panel on the LEFT of the canvas.** The
+  right panel previously carried three tabs (설명 / 버그 신고 / 수정 요청); the 설명
+  tab is split out so a node's explanation is always visible on the left while you
+  work, and the right panel keeps just **버그 신고 + 수정 요청**. Selecting a node
+  refreshes the left panel without disturbing the right tab.
+
+### Verified
+- Left 설명 panel + right 2-tab layout, panel order (설명 | 흐름도 | 신고/요청),
+  reportBug switches the right tab while the left keeps detail, tab switching leaves
+  the left panel untouched. Node-add end-to-end: dialog → canvas node → 설명 edit →
+  dock "추가" card → delete → reload persistence. Regression: catalog expand-all 891
+  nodes / 0 overlaps, 화면 흐름 mode 82 / 0, added-node lane 0 overlaps, 0 page errors.
+
 ## [0.4.0] - 2026-07-11
 
 ### Changed
