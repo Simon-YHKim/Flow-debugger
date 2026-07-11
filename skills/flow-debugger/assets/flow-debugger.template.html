@@ -298,19 +298,40 @@ const screens=GRAPH.map(s=>({...s,id:"s:"+s.route}));
 const nodes=new Map(),edges=[],capUsers=new Map();
 const addNode=n=>{if(!nodes.has(n.id))nodes.set(n.id,n);return nodes.get(n.id);};
 const apiId=t=>"api:"+t,aiId=p=>"ai:"+p,actId=(s,i)=>"a:"+s.route+"#"+i;
+const NAV_DEPTH_LIMIT=6; // how deep the recursive preview drill-down may go (cycle-guarded)
+/* Build one action's capability/nav children under a parent screen node (base or
+   materialized preview). Returns the child id list. `path` = routes already on the
+   drill-down path, so a preview never re-opens a screen already above it (cycle). */
+function buildActionKids(aid,a,scrData,path){
+  const ck=[];
+  (a.apis||[]).forEach((tag,j)=>{ const kind=tag.split(":")[0], id=aid+"::api:"+j;
+    addNode({id,type:"api",kind,parent:aid,data:{tag,kind},kids:[]}); edges.push({from:aid,to:id,kind:"ac"});
+    if(!capUsers.has(apiId(tag)))capUsers.set(apiId(tag),new Set()); capUsers.get(apiId(tag)).add(scrTitle(scrData)+" · "+actLabel(a)); ck.push(id); });
+  if(a.ai){ const id=aid+"::ai"; addNode({id,type:"ai",parent:aid,data:a.ai,kids:[]}); edges.push({from:aid,to:id,kind:"ai"});
+    if(!capUsers.has(aiId(a.ai.purpose)))capUsers.set(aiId(a.ai.purpose),new Set()); capUsers.get(aiId(a.ai.purpose)).add(scrTitle(scrData)+" · "+actLabel(a)); ck.push(id); }
+  if(a.to&&a.to!==scrData.route&&(path||[]).indexOf(a.to)<0&&(path||[]).length<NAV_DEPTH_LIMIT){ // target screen is built after this in the loop, so no nodes.has() gate here
+    const chip=aid+"::nav"; addNode({id:chip,type:"nav",parent:aid,data:{to:"s:"+a.to,route:a.to},kids:[]}); edges.push({from:aid,to:chip,kind:"nav"});
+    const pv=aid+"::navscr"; addNode({id:pv,type:"navscreen",parent:chip,data:{sid:"s:"+a.to,route:a.to,path:(path||[]).concat([scrData.route])},kids:[]}); edges.push({from:chip,to:pv,kind:"nav"});
+    nodes.get(chip).kids=[pv]; ck.push(chip); }
+  return ck;
+}
+/* Lazily grow a preview's own action subtree the first time it is expanded, so the
+   preview behaves like the real node — its actions, data/AI and further 이동 keep
+   unfolding to the right (bounded by NAV_DEPTH_LIMIT + cycle guard). */
+function materializeNav(navscrId){
+  const n=nodes.get(navscrId); if(!n||n.materialized)return; n.materialized=true;
+  const T=nodes.get(n.data.sid); if(!T){n.kids=[];return;} const path=n.data.path||[];
+  const kids=[];
+  (T.data.actions||[]).forEach((a,i)=>{ const aI=navscrId+"|a"+i;
+    addNode({id:aI,type:"action",data:a,screen:T.data,kids:[]}); edges.push({from:navscrId,to:aI,kind:"sa"});
+    nodes.get(aI).kids=buildActionKids(aI,a,T.data,path); kids.push(aI); });
+  n.kids=kids;
+}
 screens.forEach(s=>{
-  addNode({id:s.id,type:"screen",group:s.group,data:s});
+  const sn=addNode({id:s.id,type:"screen",group:s.group,data:s,kids:[]});
   (s.actions||[]).forEach((a,i)=>{
-    const aid=actId(s,i); addNode({id:aid,type:"action",group:s.group,data:a,screen:s}); edges.push({from:s.id,to:aid,kind:"sa"});
-    (a.apis||[]).forEach((tag,j)=>{ const kind=tag.split(":")[0], id=aid+"::api:"+j;
-      addNode({id,type:"api",kind,parent:aid,data:{tag,kind}}); // per-action instance (aligned to its mother action, not a shared sink)
-      edges.push({from:aid,to:id,kind:"ac"}); if(!capUsers.has(apiId(tag)))capUsers.set(apiId(tag),new Set()); capUsers.get(apiId(tag)).add(scrTitle(s)+" · "+actLabel(a)); });
-    if(a.ai){ const id=aid+"::ai"; addNode({id,type:"ai",parent:aid,data:a.ai});
-      edges.push({from:aid,to:id,kind:"ai"}); if(!capUsers.has(aiId(a.ai.purpose)))capUsers.set(aiId(a.ai.purpose),new Set()); capUsers.get(aiId(a.ai.purpose)).add(scrTitle(s)+" · "+actLabel(a)); }
-    // navigating action -> "이동 대상" chip + inline preview card of the target screen
-    // (chip click toggles the preview open in place, to the right — no viewport jump)
-    if(a.to&&a.to!==s.route){ const id=aid+"::nav"; addNode({id,type:"nav",parent:aid,group:s.group,data:{to:"s:"+a.to,route:a.to}}); edges.push({from:aid,to:id,kind:"nav"});
-      const pid=aid+"::navscr"; addNode({id:pid,type:"navscreen",parent:id,group:s.group,data:{sid:"s:"+a.to,route:a.to}}); edges.push({from:id,to:pid,kind:"nav"}); }
+    const aid=actId(s,i); addNode({id:aid,type:"action",group:s.group,data:a,screen:s,kids:[]}); edges.push({from:s.id,to:aid,kind:"sa"});
+    nodes.get(aid).kids=buildActionKids(aid,a,s,[s.route]); sn.kids.push(aid);
   });
 });
 function scrTitle(s){return s.titleKo||s.title||s.route;}
@@ -364,16 +385,27 @@ function matchSearch(n){ if(!searchTerm)return true;const t=searchTerm.toLowerCa
 function visibleNodes(){ const vis=new Set();
   if(harnessMode){ HARNESS.nodes.forEach(n=>vis.add(n.id)); return vis; }
   if(navMode){ screens.forEach(s=>{if(groupOn(s.group)&&matchSearch(nodes.get(s.id)))vis.add(s.id);}); return vis; }
-  screens.forEach(s=>{if(groupOn(s.group)&&matchSearch(nodes.get(s.id)))vis.add(s.id);});
-  screens.forEach(s=>{ if(!vis.has(s.id))return;
-    // virtual expand: while searching, a matched screen shows its actions even if collapsed —
-    // otherwise a hit inside a collapsed screen is invisible ("검색했는데 아무것도 없음").
-    if(!expanded.has(s.id)&&!(searchTerm&&matchSearch(nodes.get(s.id))))return;
-    (s.actions||[]).forEach((a,i)=>{const aid=actId(s,i);if(aiOnly&&!a.ai)return;vis.add(aid);
-      if(!aiOnly)(a.apis||[]).forEach((tag,j)=>vis.add(aid+"::api:"+j)); if(a.ai)vis.add(aid+"::ai");
-      if(!aiOnly&&nodes.has(aid+"::nav")&&nodes.has("s:"+a.to)){vis.add(aid+"::nav");
-        if((state.navOpen||{})[aid+"::nav"])vis.add(aid+"::navscr");}}); });
+  screens.forEach(s=>{if(groupOn(s.group)&&matchSearch(nodes.get(s.id))){vis.add(s.id);addKidsRec(s.id,vis);}});
   return vis; }
+/* Which children of a node are currently shown (drives both visibility and layout).
+   screen/preview → its actions when expanded (search virtual-expands a matched screen);
+   action → its caps + nav chip (aiOnly keeps only the AI cap);
+   nav chip → its preview when opened. */
+function visKids(id){
+  const n=nodes.get(id); if(!n)return [];
+  if(n.type==="screen"||n.type==="navscreen"){
+    const open=expanded.has(id)||(n.type==="screen"&&searchTerm&&matchSearch(n));
+    if(!open)return [];
+    if(n.type==="navscreen"&&!n.materialized)materializeNav(id);
+    return n.kids||[];
+  }
+  if(n.type==="action"){ let ks=n.kids||[];
+    if(aiOnly)ks=ks.filter(k=>{const kn=nodes.get(k);return kn&&kn.type==="ai";});
+    return ks; }
+  if(n.type==="nav"){ return (state.navOpen||{})[id]?(n.kids||[]):[]; }
+  return [];
+}
+function addKidsRec(id,vis){ visKids(id).forEach(k=>{ if(vis.has(k))return; vis.add(k); addKidsRec(k,vis); }); }
 
 /* ---------- AI 하네스 (앱 안 AI가 어떻게 엮여 도는지 + 각 역할) ---------- */
 let harnessMode=false;
@@ -442,10 +474,11 @@ function nodeHtml(n){
     const sel2=(selected===n.id||selected===n.data.sid)?" sel":"";
     const shot=SHOTS[s2.route]?`<img class="thumb" src="${SHOTS[s2.route]}" alt="">`:"";
     const nAct=(s2.actions||[]).length,nAi=(s2.actions||[]).filter(a=>a.ai).length;
+    const open=expanded.has(n.id);
     return `<div class="node screen navscr${sel2}${lit}" data-id="${n.id}" data-sid="${esc(n.data.sid)}" style="--gc:${gc}">
-      <div class="shead"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><div class="stitle">${esc(scrTitle(s2))}</div><span class="stype" style="--gc:${gc}">${TYPE_KO[ty]||""}</span></div>
-      ${shot}<div class="pad"><div class="sub">${esc(s2.summaryKo||"")}</div><div class="badges"><span class="pill">${nAct}개 동작</span>${nAi?`<span class="pill ai">AI ${nAi}</span>`:""}<span class="pill" style="color:var(--accent);border-color:rgba(139,147,255,.45)">미리보기</span></div>
-      <button class="gobtn" data-jump="${esc(n.data.sid)}">원본 노드로 이동하기 →</button></div></div>`;}
+      <div class="shead"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><div class="stitle">${esc(scrTitle(s2))}</div><span class="stype" style="--gc:${gc}">${TYPE_KO[ty]||""}</span><span class="ex">${open?"▾":"▸"}</span></div>
+      ${shot}<div class="pad"><div class="sub">${esc(s2.summaryKo||"")}</div><div class="badges"><span class="pill">${nAct}개 동작</span>${nAi?`<span class="pill ai">AI ${nAi}</span>`:""}<span class="pill" style="color:var(--accent);border-color:rgba(139,147,255,.45)">${open?"펼침 — 하위 기능":"눌러서 펼치기"}</span></div>
+      <button class="gobtn" data-jump="${esc(n.data.sid)}">원본 카드로 →</button></div></div>`;}
   if(n.type==="h"){const c=n.color||"#8b93ff";
     return `<div class="node${sel}${lit}" data-id="${n.id}" style="width:208px;border-top:3px solid ${c}"><div class="pad"><div class="t">${esc(n.label)}</div><div class="sub">${esc(n.role)}</div></div></div>`;}
   return "";
@@ -479,31 +512,30 @@ function emptyHint(vis){let e=document.getElementById("emptyHint");
    Capabilities are per-action instances (a shared table shows once per action; the
    detail panel still lists every action that uses it). Dragged nodes keep their
    manual position and drop out of the auto flow. */
-function packColumns(vis){const GAP=16,HEAD=30,GG=26,BANDGAP=20,CGAP=10,AGAP=16;groupLabelPos=[];
-  let y=8;
+/* Recursive mother-aligned tree layout. Each node is placed one step to the right
+   of its parent (x = depth*STEP), top-aligned to its first child, and its subtree
+   reserves its full height so nothing overlaps — at ANY depth, so nav previews and
+   their actions/data keep unfolding rightward without collision. Dragged nodes are
+   pinned and their subtree is laid out self-contained (doesn't shift siblings). */
+function packColumns(vis){const HEAD=30,GG=26,BANDGAP=20,VGAP=12,STEP=340;groupLabelPos=[];
+  let cy=8;
+  function place(id,depth){
+    const n=nodes.get(id); if(!n)return;
+    const kids=visKids(id).filter(k=>vis.has(k));
+    const dr=state.pos[id];
+    if(dr){ n.x=dr.x;n.y=dr.y; const save=cy; cy=dr.y; kids.forEach(k=>place(k,depth+1)); cy=save; return; }
+    if(!kids.length){ n.x=depth*STEP; n.y=cy; cy+=(n.h||60)+VGAP; return; }
+    const firstTop=cy;
+    kids.forEach(k=>place(k,depth+1));
+    const kidsBottom=cy-VGAP;
+    n.x=depth*STEP; n.y=firstTop;
+    if(n.y+(n.h||60)>kidsBottom) cy=n.y+(n.h||60)+VGAP;   // node taller than its kids -> reserve
+  }
   for(const g of GROUPS){
     const scrs=screens.filter(s=>s.group===g&&vis.has(s.id)); if(!scrs.length)continue;
-    groupLabelPos.push({g,x:COLX.screen,y}); y+=HEAD;
-    for(const s of scrs){
-      const sn=nodes.get(s.id), dragged=!!state.pos[s.id];
-      const top=dragged?state.pos[s.id].y:y;
-      if(!dragged){sn.x=COLX.screen;sn.y=top;}
-      let ay=top;
-      if(expanded.has(s.id))(s.actions||[]).forEach((a,i)=>{
-        const aid=actId(s,i); if(!vis.has(aid))return; const an=nodes.get(aid);
-        const caps=[]; (a.apis||[]).forEach((t,j)=>{const id=aid+"::api:"+j;if(vis.has(id))caps.push(nodes.get(id));}); if(a.ai&&vis.has(aid+"::ai"))caps.push(nodes.get(aid+"::ai")); if(vis.has(aid+"::nav"))caps.push(nodes.get(aid+"::nav"));
-        const adr=!!state.pos[aid]; if(!adr){an.x=COLX.action;an.y=ay;}
-        const aTop=adr?state.pos[aid].y:ay;
-        let cyc=aTop; caps.forEach(cn=>{if(!state.pos[cn.id]){cn.x=COLX.api;cn.y=cyc;} cyc+=(cn.h||44)+CGAP;});
-        // opened nav preview card: top-aligned to its chip, one more column to the right
-        let extraB=0; const chip=nodes.get(aid+"::nav"), nscr=nodes.get(aid+"::navscr");
-        if(chip&&nscr&&vis.has(nscr.id)){ if(!state.pos[nscr.id]){nscr.x=COLX.navscreen;nscr.y=chip.y;} extraB=(chip.y-aTop)+(nscr.h||210); }
-        const capsH=caps.length?(cyc-aTop-CGAP):0, blockH=Math.max(an.h||56, capsH, extraB);
-        if(!adr)ay=aTop+blockH+AGAP;
-      });
-      if(!dragged){const bandH=Math.max(sn.h||120, ay>top?(ay-top-AGAP):0); y=top+bandH+BANDGAP;}
-    }
-    y+=GG;
+    groupLabelPos.push({g,x:0,y:cy}); cy+=HEAD;
+    for(const s of scrs){ place(s.id,0); cy+=BANDGAP; }
+    cy+=GG;
   }
 }
 /* ---------- 화면 흐름(navigation) mode ---------- */
@@ -648,7 +680,7 @@ nodesEl.addEventListener("pointerup",()=>{if(!drag)return;const n=nodes.get(drag
     const t=nodes.get(drag.jumpHit);
     if(t.type==="screen"&&!navMode&&!expanded.has(t.id)){expanded.add(t.id);state.expanded[t.id]=true;save();}
     selected=t.id;setTab("detail");render();fitToNode(t.id);}
-  else if(drag.exHit&&n.type==="screen"&&!navMode){ // ▸/▾ arrow = explicit expand/collapse toggle
+  else if(drag.exHit&&(n.type==="screen"||n.type==="navscreen")&&!navMode){ // ▸/▾ arrow = explicit expand/collapse toggle
     if(expanded.has(drag.id)){expanded.delete(drag.id);state.expanded[drag.id]=false;}else{expanded.add(drag.id);state.expanded[drag.id]=true;}
     save();selected=drag.id;setTab("detail");render();}
   else{onNodeClick(drag.id);}
@@ -668,7 +700,7 @@ function onNodeClick(id){const n=nodes.get(id);
     state.navOpen=state.navOpen||{}; state.navOpen[id]=!state.navOpen[id]; save();
     selected=state.navOpen[id]?n.parent+"::navscr":id; // 펼치면 미리보기 선택, 접으면 칩 선택
     setTab("detail"); render(); return; }
-  if(n.type==="navscreen"){ selected=id; setTab("detail"); render(); return; }
+  if(n.type==="navscreen"){ if(!expanded.has(id)){expanded.add(id);state.expanded[id]=true;save();} selected=id; setTab("detail"); render(); return; } // 클릭=펼침(하위 기능 표시)+선택, 접기는 ▾
   if(n.type==="screen"&&!navMode&&!expanded.has(id)){expanded.add(id);state.expanded[id]=true;save();}selected=id;setTab("detail");render();}
 function fitToNode(id){const n=nodes.get(id);if(!n)return;const w=els[id]?els[id].offsetWidth:262,h=n.h||100;const r=stage.getBoundingClientRect();
   view.k=Math.min(1.4,Math.max(view.k,.9));

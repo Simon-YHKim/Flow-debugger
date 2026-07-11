@@ -3,6 +3,26 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.4.0] - 2026-07-11
+
+### Changed
+- **Navigation previews are now the node itself — recursively expandable.** A
+  preview card no longer just links to the original with a jump button; it has its
+  own ▸/▾ and, when expanded, unfolds the target screen's real actions inline (with
+  their data/AI and their own 이동 chips), which open further previews, and so on —
+  so you can keep drilling screen → action → next screen → its functions → … all to
+  the right without ever losing your place. Bounded by a depth limit (6) and a
+  cycle guard (a screen never re-opens one already above it on the path). The whole
+  layout engine was rewritten from fixed type-columns to a **recursive mother-
+  aligned tree** (x = tree depth), so nothing overlaps at any depth. A small
+  "원본 카드로 →" button remains for jumping to the canonical card.
+
+### Verified
+- Drill-down: screen → chip → preview → expand materializes the target's 6 actions
+  → a nested 이동 chip → a deeper preview, all with 0 overlaps at every depth.
+  Regression: catalog expand-all 891 nodes / 0 overlaps, 화면 흐름 mode 82 nodes /
+  0 overlaps, AI 하네스 intact, prompt dock intact, 0 page errors.
+
 ## [0.3.1] - 2026-07-11
 
 ### Changed
