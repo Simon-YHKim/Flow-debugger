@@ -143,6 +143,27 @@
   .prompt-wrap{display:flex;flex-direction:column;height:100%}
   textarea.prompt{flex:1;min-height:200px;width:100%;background:#0b0b11;border:1px solid var(--line);border-radius:10px;padding:12px;color:#cfd2f0;font-family:var(--mono);font-size:11.5px;line-height:1.55;resize:none}
   .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--faint);padding:7px 16px;border-top:1px solid var(--line);background:var(--panel);align-items:center}
+  /* 프롬프트 스택 독 (bottom dock): 메모·버그·연결변경이 AI-작업형 프롬프트로 쌓이는 곳 */
+  #pdock{flex:0 0 auto;border-top:1px solid var(--line2);background:var(--panel)}
+  #pdock .ph{display:flex;align-items:center;gap:10px;padding:7px 16px;cursor:pointer;user-select:none}
+  #pdock .ph b{font-size:12.5px}
+  #pdock .phint{font-size:11px;color:var(--faint)}
+  #pdock .plist{display:none;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;padding:2px 16px 8px}
+  #pdock.open .plist{display:flex}
+  #pdock .pin{display:none;gap:8px;padding:0 16px 10px;align-items:center}
+  #pdock.open .pin{display:flex}
+  .pcard{display:flex;gap:9px;align-items:flex-start;border:1px solid var(--line);border-radius:9px;padding:7px 11px;font-size:12px;cursor:pointer;background:var(--panel2)}
+  .pcard:hover{border-color:var(--accent)}
+  .pbadge{font-size:10px;padding:1px 7px;border-radius:99px;font-weight:700;flex:0 0 auto;color:#0c0c12;margin-top:1px}
+  .pcard .pt{flex:1;min-width:0;line-height:1.5}
+  .pcard .pt b{font-size:12px}
+  .pcard .ptext{color:#d4d4e2;word-break:keep-all}
+  .pcard .pcode{font-family:var(--mono);font-size:10px;color:var(--faint);word-break:break-all}
+  .pdel{flex:0 0 auto;background:none;border:none;color:var(--faint);cursor:pointer;font-size:13px;padding:0 2px}
+  .pdel:hover{color:#e8896f}
+  #pdock input.pfree{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 11px;color:var(--text);font-family:inherit;font-size:12.5px}
+  #pdock input.pfree::placeholder{color:var(--faint)}
+  .pempty{color:var(--faint);font-size:12px;padding:4px 2px;line-height:1.7}
   .legend span{display:flex;align-items:center;gap:5px}.legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
   .hint{font-size:11.5px;color:var(--faint);margin-top:8px;line-height:1.6}
   .countbadge{font-size:10px;color:var(--bg);background:var(--ai);border-radius:99px;padding:0 6px;margin-left:6px;font-weight:700}
@@ -198,6 +219,22 @@
       <div class="tab" data-tab="prompt">수정 요청<span class="countbadge" id="editCount" style="display:none">0</span></div>
     </div>
     <div class="body" id="sideBody"></div>
+  </div>
+</div>
+
+<div id="pdock" class="open">
+  <div class="ph" id="pdockHead">
+    <b>🧺 프롬프트 스택</b><span class="countbadge" id="pdockCount" style="display:none">0</span>
+    <span class="phint">화면·동작에 남긴 메모/버그/수정이 AI에게 줄 프롬프트로 쌓여요 — 복사해서 그대로 붙여넣으세요</span>
+    <span style="flex:1"></span>
+    <button class="btn" id="pdockCopy" title="스택 전체를 AI에 붙여넣을 프롬프트로 복사">전체 복사</button>
+    <button class="btn" id="pdockClear" title="스택의 모든 항목 삭제">비우기</button>
+    <span id="pdockChev" style="color:var(--faint);width:14px;text-align:center">▾</span>
+  </div>
+  <div class="plist" id="pdockList"></div>
+  <div class="pin">
+    <input class="pfree" id="pdockInput" placeholder="직접 요청 추가 — 노드를 선택한 상태면 그 화면/동작에 대한 요청으로 붙어요 (Enter)">
+    <button class="btn" id="pdockAdd">추가</button>
   </div>
 </div>
 
@@ -305,7 +342,7 @@ GROUPS.forEach((g,i)=>{
 const LSKEY="flowdbg-v5:"+(()=>{let h=0;const s=GRAPH.map(x=>(x&&x.route)||"").join("|");for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0;return(h>>>0).toString(36);})();
 /* pos = catalog-mode drag positions, navPos = 화면 흐름-mode drag positions —
    separate maps so dragging in one mode never corrupts the other's layout. */
-let state={pos:{},navPos:{},edits:{},expanded:{},groupsOff:{},globalNote:"",addedEdges:[],removedEdges:[],bugs:{},navOpen:{}};
+let state={pos:{},navPos:{},edits:{},expanded:{},groupsOff:{},globalNote:"",addedEdges:[],removedEdges:[],bugs:{},navOpen:{},promptExtra:[],dockOpen:true};
 try{state={...state,...JSON.parse(localStorage.getItem(LSKEY)||"{}")};}catch(e){}
 const save=()=>localStorage.setItem(LSKEY,JSON.stringify(state));
 let selected=null,hoverId=null,aiOnly=false,searchTerm="",tab="detail";
@@ -684,7 +721,8 @@ function updateEditCount(){ // count only entries whose nodes still exist (stale
     +((state.addedEdges||[]).filter(e=>nodes.has(e.from)&&nodes.has(e.to)).length)
     +((state.removedEdges||[]).filter(k=>{const p=k.split(">>");return nodes.has(p[0])&&nodes.has(p[1]);}).length),
     b=document.getElementById("editCount");b.style.display=n?"inline-block":"none";b.textContent=n;
-  const bn=Object.keys(state.bugs||{}).filter(id=>nodes.has(id)).length,bb=document.getElementById("bugCount");if(bb){bb.style.display=bn?"inline-block":"none";bb.textContent=bn;}}
+  const bn=Object.keys(state.bugs||{}).filter(id=>nodes.has(id)).length,bb=document.getElementById("bugCount");if(bb){bb.style.display=bn?"inline-block":"none";bb.textContent=bn;}
+  updateDock();}
 const TYPETAG={screen:["화면","#8b93ff"],action:["사용자 동작","#8b93ff"],api:["데이터·서버 작업","#6fb6ff"],ai:["AI 기능","#d8a657"],nav:["화면 이동","#8b93ff"],navscreen:["화면 미리보기","#8b93ff"],h:["AI 하네스 단계","#8b93ff"]};
 
 /* ---------- 경로 걷기 (Overflow Stories식 워크스루: 캡처 보며 한 단계씩) ---------- */
@@ -859,7 +897,7 @@ function mermaidText(){
 function buildBugReport(ids){
   const out=["[버그 신고서] 2nd-B — 비개발자가 작성했어요. 아래 '코드' 경로와 '점검 포인트'부터 원인을 찾아 고쳐줘.\n"];
   ids.forEach(id=>{const n=nodes.get(id);if(!n)return;const a=n.data,b=(state.bugs||{})[id]||{};
-    out.push(`■ 안 되는 동작: ${dispLabel(n)}${n.screen?"  (화면: "+scrTitle(n.screen)+" "+n.screen.data.route+")":""}`);
+    out.push(`■ 안 되는 동작: ${dispLabel(n)}${n.screen?"  (화면: "+scrTitle(n.screen)+" "+(n.screen.route||"")+")":""}`);
     if(a.feature||a.file)out.push(`  코드: ${a.feature||""}${a.file?" @ "+a.file:""}`);
     if(b.symptom)out.push(`  무슨 일이: ${b.symptom}`);
     if(b.expected)out.push(`  바란 것: ${b.expected}`);
@@ -941,6 +979,83 @@ document.getElementById("autoArrange").onclick=()=>{if(navMode)state.navPos={};e
 document.getElementById("resetAll").onclick=()=>{if(confirm("위치·펼침·수정·필터를 모두 초기화할까요?")){localStorage.removeItem(LSKEY);location.reload();}};
 function renderChips(){document.getElementById("chips").innerHTML=GROUPS.map(g=>`<div class="chip ${groupOn(g)?"":"off"}" data-g="${g}"><span class="gd" style="background:${GROUP_COLOR[g]}"></span>${GROUP_LABEL[g]}</div>`).join("");
   document.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{const g=c.dataset.g;state.groupsOff[g]=groupOn(g);save();renderChips();render();});}
+
+/* ---------- 프롬프트 스택 독 ---------- */
+/* 노드에 남긴 메모·이름수정·표시(틀림/삭제/추가)·버그신고·연결변경·직접입력을
+   AI가 바로 작업할 수 있는 문장(+코드 근거)으로 변환해 하단에 쌓는다. */
+function stackEntries(){
+  const E=[];
+  for(const [id,ed] of Object.entries(state.edits||{})){const n=nodes.get(id);if(!n)continue;
+    const tt=(TYPETAG[n.type]||[""])[0],title=`${tt} "${origLabel(n)}"`,code=codeRef(n);
+    const parts=[];
+    if(ed.label&&ed.label!==origLabel(n))parts.push(`이름(라벨)을 "${ed.label}"(으)로 바꿔줘`);
+    if(ed.flag==="틀림")parts.push("이 설명이 실제 코드와 다른지 검토하고 정정해줘");
+    if(ed.flag==="삭제")parts.push("이 항목은 실제와 다르거나 불필요하니 흐름도에서 빼줘");
+    if(ed.flag==="추가")parts.push("이 주변에 누락된 동작·연결이 없는지 코드에서 더 확인해줘");
+    if(ed.note)parts.push(ed.note);
+    if(parts.length)E.push({kind:"메모",color:"#8b93ff",nodeId:id,title,code,text:parts.join(" / ")});}
+  for(const [id,bg] of Object.entries(state.bugs||{})){const n=nodes.get(id);if(!n)continue;const a=n.data||{};
+    const t=[];if(bg.symptom)t.push("증상: "+bg.symptom);if(bg.expected)t.push("기대: "+bg.expected);if(bg.repro)t.push("재현: "+bg.repro);
+    t.push("코드 경로부터 원인을 찾아 고쳐줘");
+    const dep=[];if(a.ai&&a.ai.purpose)dep.push("AI: "+a.ai.purpose);if((a.apis||[]).length)dep.push("의존: "+a.apis.join(", "));if((a.risks||[]).length)dep.push("점검: "+a.risks.map(r=>RISK_KO[r]||r).join(","));
+    E.push({kind:"버그",color:"#e8896f",nodeId:id,title:`동작 "${dispLabel(n)}"${n.screen?` — 화면 ${scrTitle(n.screen)}`:""}`,code:codeRef(n),text:t.join(" · ")+(dep.length?"  ["+dep.join(" · ")+"]":"")});}
+  (state.addedEdges||[]).forEach((e,i)=>{const f=nodes.get(e.from),t=nodes.get(e.to);if(f&&t)E.push({kind:"연결",color:"#7fd1b9",edge:{type:"add",i},nodeId:e.from,title:`연결 추가: ${origLabel(f)} → ${origLabel(t)}`,code:[codeRef(f),codeRef(t)].filter(Boolean).join(" → "),text:"이 연결이 실제 코드에 있는지 확인하고 흐름도에 반영해줘"});});
+  (state.removedEdges||[]).forEach((k,i)=>{const p=k.split(">>"),f=nodes.get(p[0]),t=nodes.get(p[1]);if(f&&t)E.push({kind:"연결",color:"#e8896f",edge:{type:"del",i},nodeId:p[0],title:`연결 끊기: ${origLabel(f)} → ${origLabel(t)}`,code:"",text:"이 연결은 실제로 없는 것 같으니 확인 후 흐름도에서 제거해줘"});});
+  if(state.globalNote)E.push({kind:"전체",color:"#d8a657",global:true,title:"전체 메모",code:"",text:state.globalNote});
+  (state.promptExtra||[]).forEach((x,i)=>E.push({kind:"요청",color:"#9fd0e0",extra:i,nodeId:x.id||null,title:x.label||"직접 추가한 요청",code:x.code||"",text:x.t}));
+  return E;
+}
+function buildStackPrompt(){
+  const E=stackEntries();
+  const L=["아래는 기능 흐름도(flow-debugger)에서 내가 수집한 작업 요청 목록이야.",
+    "각 항목의 코드 근거(route, file:line, api 태그)를 참고해서 — 흐름도 설명이 틀렸으면 정정하고, 코드 수정이 필요하면 고쳐줘.",""];
+  E.forEach((e,i)=>{L.push(`${i+1}. [${e.kind}] ${e.title}${e.code?`  (코드: ${e.code})`:""}`);L.push(`   → ${e.text}`);});
+  if(!E.length)L.push("(아직 항목이 없어요)");
+  return L.join("\n");
+}
+function removeEntry(e){
+  if(e.kind==="메모"&&e.nodeId)delete state.edits[e.nodeId];
+  else if(e.kind==="버그"&&e.nodeId)delete state.bugs[e.nodeId];
+  else if(e.edge&&e.edge.type==="add")state.addedEdges.splice(e.edge.i,1);
+  else if(e.edge&&e.edge.type==="del")state.removedEdges.splice(e.edge.i,1);
+  else if(e.global)state.globalNote="";
+  else if(e.extra!=null)state.promptExtra.splice(e.extra,1);
+  save();updateEditCount();renderSide();
+}
+function updateDock(){
+  const dock=document.getElementById("pdock");if(!dock)return;
+  const E=stackEntries();
+  const c=document.getElementById("pdockCount");c.style.display=E.length?"inline-block":"none";c.textContent=E.length;
+  dock.classList.toggle("open",!!state.dockOpen);
+  document.getElementById("pdockChev").textContent=state.dockOpen?"▾":"▸";
+  if(!state.dockOpen)return;
+  const list=document.getElementById("pdockList");
+  if(!E.length){list.innerHTML=`<div class="pempty">아직 쌓인 항목이 없어요 — 카드를 눌러 <b>고칠 점 메모</b>를 적거나, <b>이 동작이 안 돼요</b>로 버그를 신고하거나, 아래 입력창에 직접 요청을 적으면 여기에 프롬프트로 쌓여요.</div>`;return;}
+  list.innerHTML=E.map((e,i)=>`<div class="pcard" data-pi="${i}">
+    <span class="pbadge" style="background:${e.color}">${e.kind}</span>
+    <div class="pt"><b>${esc(e.title)}</b> <span class="ptext">→ ${esc(e.text)}</span>${e.code?`<div class="pcode">${esc(e.code)}</div>`:""}</div>
+    <button class="pdel" data-pdel="${i}" title="이 항목 삭제">✕</button></div>`).join("");
+  list.querySelectorAll("[data-pdel]").forEach(b=>b.onclick=ev=>{ev.stopPropagation();removeEntry(stackEntries()[+b.dataset.pdel]);});
+  list.querySelectorAll(".pcard").forEach(cd=>cd.onclick=()=>{const e=stackEntries()[+cd.dataset.pi];if(!e||!e.nodeId)return;const gn=nodes.get(e.nodeId);if(!gn)return;
+    // find the owning screen node so we can expand it before selecting
+    let scrNode=null;
+    if(gn.type==="screen")scrNode=gn;
+    else if(gn.type==="action"&&gn.screen)scrNode=nodes.get(gn.screen.id);
+    else if(gn.parent){const pa=nodes.get(gn.parent);if(pa&&pa.screen)scrNode=nodes.get(pa.screen.id);}
+    if(scrNode&&!navMode&&!expanded.has(scrNode.id)){expanded.add(scrNode.id);state.expanded[scrNode.id]=true;save();}
+    selected=e.nodeId;setTab("detail");render();fitToNode(e.nodeId);});
+}
+document.getElementById("pdockHead").onclick=e=>{if(e.target.closest("button"))return;state.dockOpen=!state.dockOpen;save();updateDock();};
+document.getElementById("pdockCopy").onclick=e=>{e.stopPropagation();navigator.clipboard.writeText(buildStackPrompt()).then(()=>{const b=document.getElementById("pdockCopy");b.textContent="복사됨 ✓";setTimeout(()=>b.textContent="전체 복사",1200);});};
+document.getElementById("pdockClear").onclick=e=>{e.stopPropagation();if(!confirm("프롬프트 스택의 모든 항목(메모·버그·연결 변경·직접 요청)을 지울까요?"))return;
+  state.edits={};state.bugs={};state.addedEdges=[];state.removedEdges=[];state.globalNote="";state.promptExtra=[];save();updateEditCount();renderSide();render();};
+function pdockAddNow(){const inp=document.getElementById("pdockInput");const v=inp.value.trim();if(!v)return;
+  const n=selected&&nodes.get(selected);
+  state.promptExtra=state.promptExtra||[];
+  state.promptExtra.push({t:v,id:n?selected:null,label:n?((TYPETAG[n.type]||[""])[0]+' "'+dispLabel(n)+'"'):null,code:n?codeRef(n):""});
+  inp.value="";save();updateEditCount();}
+document.getElementById("pdockAdd").onclick=e=>{e.stopPropagation();pdockAddNow();};
+document.getElementById("pdockInput").addEventListener("keydown",e=>{if(e.key==="Enter"){e.stopPropagation();pdockAddNow();}});
 
 renderChips();render();renderDetail();updateEditCount();
 </script>

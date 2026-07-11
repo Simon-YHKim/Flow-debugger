@@ -3,6 +3,24 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.3.0] - 2026-07-11
+
+### Added
+- **Prompt-stack dock (bottom bar).** Everything you note across the flow —
+  card memos, 틀림/삭제/더봐줘 flags, bug reports, connection add/remove edits, and
+  free-typed requests — is now collected in a dock at the bottom as AI-ready
+  prompt cards. Each card is a human-readable Korean instruction plus its code
+  grounding (route / file:line / api tags), so it's easy for both the user and an
+  AI to act on. **전체 복사** copies the whole stack as one paste-into-your-AI
+  prompt; a free-text input adds ad-hoc requests (attached to the selected node's
+  screen/action when one is selected); cards jump to their node; per-card ✕ and
+  비우기 remove; open/closed state and contents persist. The 수정 요청 tab remains
+  as the detailed editor for the same data.
+
+### Fixed
+- Bug-report builder crashed reading `n.screen.data.route` on an action node
+  (screen is stored as the data object, not a node) — now reads `n.screen.route`.
+
 ## [0.2.3] - 2026-07-11
 
 ### Added
