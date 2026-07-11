@@ -158,6 +158,16 @@
   details.dev summary::before{content:"▸ 개발 정보"}details.dev[open] summary{color:var(--muted)}details.dev[open] summary::before{content:"▾ 개발 정보"}
   details.dev .kv{font-family:var(--mono);font-size:11px;color:var(--muted)}
   .empty{color:var(--faint);font-size:13.5px;text-align:center;margin-top:36px;line-height:1.7}
+  .spec-stack{font-size:11.5px;color:var(--muted);line-height:1.6;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:6px 0}
+  .spec-stats{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0}
+  .spec-stat{flex:1 1 74px;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:9px 6px;text-align:center}
+  .spec-stat b{display:block;font-size:19px;color:var(--text);font-weight:700;line-height:1.15}
+  .spec-stat span{font-size:10.5px;color:var(--faint)}
+  .spec-krow{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--text);margin:9px 0 4px;font-weight:600}
+  .spec-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px}
+  .spec-riskrow{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text);margin:6px 0}
+  .spec-riskrow .rdot{width:9px;height:9px;border-radius:99px;flex:0 0 auto}
+  .spec-riskrow b{margin-left:auto;color:var(--muted)}
   .prompt-wrap{display:flex;flex-direction:column;height:100%}
   textarea.prompt{flex:1;min-height:200px;width:100%;background:#0b0b11;border:1px solid var(--line);border-radius:10px;padding:12px;color:#cfd2f0;font-family:var(--mono);font-size:11.5px;line-height:1.55;resize:none}
   .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--faint);padding:7px 16px;border-top:1px solid var(--line);background:var(--panel);align-items:center}
@@ -240,6 +250,7 @@
       <div class="tab on" data-tab="bug">버그 신고<span class="countbadge" id="bugCount" style="display:none">0</span></div>
       <div class="tab" data-tab="prompt">수정 요청<span class="countbadge" id="editCount" style="display:none">0</span></div>
       <div class="tab" data-tab="addnode">노드 추가<span class="countbadge" id="addCount" style="display:none">0</span></div>
+      <div class="tab" data-tab="spec">스펙</div>
     </div>
     <div class="body" id="sideBody"></div>
   </div>
@@ -783,7 +794,36 @@ cutbtn.onclick=()=>{ if(selEdge)removeEdge(selEdge); };
 function setTab(t){ if(t==="detail"){renderDetail();if(tab==="addnode")renderSide();return;} // 설명은 좌측 고정 패널 — 노드 선택 시 좌측만 갱신(노드추가 탭이면 '선택 카드에 연결'도 갱신)
   tab=t;document.querySelectorAll(".side .tab").forEach(x=>x.classList.toggle("on",x.dataset.tab===t));renderSide();}
 document.querySelectorAll(".tab").forEach(x=>x.onclick=()=>setTab(x.dataset.tab));
-function renderSide(){if(tab==="bug")renderBug();else if(tab==="addnode")renderAddNode();else renderPrompt();} // 우측 패널 = 버그신고/수정요청/노드추가 (설명은 renderDetail로 좌측 고정)
+function renderSide(){if(tab==="bug")renderBug();else if(tab==="addnode")renderAddNode();else if(tab==="spec")renderSpec();else renderPrompt();} // 우측 패널 = 버그신고/수정요청/노드추가/스펙 (설명은 renderDetail로 좌측 고정)
+// 시스템 스펙 탭: 로드된 데이터에서 스택·규모·서버작업·AI·위험 프로필을 자동 집계(어떤 앱/프로그램이든 동작).
+function renderSpec(){
+  const S=GRAPH||[]; let acts=0,aiActs=0; const userN=(state.addedNodes||[]).length;
+  const apiTags=new Map(),aiMap=new Map(),risk={},groups={};
+  for(const s of S){const g=s.group||"기타";groups[g]=(groups[g]||0)+1;
+    for(const a of (s.actions||[])){acts++;
+      (a.apis||[]).forEach(t=>apiTags.set(t,(apiTags.get(t)||0)+1));
+      if(a.ai){aiActs++;const k=a.ai.purpose||"ai";if(!aiMap.has(k))aiMap.set(k,a.ai);}
+      (a.risks||[]).forEach(r=>risk[r]=(risk[r]||0)+1);}}
+  const kinds={};for(const t of apiTags.keys()){const k=(t.split(":")[0])||"기타";(kinds[k]=kinds[k]||[]).push(t);}
+  const caps=Object.keys(SHOTS||{}).length, RISKS=["network","auth","ai","cost","external","gate","weakpoint","bug"];
+  const stat=(n,l)=>`<div class="spec-stat"><b>${n}</b><span>${l}</span></div>`;
+  let h=`<div class="dh">시스템 스펙</div>`;
+  h+=STACK?`<div class="spec-stack">${esc(STACK)}</div>`:`<div class="hint">스택 정보 없음 — 그래프 옆 screenmap.debug.stack.txt 로 추가할 수 있어요.</div>`;
+  h+=`<div class="dh">규모</div><div class="spec-stats">${stat(S.length,"화면")}${stat(acts,"동작")}${stat(Object.keys(groups).length,"그룹")}${stat(apiTags.size,"서버·데이터")}${stat(aiMap.size,"AI 기능")}${stat(caps,"캡처")}${userN?stat(userN,"추가 노드"):""}</div>`;
+  h+=`<div class="dh">데이터·서버 작업 (${apiTags.size})</div>`;
+  if(!apiTags.size)h+=`<div class="hint">감지된 서버·데이터 호출이 없어요.</div>`;
+  else Object.keys(kinds).sort().forEach(k=>{const kg=kinds[k],kindKo=(GAPI[kg[0]]&&GAPI[kg[0]].kindKo)||k;
+    h+=`<div class="spec-krow"><span>${esc(kindKo)}</span><span class="faint">${kg.length}종</span></div><div class="spec-chips">${kg.map(t=>`<span class="pill" title="${esc(t)}">${esc(apiKo(t))}</span>`).join("")}</div>`;});
+  h+=`<div class="dh">AI 기능 (${aiMap.size}) · AI 쓰는 동작 ${aiActs}개</div>`;
+  if(!aiMap.size)h+=`<div class="hint">감지된 AI 호출이 없어요.</div>`;
+  else for(const [k,ai] of aiMap)h+=`<div class="actrow" style="cursor:default"><div class="an"><span class="pill ai">AI</span> ${esc(aiKo(k))}</div><div class="ap">${esc(k)}${ai.model?" · "+esc(ai.model):""}${ai.via?" · "+esc(ai.via):""}</div></div>`;
+  h+=`<div class="dh">위험 프로필</div>`;
+  if(!RISKS.some(r=>risk[r]))h+=`<div class="hint">표시된 위험이 없어요.</div>`;
+  else RISKS.forEach(r=>{if(!risk[r])return;h+=`<div class="spec-riskrow"><span class="rdot" style="background:${RISK_COLOR[r]||'#888'}"></span>${esc(RISK_KO[r]||r)}<b>${risk[r]}</b></div>`;});
+  h+=`<div class="dh">화면 구성 (그룹별)</div>`;
+  Object.keys(groups).forEach(g=>h+=`<div class="spec-krow"><span>${esc(g)}</span><span class="faint">${groups[g]} 화면</span></div>`);
+  sideBody.innerHTML=h;
+}
 function setEdit(id,f,v){if(!state.edits[id])state.edits[id]={};state.edits[id][f]=v;if(v===""||v==null)delete state.edits[id][f];if(state.edits[id]&&!Object.keys(state.edits[id]).length)delete state.edits[id];save();updateEditCount();}
 function updateEditCount(){ // count only entries whose nodes still exist (stale ids from an old scan otherwise inflate the badge)
   const n=Object.keys(state.edits).filter(id=>nodes.has(id)).length+(state.globalNote?1:0)

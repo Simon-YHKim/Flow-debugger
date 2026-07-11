@@ -37,8 +37,10 @@
 >     "renders":"src/screens/deepspace/dds-auth-screens.tsx:305",
 >     "detail":"무슨 일이 일어나는지 1-2문장","to":"/"}]}]
 > ```
-> 태그 형식: db:<table>:<select|insert|update|delete>, rpc:<name>, edge:<fn>,
-> storage:<bucket>:<op>, auth:<op>. ai 없으면 null. 유효한 JSON(쌍따옴표, trailing comma 금지).
+> 태그 형식 — **앱의 실제 백엔드에 맞춰** 고른다(Supabase 전용 아님):
+> - Supabase: db:<table>:<select|insert|update|delete>, rpc:<name>, edge:<fn>, storage:<bucket>:<op>, auth:<op>
+> - 범용(REST/GraphQL/기타 백엔드): rest:<METHOD>:<path>(예 rest:GET:/api/notes), graphql:<query|mutation>:<name>, http:<METHOD>:<host>, fn:<name>(로컬/서버 함수 호출), auth:<op>(로그인·세션)
+> 실제 호출을 **정직하게** 반영하고, 해당 없는 종류를 억지로 db: 에 끼워 넣지 말 것. ai 없으면 null. 유효한 JSON(쌍따옴표, trailing comma 금지).
 > `impl`/`renders` 는 해당 없으면 생략(선택 필드 — 흐름도가 있으면 '코드 힌트'에 "@ impl (렌더: renders)"로 더한다). **stack 한 줄**(프레임워크·백엔드·화면변형 메커니즘)은 배열에 섞지 말고 ENRICH 의 앱 최상위 요약/전체 메모로 따로 전달한다(화면 객체 배열을 오염시키면 흐름도에 유령 노드가 생긴다).
 > **`to`**: 그 동작이 버튼/링크/router(push/replace/navigate/Link href)로 **다른 화면으로 이동**시키면
 > 대상 route(예 "/capture-full"), 이동이 아니면 null. (화면 흐름 뷰가 이 값으로 화면→화면 화살표를 그린다.)
@@ -56,9 +58,11 @@
 ## GLOSSARY
 
 > screenmap.json 의 모든 action.apis[] 고유 태그와 모든 ai.purpose 를 모아
-> 비개발자용 한국어 풀이를 만든다. 태그 kind = 첫 토큰(db/rpc/edge/storage/auth, 그 외 기타).
-> kindKo: db="데이터 저장·조회", rpc="서버 계산", edge="서버 기능", storage="파일 저장",
-> auth="로그인·인증", 기타="기타". 각 태그 ko 는 "무엇을 하는지"를 짧게(테이블명 말고 행동으로).
+> 비개발자용 한국어 풀이를 만든다. 태그 kind = 첫 토큰.
+> kindKo 매핑: db="데이터 저장·조회", rpc="서버 계산", edge="서버 기능", storage="파일 저장",
+> auth="로그인·인증", rest/http/graphql="서버 요청", fn="서버 기능".
+> 이 표에 없는 kind 라도(실제 백엔드 호출이면 특히) "기타"로 버리지 말고 뜻에 맞는 한국어 한 마디를 지어 준다.
+> 각 태그 ko 는 "무엇을 하는지"를 짧게(경로·테이블명 말고 행동으로).
 > ai purpose 는 ko(한글 기능명) + desc(비개발자용 한 문장). JSON 객체만 출력:
 > ```json
 > {"apis":{"db:sources:insert":{"ko":"수집한 글 저장","kindKo":"데이터 저장·조회"}},

@@ -3,6 +3,27 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.9.0] - 2026-07-11
+
+### Added
+- **시스템 스펙 tab.** A fourth right-panel tab (버그 신고 / 수정 요청 / 노드 추가 / 스펙)
+  that auto-profiles the examined system from the loaded data: the stack line, scale
+  (screens / actions / groups / server-data calls / AI features / captures), a
+  data/server-call inventory grouped by kind with tag chips, an AI inventory
+  (purpose · model · via), a risk profile (count per network/auth/ai/cost/external/
+  gate/weakpoint/bug), and screens per group. Works for any target — app, web page, or
+  other program — since it computes purely from the graph/glossary/stack.
+
+### Changed
+- **Framework-neutral scan (not just Supabase).** A generality test scanning a plain
+  vanilla-JS web app (REST `fetch` + OpenAI, no framework) surfaced that the api-tag
+  vocabulary and GLOSSARY kindKo table were hard-coded to Supabase's five primitives, so
+  a naive run bucketed REST calls as "기타". SCAN now documents generic tag conventions
+  (`rest:<METHOD>:<path>`, `graphql:`, `http:`, `fn:`) alongside the Supabase set, and
+  GLOSSARY maps rest/http/graphql → "서버 요청", fn → "서버 기능", and tells the model to
+  name any other backend kind rather than dropping it to "기타". The visualization, Korean
+  enrichment, risk annotation, and file/impl tracing were already backend-agnostic.
+
 ## [0.8.1] - 2026-07-11
 
 ### Fixed

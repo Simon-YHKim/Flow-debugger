@@ -1,11 +1,13 @@
 # flow-debugger — Session Handoff
 
-## Latest — 2026-07-11 / v0.8.1 3자 배포 준비(앱이름 파라미터화) · v0.8.0 노드추가=탭 · v0.7.0 앵커 재스캔
+## Latest — 2026-07-11 / v0.9.0 시스템 스펙 탭 + 프레임워크 중립 스캔 · v0.8.x 3자준비·노드탭 · v0.7.0 앵커
 
 ### 어디까지 왔나
-- main HEAD: v0.8.1 (아래 커밋). origin == local, working tree clean.
-- 3자 이용 경로 검증: 플러그인 **미설치**(installed_plugins.json엔 insane-search만) → `/flow-debugger`는 전역 스킬(`~/.claude/skills/flow-debugger`) 로드, 정본과 byte-identical(README 1개만 여분). 전역 빌드로 라이브검증 PASS(탭·앵커·stack). 3자 설치=`/plugin marketplace add Simon-YHKim/Flow-debugger` → `/plugin install flow-debugger@flow-debugger`(marketplace.json 유효, MIT).
+- main HEAD: v0.9.0 (아래 커밋). origin == local, working tree clean.
+- **범용성 실증**: 2nd-B(RN/Supabase)와 전혀 다른 타깃 — 프레임워크 없는 바닐라 JS 웹앱(REST fetch + OpenAI) — 을 스킬로 실제 스캔→빌드해 정상 작동 확인(scratchpad/testapp + testapp-flow.html, 3화면 9동작 pageerror0, 제목 "메모장"). 발견: 시각화·한글 enrich·위험 annotate·file/impl 추적은 백엔드 무관하게 완벽, **유일한 결함=태그 어휘가 Supabase 5종 하드코딩**(REST면 GLOSSARY가 "기타"로 오분류)→v0.9.0에서 SCAN/GLOSSARY 중립화.
+- 3자 이용 경로: 플러그인 **미설치** → `/flow-debugger`는 전역 스킬 로드(정본과 byte-identical). 3자 설치=`/plugin marketplace add Simon-YHKim/Flow-debugger` → `/plugin install flow-debugger@flow-debugger`(marketplace.json 유효, MIT).
 - 이번 세션 머지된 커밋(직접 push to main):
+  - **v0.9.0** — ①우측 **시스템 스펙 탭**(스택·규모·서버작업 인벤토리·AI목록·위험 프로필 자동집계, 앱/웹/프로그램 무관) ②**프레임워크 중립 스캔**(scan-prompts SCAN에 rest:/graphql:/http:/fn: 범용 태그 + GLOSSARY kindKo에 서버요청 매핑, "기타" 덤핑 금지). 2nd-B+testapp 양쪽 verify PASS.
   - **v0.8.1** — 3자 배포 준비: 템플릿에 하드코딩된 `2nd-B` 제목/브랜드를 `__APP_NAME__` 토큰화(build.js가 sibling `<graph>.appname.txt`로 채움, 없으면 "앱"). 남의 앱 이름 유출 방지. SKILL/README에 appname/stack sidecar 문서화. 스크립트는 원래 경로-클린이었음.
   - **v0.8.0** — `＋ 노드 추가`를 모달 다이얼로그 → **우측 패널 탭**(버그신고/수정요청 옆)으로 이동. 폼+추가노드 목록(흐름도에서 보기/삭제), 툴바 버튼은 탭 오픈, 입력값 재렌더 보존, 배지 카운트, 옛 .adlg 모달 제거. playwright PASS(탭 3개·add→캔버스+목록·삭제·overlap0·pageerror0).
   - `1e634c0` **v0.7.0** — 2nd-B 재스캔으로 0.6.0이 비워둔 앵커 정확도 필드 실채움 + apply-anchors.js + 버그신고서 codeRef 픽스 + stack 주입 + A'(divergent 4화면 액션SET prod 재도출)
