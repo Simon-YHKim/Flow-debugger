@@ -3,6 +3,27 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.10.0] - 2026-07-11
+
+### Added
+- **명령/엔드포인트 모드 — pure backend & CLI targets.** A `<graph>.mode.txt` = `ui` |
+  `backend` | `cli` (default `ui`) drives the noun for the top-level node: 화면 /
+  엔드포인트 / 명령. The page title, stat bar, node type labels, empty states, legend,
+  search/flow-button text, and the spec popup all switch vocabulary. `scan-prompts.md`
+  gains a "대상 모드" section: a screenless API server maps each endpoint as a top node
+  (route = "METHOD /path", actions = the handler's DB/service/external calls); a CLI maps
+  each command. Proven end-to-end by scanning an Express API server (PostgreSQL + external
+  payment API + JWT) — 4 endpoints, 11 actions, correct 엔드포인트 vocabulary, pageerror 0.
+- **Minimap drag-to-pan.** The minimap was click-only; it now supports click **and drag**
+  (pointer-captured, so it keeps panning even when the cursor leaves the minimap) for fast
+  navigation of large maps. Cursor shows grab / grabbing.
+
+### Changed
+- **시스템 스펙 moved from a tab to a top button + popup.** Per request: the spec is no
+  longer the 4th right-panel tab. A **📋 시스템 스펙** button in the toolbar opens a centered
+  popup (closable via the 닫기 button, Esc, or clicking the backdrop). The right panel is
+  back to three tabs (버그 신고 / 수정 요청 / 노드 추가).
+
 ## [0.9.0] - 2026-07-11
 
 ### Added

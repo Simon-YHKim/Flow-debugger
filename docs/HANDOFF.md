@@ -1,9 +1,12 @@
 # flow-debugger — Session Handoff
 
-## Latest — 2026-07-11 / v0.9.0 시스템 스펙 탭 + 프레임워크 중립 스캔 · v0.8.x 3자준비·노드탭 · v0.7.0 앵커
+## Latest — 2026-07-11 / v0.10.0 명령·엔드포인트 모드 + 스펙 팝업 + 미니맵 드래그 · v0.9.0 스펙·중립스캔
 
 ### 어디까지 왔나
-- main HEAD: v0.9.0 (아래 커밋). origin == local, working tree clean.
+- main HEAD: v0.10.0 (아래 커밋). origin == local, working tree clean.
+- **backend 모드 실증**: 화면 없는 Express API 서버(주문 API + PostgreSQL + 외부 결제 + JWT)를 `backend` 모드로 실제 스캔→빌드(scratchpad/backendapp + backend-flow.html). 4엔드포인트·11동작, 어휘가 전부 "엔드포인트"로 전환(제목·통계·라벨·스펙·범례), db/auth/rest 태그·위험프로필·실제버그(auth우회 stub·무음 refund) 정상, pageerror0. ui(2nd-B·메모장)/backend 모두 verify PASS.
+- 이번 세션 머지된 커밋(직접 push to main):
+  - **v0.10.0** — ①**명령/엔드포인트 모드**(`<graph>.mode.txt`=ui|backend|cli, MODE/UNIT로 화면→엔드포인트/명령 어휘 전환, build.js 주입, scan-prompts "대상 모드" 가이드) ②**스펙=탭→상단 📋버튼+팝업**(닫기/Esc/바깥클릭, 우측은 3탭 복귀) ③**미니맵 드래그**(클릭+포인터캡처 드래그로 이동). 3타깃 verify PASS.
 - **범용성 실증**: 2nd-B(RN/Supabase)와 전혀 다른 타깃 — 프레임워크 없는 바닐라 JS 웹앱(REST fetch + OpenAI) — 을 스킬로 실제 스캔→빌드해 정상 작동 확인(scratchpad/testapp + testapp-flow.html, 3화면 9동작 pageerror0, 제목 "메모장"). 발견: 시각화·한글 enrich·위험 annotate·file/impl 추적은 백엔드 무관하게 완벽, **유일한 결함=태그 어휘가 Supabase 5종 하드코딩**(REST면 GLOSSARY가 "기타"로 오분류)→v0.9.0에서 SCAN/GLOSSARY 중립화.
 - 3자 이용 경로: 플러그인 **미설치** → `/flow-debugger`는 전역 스킬 로드(정본과 byte-identical). 3자 설치=`/plugin marketplace add Simon-YHKim/Flow-debugger` → `/plugin install flow-debugger@flow-debugger`(marketplace.json 유효, MIT).
 - 이번 세션 머지된 커밋(직접 push to main):

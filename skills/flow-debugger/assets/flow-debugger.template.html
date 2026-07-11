@@ -116,7 +116,8 @@
   .zoomctl .zb{width:34px;height:34px;border-radius:9px;background:var(--panel);border:1px solid var(--line2);color:var(--text);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center}
   .zoomctl .zb:hover{border-color:var(--accent)}
   .zoomctl .zpct{font-size:10px;color:var(--faint);text-align:center;font-family:var(--mono)}
-  .minimap{position:absolute;left:14px;bottom:14px;width:212px;height:150px;background:rgba(11,11,17,.85);border:1px solid var(--line2);border-radius:10px;z-index:5;overflow:hidden;cursor:pointer}
+  .minimap{position:absolute;left:14px;bottom:14px;width:212px;height:150px;background:rgba(11,11,17,.85);border:1px solid var(--line2);border-radius:10px;z-index:5;overflow:hidden;cursor:grab;touch-action:none}
+  .minimap.mmdrag{cursor:grabbing}
   .minimap canvas{display:block}
   .minimap .vp{position:absolute;border:1.5px solid var(--accent);background:rgba(139,147,255,.12);pointer-events:none}
   .minimap .mt{position:absolute;top:4px;left:8px;font-size:9.5px;color:var(--faint)}
@@ -168,6 +169,12 @@
   .spec-riskrow{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text);margin:6px 0}
   .spec-riskrow .rdot{width:9px;height:9px;border-radius:99px;flex:0 0 auto}
   .spec-riskrow b{margin-left:auto;color:var(--muted)}
+  .specbtn{border-color:var(--accent);color:var(--accent)}
+  .specpop{position:fixed;inset:0;background:rgba(8,8,12,.72);z-index:70;display:flex;align-items:center;justify-content:center;padding:24px}
+  .specpop .box{width:min(460px,94vw);max-height:88vh;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line2);border-radius:14px;box-shadow:0 16px 48px rgba(0,0,0,.5)}
+  .specpop .pophead{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;border-bottom:1px solid var(--line)}
+  .specpop .pophead b{font-size:14px}
+  .specpop .popbody{padding:4px 16px 16px;overflow-y:auto}
   .prompt-wrap{display:flex;flex-direction:column;height:100%}
   textarea.prompt{flex:1;min-height:200px;width:100%;background:#0b0b11;border:1px solid var(--line);border-radius:10px;padding:12px;color:#cfd2f0;font-family:var(--mono);font-size:11.5px;line-height:1.55;resize:none}
   .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--faint);padding:7px 16px;border-top:1px solid var(--line);background:var(--panel);align-items:center}
@@ -204,6 +211,7 @@
   <div class="stat" id="stat"></div>
   <div class="grow"></div>
   <div class="ctrl">
+    <button class="btn specbtn" id="specBtn" title="확인 중인 시스템의 스펙(스택·규모·서버작업·AI·위험 프로필)을 팝업으로 보기">📋 시스템 스펙</button>
     <input class="search" id="search" placeholder="화면·기능 검색">
     <button class="btn" id="aiOnly">AI 기능만</button>
     <button class="btn" id="navFlowBtn" title="화면들이 버튼으로 어떻게 이어지는지 (버튼→다음 화면 이동 흐름)">화면 흐름</button>
@@ -219,7 +227,7 @@
 
 <div class="help">
   <b>보는 법</b> · 가운데 흐름도의 <b>화면 카드</b>(아이콘·썸네일로 어떤 화면인지 알 수 있어요)를 누르면 → <b>왼쪽 '설명' 패널</b>에 쉬운 설명이 뜨고, 카드 오른쪽으로 <b>그 화면에서 할 수 있는 일</b> → <b>데이터·서버 작업</b>과 <b>AI 기능</b>이 펼쳐집니다.
-  카드에 마우스를 올리면 연결선이 강조돼요. <b>＋ 노드 추가</b>로 "이런 화면·기능이 있어야 해요"를 얹으면 프롬프트에 '만들어줘'로 담겨요. <b>화면 흐름</b>을 켜면 버튼으로 이어지는 화면 이동이 화살표로 보이고, 화면을 눌러 <b>🚩 여기서 출발 → 🎯 여기까지 경로</b>로 이동 경로를 찾고 <b>▶ 경로 걷기</b>로 캡처를 보며 한 단계씩 따라갈 수 있어요. <b>연결 편집</b>을 켜면 카드 오른쪽 점을 끌어 새 연결을 잇고, 선을 눌러 끊을 수 있어요(변경은 오른쪽 '수정 요청'에 자동 기록). <span class="faint">빈 곳 드래그=이동(빈 곳 클릭=선택 해제) · 휠/버튼/+−=확대축소 · 0=전체 맞춤 · 더블클릭=카드 확대 · 검색 후 Enter=이동 · Esc=해제 · 미니맵 클릭=이동</span>
+  카드에 마우스를 올리면 연결선이 강조돼요. <b>＋ 노드 추가</b>로 "이런 화면·기능이 있어야 해요"를 얹으면 프롬프트에 '만들어줘'로 담겨요. <b>화면 흐름</b>을 켜면 버튼으로 이어지는 화면 이동이 화살표로 보이고, 화면을 눌러 <b>🚩 여기서 출발 → 🎯 여기까지 경로</b>로 이동 경로를 찾고 <b>▶ 경로 걷기</b>로 캡처를 보며 한 단계씩 따라갈 수 있어요. <b>연결 편집</b>을 켜면 카드 오른쪽 점을 끌어 새 연결을 잇고, 선을 눌러 끊을 수 있어요(변경은 오른쪽 '수정 요청'에 자동 기록). <span class="faint">빈 곳 드래그=이동(빈 곳 클릭=선택 해제) · 휠/버튼/+−=확대축소 · 0=전체 맞춤 · 더블클릭=카드 확대 · 검색 후 Enter=이동 · Esc=해제 · 미니맵 클릭·드래그=이동</span>
 </div>
 
 <div class="chips" id="chips"></div>
@@ -250,7 +258,6 @@
       <div class="tab on" data-tab="bug">버그 신고<span class="countbadge" id="bugCount" style="display:none">0</span></div>
       <div class="tab" data-tab="prompt">수정 요청<span class="countbadge" id="editCount" style="display:none">0</span></div>
       <div class="tab" data-tab="addnode">노드 추가<span class="countbadge" id="addCount" style="display:none">0</span></div>
-      <div class="tab" data-tab="spec">스펙</div>
     </div>
     <div class="body" id="sideBody"></div>
   </div>
@@ -289,6 +296,9 @@ const GRAPH = (__GRAPH_JSON__)||[];
 const GLOSSARY = (__GLOSSARY_JSON__)||{};
 const SHOTS = (__SHOTS_JSON__)||{};
 const STACK = (__STACK_JSON__)||"";
+// MODE = ui(화면) | backend(엔드포인트) | cli(명령). UNIT = 최상위 노드를 부르는 말.
+const MODE = "__MODE__";
+const UNIT = ({ui:"화면",backend:"엔드포인트",cli:"명령"})[MODE] || "화면";
 const GAPI = GLOSSARY.apis||{}, GAI = GLOSSARY.ai||{};
 
 const GROUP_ORDER=["auth","capture","knowledge","identity","assistant","ops","deepspace","settings"];
@@ -376,7 +386,7 @@ const NAV=[];
 screens.forEach(s=>{(s.actions||[]).forEach((a,i)=>{ if(a.to){const tid="s:"+a.to; if(nodes.has(tid)&&tid!==s.id)NAV.push({from:s.id,to:tid,label:actLabel(a),aid:actId(s,i)});} });});
 function apiKo(t){return(GAPI[t]&&GAPI[t].ko)||t;}
 function aiKo(p){return(GAI[p]&&GAI[p].ko)||p;}
-const UKIND={screen:"화면",action:"동작",note:"메모"};
+const UKIND={screen:UNIT,action:"동작",note:"메모"};
 function dispLabel(n){if(n.type==="h")return n.label;if(n.type==="user")return n.data.label||"(이름 없음)";if(n.type==="nav"){const t=nodes.get(n.data.to);return "이동: "+(t?scrTitle(t.data):n.data.route);}if(n.type==="navscreen"){const t=nodes.get(n.data.sid);return(t?scrTitle(t.data):n.data.route)+" (미리보기)";}return n.type==="screen"?scrTitle(n.data):n.type==="action"?actLabel(n.data):n.type==="api"?apiKo(n.data.tag):aiKo(n.data.purpose);}
 /* codeRef = the code hint shown for a node. For actions we prefer `impl` (the real
    handler/hook location the scan traced to) over `file` (often the screen-mount line),
@@ -514,7 +524,7 @@ function nodeHtml(n){
     return `<div class="node ai${sel}${lit}" data-id="${n.id}"><div class="pad"><div class="t"><span>${lab}</span></div><div class="sub">${esc(n.data.model||"")}</div></div></div>`;}
   if(n.type==="nav"){const t=nodes.get(n.data.to),s2=t&&t.data,gc=s2?(GROUP_COLOR[s2.group]||"var(--accent)"):"var(--accent)",ty=s2?screenType(s2):"detail";
     const open=!!(state.navOpen||{})[n.id];
-    return `<div class="node navchip${sel}${lit}" data-id="${n.id}" style="--gc:${gc}"><div class="pad"><div class="t"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><span style="color:var(--muted);font-size:11px;flex:0 0 auto">이동 →</span><span style="font-weight:650;flex:1">${esc(s2?scrTitle(s2):n.data.route)}</span><span class="ex">${open?"▾":"▸"}</span></div><div class="sub">${open?"누르면 미리보기를 접어요":"누르면 옆에 그 화면을 펼쳐 보여줘요"}</div></div></div>`;}
+    return `<div class="node navchip${sel}${lit}" data-id="${n.id}" style="--gc:${gc}"><div class="pad"><div class="t"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><span style="color:var(--muted);font-size:11px;flex:0 0 auto">이동 →</span><span style="font-weight:650;flex:1">${esc(s2?scrTitle(s2):n.data.route)}</span><span class="ex">${open?"▾":"▸"}</span></div><div class="sub">${open?"누르면 미리보기를 접어요":"누르면 옆에 그 "+UNIT+"을 펼쳐 보여줘요"}</div></div></div>`;}
   if(n.type==="navscreen"){const t=nodes.get(n.data.sid);if(!t)return "";const s2=t.data,ty=screenType(s2),gc=GROUP_COLOR[s2.group]||"var(--accent)";
     const sel2=(selected===n.id||selected===n.data.sid)?" sel":"";
     const shot=SHOTS[s2.route]?`<img class="thumb" src="${SHOTS[s2.route]}" alt="">`:"";
@@ -671,9 +681,9 @@ function origLabel(n){return dispLabel(n);}function curLabel(n){const e=state.ed
 function updateStat(vis){let m;
   if(harnessMode)m="AI 하네스 보기 — 입력 → 안전검사 → 게이트웨이 → 티어 → 프록시 → 모델 → 출력검사 → 감사";
   else if(navMode){const pr=new Set();NAV.forEach(e=>{if(vis.has(e.from)&&vis.has(e.to))pr.add(e.from+">"+e.to);});
-    m=`화면 흐름 · 화면 ${vis.size} · 이동 연결 ${pr.size}`;if(navPath)m+=` · 경로 ${navPath.steps.length}단계`;else if(pathFrom)m+=" · 출발 지정됨 — 도착 화면을 누르세요";}
+    m=`${UNIT} 흐름 · ${UNIT} ${vis.size} · 이동 연결 ${pr.size}`;if(navPath)m+=` · 경로 ${navPath.steps.length}단계`;else if(pathFrom)m+=` · 출발 지정됨 — 도착 ${UNIT}을 누르세요`;}
   else{const acts=[...nodes.values()].filter(n=>n.type==="action").length;const ua=new Set(),ui=new Set();for(const n of nodes.values()){if(n.type==="api"&&n.data)ua.add(n.data.tag);if(n.type==="ai"&&n.data)ui.add(n.data.purpose);}
-    m=`${screens.length}개 화면 · 동작 ${acts} · 데이터/서버 ${ua.size} · AI ${ui.size}종 · 표시 ${vis.size}`;}
+    m=`${screens.length}개 ${UNIT} · 동작 ${acts} · 데이터/서버 ${ua.size} · AI ${ui.size}종 · 표시 ${vis.size}`;}
   if(searchTerm&&!harnessMode)m+=` · "${searchTerm}" 일치 화면 ${screens.filter(s=>vis.has(s.id)).length}개 (Enter=이동)`;
   document.getElementById("stat").textContent=m;}
 
@@ -694,9 +704,17 @@ function drawMinimapVP(){if(!mmBox){mmvp.style.display="none";return;}mmvp.style
   const l=Math.max(0,Math.min(mmc.width,vx)),t=Math.max(0,Math.min(mmc.height,vy));
   const rr=Math.max(0,Math.min(mmc.width,vx+vw)),bb=Math.max(0,Math.min(mmc.height,vy+vh));
   mmvp.style.left=l+"px";mmvp.style.top=t+"px";mmvp.style.width=Math.max(0,rr-l)+"px";mmvp.style.height=Math.max(0,bb-t)+"px";}
-mm.addEventListener("pointerdown",e=>{if(!mmBox)return;const r=mm.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;
+// 미니맵: 클릭으로 이동 + 드래그로 계속 이동(위치 찾기 편하게). 포인터 캡처로 밖으로 나가도 따라옴.
+let mmDrag=false;
+function mmPanTo(clientX,clientY){if(!mmBox)return;const r=mm.getBoundingClientRect();
+  const mx=clientX-r.left,my=clientY-r.top;
   const wx=mx/mmBox.sc+mmBox.minx,wy=my/mmBox.sc+mmBox.miny;const sr=stage.getBoundingClientRect();
-  view.x=-(wx*view.k)+sr.width/2;view.y=-(wy*view.k)+sr.height/2;applyView();e.stopPropagation();});
+  view.x=-(wx*view.k)+sr.width/2;view.y=-(wy*view.k)+sr.height/2;applyView();}
+mm.addEventListener("pointerdown",e=>{if(!mmBox)return;mmDrag=true;mm.classList.add("mmdrag");try{mm.setPointerCapture(e.pointerId);}catch(_){}mmPanTo(e.clientX,e.clientY);e.stopPropagation();e.preventDefault();});
+mm.addEventListener("pointermove",e=>{if(!mmDrag)return;mmPanTo(e.clientX,e.clientY);e.stopPropagation();});
+function mmEnd(e){if(!mmDrag)return;mmDrag=false;mm.classList.remove("mmdrag");try{mm.releasePointerCapture(e.pointerId);}catch(_){}}
+mm.addEventListener("pointerup",e=>{mmEnd(e);e.stopPropagation();});
+mm.addEventListener("pointercancel",mmEnd);
 
 /* ---------- zoom ---------- */
 function zoomAt(k,cx,cy){const r=stage.getBoundingClientRect();cx=cx??r.width/2;cy=cy??r.height/2;const old=view.k;k=Math.max(.25,Math.min(2.4,k));view.x=cx-(cx-view.x)*(k/old);view.y=cy-(cy-view.y)*(k/old);view.k=k;applyView();}
@@ -794,9 +812,9 @@ cutbtn.onclick=()=>{ if(selEdge)removeEdge(selEdge); };
 function setTab(t){ if(t==="detail"){renderDetail();if(tab==="addnode")renderSide();return;} // 설명은 좌측 고정 패널 — 노드 선택 시 좌측만 갱신(노드추가 탭이면 '선택 카드에 연결'도 갱신)
   tab=t;document.querySelectorAll(".side .tab").forEach(x=>x.classList.toggle("on",x.dataset.tab===t));renderSide();}
 document.querySelectorAll(".tab").forEach(x=>x.onclick=()=>setTab(x.dataset.tab));
-function renderSide(){if(tab==="bug")renderBug();else if(tab==="addnode")renderAddNode();else if(tab==="spec")renderSpec();else renderPrompt();} // 우측 패널 = 버그신고/수정요청/노드추가/스펙 (설명은 renderDetail로 좌측 고정)
-// 시스템 스펙 탭: 로드된 데이터에서 스택·규모·서버작업·AI·위험 프로필을 자동 집계(어떤 앱/프로그램이든 동작).
-function renderSpec(){
+function renderSide(){if(tab==="bug")renderBug();else if(tab==="addnode")renderAddNode();else renderPrompt();} // 우측 패널 = 버그신고/수정요청/노드추가 (스펙은 상단 버튼→팝업, 설명은 renderDetail로 좌측 고정)
+// 시스템 스펙: 로드된 데이터에서 스택·규모·서버작업·AI·위험 프로필을 자동 집계(앱/웹/백엔드/CLI 무관). 상단 버튼→팝업.
+function specHtml(){
   const S=GRAPH||[]; let acts=0,aiActs=0; const userN=(state.addedNodes||[]).length;
   const apiTags=new Map(),aiMap=new Map(),risk={},groups={};
   for(const s of S){const g=s.group||"기타";groups[g]=(groups[g]||0)+1;
@@ -807,9 +825,9 @@ function renderSpec(){
   const kinds={};for(const t of apiTags.keys()){const k=(t.split(":")[0])||"기타";(kinds[k]=kinds[k]||[]).push(t);}
   const caps=Object.keys(SHOTS||{}).length, RISKS=["network","auth","ai","cost","external","gate","weakpoint","bug"];
   const stat=(n,l)=>`<div class="spec-stat"><b>${n}</b><span>${l}</span></div>`;
-  let h=`<div class="dh">시스템 스펙</div>`;
+  let h="";
   h+=STACK?`<div class="spec-stack">${esc(STACK)}</div>`:`<div class="hint">스택 정보 없음 — 그래프 옆 screenmap.debug.stack.txt 로 추가할 수 있어요.</div>`;
-  h+=`<div class="dh">규모</div><div class="spec-stats">${stat(S.length,"화면")}${stat(acts,"동작")}${stat(Object.keys(groups).length,"그룹")}${stat(apiTags.size,"서버·데이터")}${stat(aiMap.size,"AI 기능")}${stat(caps,"캡처")}${userN?stat(userN,"추가 노드"):""}</div>`;
+  h+=`<div class="dh">규모</div><div class="spec-stats">${stat(S.length,UNIT)}${stat(acts,"동작")}${stat(Object.keys(groups).length,"그룹")}${stat(apiTags.size,"서버·데이터")}${stat(aiMap.size,"AI 기능")}${stat(caps,"캡처")}${userN?stat(userN,"추가 노드"):""}</div>`;
   h+=`<div class="dh">데이터·서버 작업 (${apiTags.size})</div>`;
   if(!apiTags.size)h+=`<div class="hint">감지된 서버·데이터 호출이 없어요.</div>`;
   else Object.keys(kinds).sort().forEach(k=>{const kg=kinds[k],kindKo=(GAPI[kg[0]]&&GAPI[kg[0]].kindKo)||k;
@@ -820,9 +838,16 @@ function renderSpec(){
   h+=`<div class="dh">위험 프로필</div>`;
   if(!RISKS.some(r=>risk[r]))h+=`<div class="hint">표시된 위험이 없어요.</div>`;
   else RISKS.forEach(r=>{if(!risk[r])return;h+=`<div class="spec-riskrow"><span class="rdot" style="background:${RISK_COLOR[r]||'#888'}"></span>${esc(RISK_KO[r]||r)}<b>${risk[r]}</b></div>`;});
-  h+=`<div class="dh">화면 구성 (그룹별)</div>`;
-  Object.keys(groups).forEach(g=>h+=`<div class="spec-krow"><span>${esc(g)}</span><span class="faint">${groups[g]} 화면</span></div>`);
-  sideBody.innerHTML=h;
+  h+=`<div class="dh">${UNIT} 구성 (그룹별)</div>`;
+  Object.keys(groups).forEach(g=>h+=`<div class="spec-krow"><span>${esc(g)}</span><span class="faint">${groups[g]} ${UNIT}</span></div>`);
+  return h;
+}
+function closeSpec(){const p=document.getElementById("specPop");if(p)p.remove();}
+function openSpec(){closeSpec();const d=document.createElement("div");d.className="specpop";d.id="specPop";
+  d.innerHTML=`<div class="box"><div class="pophead"><b>📋 시스템 스펙</b><button class="btn" id="specClose">닫기 ✕</button></div><div class="popbody">${specHtml()}</div></div>`;
+  document.body.appendChild(d);
+  d.onclick=e=>{if(e.target===d)closeSpec();};
+  document.getElementById("specClose").onclick=closeSpec;
 }
 function setEdit(id,f,v){if(!state.edits[id])state.edits[id]={};state.edits[id][f]=v;if(v===""||v==null)delete state.edits[id][f];if(state.edits[id]&&!Object.keys(state.edits[id]).length)delete state.edits[id];save();updateEditCount();}
 function updateEditCount(){ // count only entries whose nodes still exist (stale ids from an old scan otherwise inflate the badge)
@@ -834,7 +859,7 @@ function updateEditCount(){ // count only entries whose nodes still exist (stale
   const bn=Object.keys(state.bugs||{}).filter(id=>nodes.has(id)).length,bb=document.getElementById("bugCount");if(bb){bb.style.display=bn?"inline-block":"none";bb.textContent=bn;}
   const an=(state.addedNodes||[]).length,ab=document.getElementById("addCount");if(ab){ab.style.display=an?"inline-block":"none";ab.textContent=an;}
   updateDock();}
-const TYPETAG={screen:["화면","#8b93ff"],action:["사용자 동작","#8b93ff"],api:["데이터·서버 작업","#6fb6ff"],ai:["AI 기능","#d8a657"],nav:["화면 이동","#8b93ff"],navscreen:["화면 미리보기","#8b93ff"],h:["AI 하네스 단계","#8b93ff"]};
+const TYPETAG={screen:[UNIT,"#8b93ff"],action:["사용자 동작","#8b93ff"],api:["데이터·서버 작업","#6fb6ff"],ai:["AI 기능","#d8a657"],nav:[UNIT+" 이동","#8b93ff"],navscreen:[UNIT+" 미리보기","#8b93ff"],h:["AI 하네스 단계","#8b93ff"]};
 
 /* ---------- 경로 걷기 (Overflow Stories식 워크스루: 캡처 보며 한 단계씩) ---------- */
 let walkIdx=0;
@@ -870,7 +895,7 @@ function renderWalk(){
   fitToNode(scrId); // keep the canvas in sync with the step
 }
 function renderDetail(){
-  if(!selected){detailBody.innerHTML=`<div class="empty">가운데 흐름도에서 <b>화면 카드</b>를 눌러보세요.<br>아이콘·썸네일로 어떤 화면인지<br>알아볼 수 있어요.<br><br>누르면 그 화면의 동작과<br>AI·데이터 작업이 펼쳐지고<br>여기에 쉬운 설명이 나옵니다.</div>`;return;}
+  if(!selected){detailBody.innerHTML=`<div class="empty">가운데 흐름도에서 <b>${UNIT} 카드</b>를 눌러보세요.<br>아이콘·썸네일로 어떤 ${UNIT}인지<br>알아볼 수 있어요.<br><br>누르면 그 ${UNIT}의 동작과<br>AI·데이터 작업이 펼쳐지고<br>여기에 쉬운 설명이 나옵니다.</div>`;return;}
   const n=nodes.get(selected),ed=state.edits[selected]||{},tt=TYPETAG[n.type]||["",""];
   if(n.type==="h"){
     const ins=[...new Set(edges.filter(e=>e.to===n.id).map(e=>nodes.get(e.from)).filter(Boolean).map(x=>x.label))];
@@ -894,7 +919,7 @@ function renderDetail(){
   if(n.type==="navscreen"){const t=nodes.get(n.data.sid);
     if(!t){detailBody.innerHTML='<div class="empty">화면 정보를 찾을 수 없어요.</div>';return;}
     const s=t.data,ty=screenType(s),gc=GROUP_COLOR[s.group];
-    let hh=`<div class="dtitle"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><div><span class="typetag" style="background:${gc}22;color:${gc}">화면 미리보기 · ${TYPE_KO[ty]||""}</span></div></div>
+    let hh=`<div class="dtitle"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><div><span class="typetag" style="background:${gc}22;color:${gc}">${UNIT} 미리보기 · ${TYPE_KO[ty]||""}</span></div></div>
       <div class="ed-label" style="cursor:default;margin-top:10px">${esc(scrTitle(s))}</div>`;
     if(SHOTS[s.route])hh+=`<img class="shotbig" src="${SHOTS[s.route]}" alt="">`;
     hh+=`<div class="plainbox">${esc(s.summaryKo||s.summary||"")}</div>`;
@@ -1078,6 +1103,7 @@ searchEl.onkeydown=e=>{if(e.key!=="Enter")return;clearTimeout(searchDeb);searchT
 document.addEventListener("keydown",e=>{
   const tag=(e.target&&e.target.tagName)||"";
   if(e.key==="Escape"){
+    if(document.getElementById("specPop")){closeSpec();return;}
     if(document.getElementById("walkOv")){closeWalk();return;}
     if(tag==="INPUT"||tag==="TEXTAREA"){e.target.blur();return;}
     if(navPath||pathFrom){clearNavPath();render();renderDetail();return;}
@@ -1280,8 +1306,19 @@ function renderAddNode(){
   sideBody.querySelectorAll("[data-usel]").forEach(b=>b.onclick=()=>{const id=b.dataset.usel;if(nodes.get(id)){selected=id;render();renderDetail();fitToNode(id);renderAddNode();}});
 }
 document.getElementById("addNode").onclick=()=>setTab("addnode");
+document.getElementById("specBtn").onclick=openSpec;
 
-injectAddedNodes();
+// backend/cli 모드면 정적 HTML의 '화면' 어휘를 UNIT(엔드포인트/명령)으로 바꾼다(ui 기본은 무변경).
+function applyVocab(){
+  if(MODE==="ui")return;
+  const s=document.getElementById("search");if(s)s.placeholder=UNIT+"·기능 검색";
+  const nf=document.getElementById("navFlowBtn");if(nf){nf.textContent=UNIT+" 흐름";nf.title=UNIT+"들이 어떻게 이어지는지 (다음으로 이동/호출 흐름)";}
+  const an=document.getElementById("addNode");if(an)an.title=an.title.split("화면").join(UNIT);
+  const help=document.querySelector(".help");if(help)help.innerHTML=help.innerHTML.split("화면").join(UNIT);
+  const lg=document.querySelector(".legend");if(lg)lg.innerHTML=lg.innerHTML.split("화면").join(UNIT);
+}
+
+injectAddedNodes();applyVocab();
 renderChips();render();renderDetail();renderSide();updateEditCount();
 </script>
 </body>

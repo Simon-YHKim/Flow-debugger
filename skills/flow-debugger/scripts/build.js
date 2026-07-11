@@ -18,6 +18,10 @@ const stackText = rd(graph.replace(/\.json$/, '.stack.txt'), '');
 // optional app name for the page title/brand: a sibling "<graph>.appname.txt".
 // Defaults to a generic label so a third party's build never shows another app's name.
 const appName = (rd(graph.replace(/\.json$/, '.appname.txt'), '').trim() || '앱');
+// optional target mode: sibling "<graph>.mode.txt" = ui | backend | cli. Drives the
+// noun for the top-level node (화면 / 엔드포인트 / 명령). Defaults to ui.
+const modeRaw = rd(graph.replace(/\.json$/, '.mode.txt'), '').trim();
+const mode = ['ui', 'backend', 'cli'].includes(modeRaw) ? modeRaw : 'ui';
 
 let html = fs.readFileSync(tpl, 'utf8');
 html = html.replace('__GRAPH_JSON__', fs.readFileSync(graph, 'utf8'));
@@ -25,8 +29,9 @@ html = html.replace('__GLOSSARY_JSON__', rd(glossary, '{}'));
 html = html.replace('__SHOTS_JSON__', rd(shots, '{}'));
 html = html.replace('__STACK_JSON__', JSON.stringify(stackText.trim()));
 html = html.split('__APP_NAME__').join(appName);
+html = html.split('__MODE__').join(mode);
 
-for (const t of ['__GRAPH_JSON__', '__GLOSSARY_JSON__', '__SHOTS_JSON__', '__STACK_JSON__', '__APP_NAME__']) {
+for (const t of ['__GRAPH_JSON__', '__GLOSSARY_JSON__', '__SHOTS_JSON__', '__STACK_JSON__', '__APP_NAME__', '__MODE__']) {
   if (html.includes(t)) { console.error('token not replaced: ' + t); process.exit(1); }
 }
 fs.writeFileSync(out, html, 'utf8');
