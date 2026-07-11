@@ -27,7 +27,7 @@
 | # | 작업 | 크기 | 권장 |
 |---|---|---|---|
 | ~~A~~ | ~~개선된 SCAN으로 2nd-B 재스캔 → impl/renders/stack 채우기 → 재빌드~~ | ~~medium~~ | ✅ **v0.7.0 완료** (1e634c0) |
-| A' | 잔여 ~7동작(theme·manual·account privacy 등) — 위임화면인데 impl 없어 힌트가 legacy 핸들러 노출(단, screen.renders로 리다이렉트됨). DeepSpace 렌더 파일에서 해당 핸들러 재추적해 impl 채우기 | small | 2% 잔여, 정밀도 마무리 |
+| A' | **더 깊은 발견(앵커 아님·액션SET divergence)**: 일부 DeepSpace 프로덕션 화면이 legacy보다 **단순 재구현**이라 flow-map의 액션 SET 자체가 legacy-derived → 프로드에 없는 액션을 표시. 확인: `/manual`=DeepSpaceManualScreen(1070)은 FAQ→/support 행뿐(legacy의 언어토글·권한·리서치 없음), `/account`=DeepSpaceAccountDesignScreen(461)은 5 nav행뿐("privacy&consent" 직접행 없음, privacy는 별도 DeepSpacePrivacyDesignScreen@492). 진짜 갭=DeepSpace prod 화면 기준 **액션SET 재도출**(콘텐츠/충실도 결정: legacy트랙·prod트랙·양쪽 중 무엇을 보여줄지 Simon 결정). clean 예외=`/theme` "Set performance"는 1줄 픽스(file→DeepSpaceDesignScreens.tsx:1064 setLiteMode). | medium | prod 화면 재스캔(액션SET), Simon 트랙결정 필요 |
 | B | HTML에 "AI로 다듬기" 버튼(복사 전 인앱 프롬프트 개선) | small~med | Simon이 AskUserQuestion서 ①②만 선택(③ 미채택) — 보류 |
 | C | 완료기준/주의를 화면 카드에도 선택적 노출(progressive disclosure) | small | Simon이 원하면 |
 | D | 캡처 갱신: not-found 화면 재export 후 재캡처(모든 82route는 소스존재—캡처만 갭) | small | 아이콘 폴백 중 |
