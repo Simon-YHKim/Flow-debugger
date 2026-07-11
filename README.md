@@ -58,6 +58,9 @@ node skills/flow-debugger/scripts/build.js \
   Output/flow-debugger.html
 ```
 
+앱 이름을 제목/브랜드에 넣으려면 그래프 옆에 `Output/screenmap.debug.appname.txt`
+한 줄 파일을 두면 된다(없으면 "앱"). 프레임워크 한 줄은 `screenmap.debug.stack.txt`.
+
 ## 산출물 HTML이 주는 것
 
 - 화면 카드(아이콘·실제 스크린샷 썸네일)로 어떤 화면인지 인식

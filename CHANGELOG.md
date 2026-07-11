@@ -3,6 +3,17 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.8.1] - 2026-07-11
+
+### Fixed
+- **Third-party ready: the app name is no longer hard-coded.** The page title and brand
+  header read `2nd-B` verbatim, so anyone else building a map for their own app got
+  another product's name. They are now an `__APP_NAME__` token filled by `build.js` from
+  an optional sibling `<graph>.appname.txt`, defaulting to a generic `앱` when absent — so
+  a third party's build never leaks another app's branding. Documented the optional
+  `appname.txt` / `stack.txt` sidecars in SKILL.md and README. (Scripts were already
+  path-clean; this was the only Simon-specific string in the loaded assets.)
+
 ## [0.8.0] - 2026-07-11
 
 ### Changed

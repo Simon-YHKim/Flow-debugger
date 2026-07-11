@@ -105,6 +105,12 @@ node scripts/build.js assets/flow-debugger.template.html \
 빌드 직후 `<script>` 구문을 반드시 자가 검증한다 (build.js 가 `new Function`
 파싱으로 확인하고 실패 시 비정상 종료). 그 다음 브라우저로 연다.
 
+선택 사이드카(그래프와 같은 폴더, `<graph>.<이름>`):
+- `screenmap.debug.appname.txt` — 페이지 제목/브랜드에 쓸 앱 이름 한 줄(없으면 "앱").
+  **대상 앱마다 자기 이름을 넣어야** 남의 앱 이름이 안 새어 나온다.
+- `screenmap.debug.stack.txt` — 프레임워크/백엔드 한 줄. 내보내는 프롬프트 맨 위
+  `[앱 스택]`으로 붙어 코딩 에이전트가 스택을 먼저 알게 한다.
+
 ## 비개발자가 얻는 디버깅 기능 (HTML)
 
 - **약점 마커**: 동작 카드에 색점으로 "인터넷 필요/비용/AI/외부의존/조용한 실패 위험" 표시
