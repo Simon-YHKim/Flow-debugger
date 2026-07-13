@@ -13,7 +13,7 @@ description: >-
   per-action diagnostic checklists, connection editing, and a bug-report
   generator that turns a vague "안 돼요" into a precise, VERIFIED file:line report.
   Produces the HTML plus a copy-paste fix and bug prompt for the assistant.
-version: 0.12.1
+version: 0.13.0
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 compatibility: [claude-code]
 author: Simon Kim
@@ -75,7 +75,7 @@ echo "NO_SCREEN_CODE"
 (그 경로를 SCAN 프롬프트의 `<FILE LIST>` 로 그대로 넣으면 된다 — 별도 설정 파일은 없다).
 화면이 없는 대상(API 서버·CLI)이면 중단하지 말고 `<graph>.mode.txt` = `backend`/`cli` 로 진행한다.
 
-## 파이프라인 (7단계)
+## 파이프라인 (8단계)
 
 프롬프트 전문은 [references/scan-prompts.md](references/scan-prompts.md) 에 있다.
 화면이 많으면 Workflow(또는 `agent-delegate`)로 그룹별 병렬 fan-out 한다.
@@ -159,6 +159,23 @@ node scripts/verify-html.js Output/flow-debugger.html --template assets/flow-deb
 - `screenmap.debug.harness.json` — 이 앱의 AI 배선을 직접 그릴 때
   (`{nodes:[{id,hx,hy,color,label,role,detail}], edges:[[from,to]]}`). 없으면 스캔한 AI 호출에서
   **자동 파생**한다(없는 단계를 지어내지 않는다).
+
+### 7) 핸드오프 — **새 세션이 앱 구조를 이어받게 한다**
+```bash
+node scripts/make-handoff.js <graph.json> <appRoot>   --glossary Output/glossary.ko.json --prescan Output/prescan.json   --out <appRepo>/docs/FLOW-HANDOFF.md --html docs/flow-debugger.html --name "<앱 이름>"
+```
+인터랙티브 HTML 은 **사람**을 위한 것이다. 이건 **다음 에이전트(또는 다음의 나)** 를 위한 것이다 —
+git 에 남는 마크다운 하나로 앱의 실제 구조를 넘긴다:
+
+- **이 앱에서 새 세션이 저지르는 실수 3가지** (프로덕션이 안 그리는 파일 고치기 · 열리지도 않는 화면의
+  "버그" 고치기 · 겉보기와 다른 헬퍼) — 이게 이 문서의 존재 이유다
+- 화면 인벤토리 (그룹별, **프로덕션 렌더 파일** 열 포함) · 화면 이동 그래프(mermaid)
+- 서버·데이터 작업 · AI 기능 인벤토리
+- **검증된 코드 좌표** (화면 → 동작 → file:line, ✔/·/⚠ 등급)
+- 이 맵의 신뢰도 통계 + **맵 갱신하는 법**
+
+**반드시 대상 앱 레포에 커밋하고 main 에 머지한다.** 한 대의 머신에만 있는 핸드오프는 핸드오프가 아니다.
+다음 세션은 `git pull` 후 이 파일 하나만 읽으면 구조를 안다.
 
 ## 비개발자가 얻는 디버깅 기능 (HTML)
 

@@ -127,7 +127,16 @@ const CAP_PATTERNS = [
   [/\bauth\.(signIn\w*|signUp|signOut|getSession|getUser|resetPasswordForEmail|updateUser)/g, (m) => `auth:${m[1]}`],
   [/\bfetch\(\s*[`'"]([^`'"]+)[`'"]/g, (m) => `http:${m[1].slice(0, 48)}`],
 ];
-const AI_PATTERNS = /\b(callGemini|callAdvisor|embedTexts|embedAndStore\w*|transcribe\w*|classify\w*|generateText|createCompletion|chat\.completions|anthropic\.|openai\.|\.generateContent)\b/;
+// `classify\w*` / `transcribe\w*` matched ordinary error-classifier functions and marked them
+// as AI — a handoff that says a URL cleaner calls a language model is worse than no handoff,
+// because the reader stops trusting the whole file. Name the ACTUAL entry points; the call-graph
+// propagation below finds everything downstream of them (that is how `createRecord()` is caught).
+const AI_PATTERNS = new RegExp(
+  '\\b(callGemini|callAdvisor|embedTexts|embedAndStoreRecord|transcribeAudio|generateContent' +
+  '|createCompletion|generateText|invokeModel)\\b' +
+  '|\\b(openai|anthropic|genai|GoogleGenAI)\\s*\\.' +
+  '|chat\\.completions'
+);
 
 // Every exported function in the app's non-screen source, with the capabilities its BODY uses.
 // -> {fnName: {file, line, apis:[], ai:bool, callees:[]}}
@@ -148,7 +157,13 @@ function indexHelpers(appRoot, opts) {
       if (m) starts.push({ name: m[1], line: i + 1 });
     });
     starts.forEach((st, k) => {
-      const end = k + 1 < starts.length ? starts[k + 1].line - 1 : lines.length;
+      // bound the body: the next export, a top-level close, or 200 lines — whichever comes first.
+      // The last export used to swallow the rest of the file and inherit its calls.
+      let end = k + 1 < starts.length ? starts[k + 1].line - 1 : lines.length;
+      for (let i = st.line; i < Math.min(end, st.line + 200); i++) {
+        if (/^}/.test(lines[i] || '')) { end = i + 1; break; }
+      }
+      end = Math.min(end, st.line + 200);
       const body = lines.slice(st.line - 1, end).join('\n');
       const apis = new Set();
       for (const [re, mk] of CAP_PATTERNS) {
@@ -156,14 +171,29 @@ function indexHelpers(appRoot, opts) {
         let m; while ((m = re.exec(body))) apis.add(mk(m));
       }
       const ai = AI_PATTERNS.test(body);
-      // which OTHER helpers does it call? (one hop is enough to catch createRecord -> embed…)
-      const callees = [...new Set((body.match(/\b([a-z][\w$]{3,})\s*\(/g) || [])
-        .map(x => x.replace(/\s*\($/, '')))].filter(x => x !== st.name);
-      if (apis.size || ai) idx[st.name] = { file: f + ':' + st.line, apis: [...apis], ai, callees: callees.slice(0, 12) };
-      else idx[st.name] = { file: f + ':' + st.line, apis: [], ai: false, callees: callees.slice(0, 12) };
+      // Which other helpers does it call? Propagating through EVERY lowercase call was how
+      // `normalizeAnalyticsUrl()` (a URL string cleaner) ended up listed as calling an AI:
+      // a name collision with some indexed helper. A callee only counts if this file actually
+      // IMPORTS it, or defines it — otherwise it is a different function with the same name.
+      const imported = new Set();
+      const importRe = /import\s+(?:type\s+)?\{([^}]+)\}|import\s+(\w+)\s+from/g;
+      let im;
+      const headTxt = lines.slice(0, 60).join('\n');
+      while ((im = importRe.exec(headTxt))) {
+        (im[1] || im[2] || '').split(',').forEach(x => {
+          const n = x.trim().split(/\s+as\s+/).pop().trim();
+          if (n) imported.add(n);
+        });
+      }
+      const localNames = new Set(starts.map(x => x.name));
+      const callees = [...new Set((body.match(/\b([A-Za-z_$][\w$]{2,})\s*\(/g) || [])
+        .map(x => x.replace(/\s*\($/, '')))]
+        .filter(x => x !== st.name && (imported.has(x) || localNames.has(x)));
+      idx[st.name] = { file: f + ':' + st.line, apis: [...apis], ai, callees: callees.slice(0, 16) };
     });
   }
   // propagate: a helper that calls a helper that hits the DB/AI, hits the DB/AI too.
+  // (This is what surfaces `createRecord()` -> embedding model, which no screen file shows.)
   for (let pass = 0; pass < 3; pass++) {
     for (const name of Object.keys(idx)) {
       const h = idx[name];

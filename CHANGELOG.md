@@ -3,6 +3,35 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.13.0] - 2026-07-14
+
+### Added
+- **`scripts/make-handoff.js` — pipeline step 7. The map becomes a handoff.**
+  The interactive HTML is for a human. This is for the next agent (or the next you): one
+  git-persistent markdown file, committed to the TARGET repo and merged, that hands over the
+  app's real structure so a fresh session does not start from zero.
+  It leads with **the three mistakes a new session actually makes** in that codebase, because
+  that is the whole point:
+  · editing the file production does not render (the delegation switch, named, with the
+    production render file listed per screen)
+  · "fixing" a bug on a route a real user cannot open (the gated routes, listed with evidence)
+  · missing what an innocent-looking helper really does (`createRecord()` calls an AI three
+    frames down — the helpers are listed)
+  Then: screen inventory, the screen-to-screen graph as mermaid, the server/data and AI
+  inventories, **every verified code coordinate** with its trust mark, the map's own reliability
+  stats, and the command to regenerate it. Paths are repo-relative — a handoff that only works
+  on one machine is not a handoff.
+
+### Fixed
+- **The helper index called a URL cleaner an AI.** `classify\w*` / `transcribe\w*` matched
+  ordinary error-classifier functions, so `normalizeAnalyticsUrl()` was reported as calling a
+  language model. A handoff that says that is worse than no handoff — the reader stops trusting
+  the whole file. The AI entry points are named explicitly now and the call graph finds the rest
+  (46 "AI helpers" → 27, with `createRecord()` still correctly caught).
+- **Helper capabilities propagated through name collisions.** A callee now only counts if the
+  file actually imports it or defines it.
+- **The last exported function in a file inherited the rest of the file.** Bodies are bounded.
+
 ## [0.12.1] - 2026-07-14
 
 Found by actually running the pipeline end to end on a real 86-screen app, which is the only
