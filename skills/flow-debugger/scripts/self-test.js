@@ -77,6 +77,15 @@ w('src/app/legacy-home.tsx', [
   '  return <OldBody onPress={handleTap} />;', // 5  a JSX render line
   '}',                                         // 6
 ].join('\n') + '\n');
+// The shape that actually burned a real map: a BARE render line with no handler on it.
+// All three of the home screen's actions were anchored to `return <DeepSpaceShell />` — and
+// the handlers were not even in that file.
+w('src/app/shell-home.tsx', [
+  'export default function Home() {',          // 1
+  '  const openStar = () => push("/star");',   // 2  the handler
+  '  return <DeepSpaceShell />;',              // 3  bare JSX — the scan anchored here
+  '}',                                         // 4
+].join('\n') + '\n');
 // an ordinary loading guard: same SHAPE, not a delegation. Must not be flagged.
 w('src/app/guarded.tsx', [
   'export default function Guarded({ loading }) {',  // 1
@@ -138,12 +147,17 @@ eq('camelCase feature IS used as a symbol', VF('src/app/(auth)/sign-in.tsx:6', '
 
 // A JSX render line is NOT where an action is handled. A real run put all three of the home
 // screen's actions on `return <DeepSpaceShell />` — the handlers were not even in that file.
-eq('a JSX render line is never an action anchor',
-   V('src/app/(auth)/sign-in.tsx:7', 'handleSubmit').status, 'near');
-eq('  ...and it snaps to the handler instead',
-   V('src/app/(auth)/sign-in.tsx:7', 'handleSubmit').value, 'src/app/(auth)/sign-in.tsx:6');
-eq('a JSX line with no symbol to snap to is flagged weak',
-   V('src/app/legacy-home.tsx:5').status, 'weak');
+// A BARE render line is never where an action is handled.
+eq('a bare JSX render line is refused', V('src/app/shell-home.tsx:3').status, 'weak');
+eq('  ...and snaps to the handler when the symbol names one',
+   V('src/app/shell-home.tsx:3 (openStar)').value, 'src/app/shell-home.tsx:2');
+// …but a JSX line that CARRIES the handler is exactly where the logic lives. Flagging it was a
+// false alarm on a correct anchor, and a false alarm costs more trust than a missed one.
+eq('a JSX line with an inline handler is real logic',
+   V('src/app/(auth)/sign-in.tsx:7', 'handleSubmit').status, 'exact');
+// `renders` POINTS AT the render site by definition — the rule must not fire on it
+eq('renders is exempt from the non-code rule',
+   A.validateAnchor('src/app/shell-home.tsx:3', root, { isRender: true }).status, 'unchecked');
 
 // An `impl` anchor must NOT be compared against the SCREEN handler's name: impl points into a
 // lib helper whose function has a different name. A real run produced 15 "function not there"

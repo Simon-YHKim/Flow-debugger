@@ -3,6 +3,47 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.12.1] - 2026-07-14
+
+Found by actually running the pipeline end to end on a real 86-screen app, which is the only
+way these were ever going to surface.
+
+### Fixed — the verifier had quietly stopped verifying
+- **`validateGraph` double-wrapped the symbol.** It received `{symbol, feature}` and passed it
+  on as `{symbol: {symbol, feature}}`, so `IDENT.test()` saw an object, found no identifier, and
+  reported every anchor as `unchecked` — *even the 253 that carried a perfectly good function
+  name*. The verifier stopped verifying and reported the result as if it had. Real map:
+  **8 verified → 253 verified** once the symbol actually reached the check.
+- **`renders` was flagged for doing its job.** The field names WHERE A SCREEN IS PAINTED, so it
+  points at a JSX line or a section comment by definition — and the non-code rule fired on it.
+  46 false CAUTIONs on the real map.
+- **A JSX line that carries the behaviour is where the behaviour lives.** `onPress={() => save()}`
+  and `<Link href="/x">` are the handler; flagging them was a false alarm on a correct anchor,
+  and a false alarm costs more trust than a missed one. Only a BARE render line
+  (`return <DeepSpaceShell />` with the handlers elsewhere) is refused now.
+- **`prescan` named the wrong render switch with full confidence.** It took the first
+  plausibly-named function in `lib/` and reported `isCaptureDraftMode()` on an app whose actual
+  switch is `isDeepSpaceUI()` — the exact class of error the module exists to prevent. It now
+  finds the function that ROUTE FILES actually branch on and ranks by how many do.
+- **`apply-anchors` dropped the `symbol` field** a RESCAN produces, so the whole point of the
+  re-scan (giving the verifier something to compare against) was lost on merge.
+
+### Result on the real app (86 screens, 342 actions, 608 anchors)
+A full framework-aware RESCAN through the fixed pipeline:
+
+| | before | after |
+|---|---|---|
+| VERIFIED (function found at that line) | 8 | **253** |
+| CAUTION (blank / import / comment / bare JSX) | 88 | **0** |
+| SUSPECT (function is not there) | 1 | **0** |
+| NOT A LOCATION (prose in a coordinate) | 0 | **0** |
+| BROKEN | 0 | **0** |
+| delegation traps (anchor into a file that renders something else) | 3 | **0** |
+| `--strict` | fails | **passes** |
+
+The remaining 355 are `LOCATED` — file and line are real, and the report says plainly that no
+function name was compared, because none was recorded. It does not claim a check it did not run.
+
 ## [0.12.0] - 2026-07-14
 
 Driven by a real run that went wrong, and by an adversarial re-review of 0.11.0 that found the

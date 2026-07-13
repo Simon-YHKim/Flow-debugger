@@ -195,12 +195,25 @@ function isNonCodeLine(txt) {
   if (!t) return '빈 줄을 가리켜요';
   if (/^(import\b|export\s+\*|export\s+\{|from\s|require\()/.test(t)) return 'import 줄을 가리켜요';
   if (/^(\/\/|\/\*|\*|#|<!--|\*\/)/.test(t)) return '주석 줄을 가리켜요';
-  // `return <Foo ... />` / `return (<Foo` / a bare JSX element — this is the screen being
-  // painted, not the action being handled.
-  if (/^return\s*\(?\s*<[A-Za-z]/.test(t) || /^<[A-Z][\w.]*[\s/>]/.test(t))
+  // `return <Foo/>` — the screen being painted, not the action being handled. BUT a JSX line
+  // that carries an inline handler (`onPress={() => router.push('/x')}`) IS where that logic
+  // lives; flagging it was a false alarm on a correct anchor, and a false alarm on a correct
+  // anchor costs more trust than a missed one.
+  if (/^return\s*\(?\s*<[A-Za-z]/.test(t) || /^<[A-Z][\w.]*[\s/>]/.test(t)) {
+    // A JSX line that CARRIES the behaviour is where the behaviour lives:
+    //   · an inline handler   `onPress={() => save()}`
+    //   · declarative navigation  `<Link href="/x">` / `to=` / `router.push` on the line
+    // Flagging these was a false alarm on a correct anchor — and a false alarm on a correct
+    // anchor costs more trust than a missed one.
+    if (/\bon[A-Z]\w*\s*=\s*\{|=>|\b(href|to|action)\s*=|router\.(push|replace|navigate)/.test(t)) return null;
     return '화면을 그리는 줄(JSX)을 가리켜요 — 동작을 처리하는 핸들러가 아니에요';
+  }
   return null;
 }
+// `renders` names WHERE A SCREEN IS PAINTED. A JSX line or a section comment is exactly what it
+// is supposed to point at, so the non-code rule must not apply to it — it was flagging the field
+// for doing its job.
+const RENDER_FIELDS = new Set(['renders', 'screenRenders']);
 // Does this action's anchor look like a GATE rather than logic? (`if (!user) return ...`)
 const GATE_LINE = /^(if|when)\s*\(|^\s*(?:return\s+)?(?:null|undefined)\s*;?$/;
 // Find the line the symbol is DEFINED on. `near` restricts the search to a window and
@@ -301,7 +314,7 @@ function validateAnchor(raw, appRoot, opts) {
   // so an anchor with a symbol used to be confirmed EXACT onto an import line. (There is one
   // such anchor in the real 2nd-B map: a JSDoc comment, reported ✔.) A line that is blank,
   // an import or a comment is never where the logic is, whatever text sits on it.
-  const nonCode = isNonCodeLine(lines[ref.line - 1]);
+  const nonCode = o.isRender ? null : isNonCodeLine(lines[ref.line - 1]);
   if (nonCode) {
     const f = syms.length && o.snap !== false ? findSymbolLine(lines, syms, ref.line) : null;
     if (f && f.line) return Object.assign(base, { ok: true, status: 'near', line: f.line,
@@ -409,21 +422,25 @@ function validateGraph(graph, appRoot, opts) {
   const findings = [], index = {};
   const stat = { total: 0, ok: 0, exact: 0, near: 0, resolved: 0, fileonly: 0, unchecked: 0, weak: 0,
                  absent: 0, prose: 0, missing: 0, ambiguous: 0, range: 0, outside: 0, unparsable: 0 };
-  const check = (raw, ctx, symbol) => {
+  // sym is {symbol, feature} — NOT a bare string. Wrapping it again as {symbol: {...}} made
+  // every anchor `unchecked` even when the scan had supplied a perfectly good identifier,
+  // i.e. the verifier silently stopped verifying and reported the result as if it had.
+  const check = (raw, ctx, sym) => {
     if (raw == null || raw === '') return;
     stat.total++;
-    const v = validateAnchor(raw, appRoot, { symbol, snap: o.snap !== false });
+    const s = sym || {};
+    const v = validateAnchor(raw, appRoot, { symbol: s.symbol, feature: s.feature, isRender: s.isRender, snap: o.snap !== false });
     findings.push(Object.assign({}, ctx, v));
     if (v.ok) stat.ok++;
     stat[v.status] = (stat[v.status] || 0) + 1;
     index[raw] = { status: v.status, why: v.why || '', value: v.value || '' };
   };
   for (const s of (graph || [])) {
-    check(s.renders, { route: s.route, field: 'renders', kind: 'screen' }, null);
+    check(s.renders, { route: s.route, field: 'renders', kind: 'screen' }, { isRender: true });
     for (const a of (s.actions || [])) {
       check(a.file,    { route: s.route, action: a.action, field: 'file',    kind: 'action' }, { symbol: a.symbol, feature: a.feature });
       check(a.impl,    { route: s.route, action: a.action, field: 'impl',    kind: 'action' }, null);   // its own (symbol) only — see note above
-      check(a.renders, { route: s.route, action: a.action, field: 'renders', kind: 'action' }, null);
+      check(a.renders, { route: s.route, action: a.action, field: 'renders', kind: 'action' }, { isRender: true });
     }
   }
   return { findings, index, stat };
@@ -441,7 +458,7 @@ function applyVerdicts(graph, appRoot, opts) {
     const raw = obj[field];
     if (raw == null || raw === '') return;
     const s = sym || {};
-    const v = validateAnchor(raw, appRoot, { symbol: s.symbol, feature: s.feature, snap: o.snap !== false });
+    const v = validateAnchor(raw, appRoot, { symbol: s.symbol, feature: s.feature, isRender: s.isRender, snap: o.snap !== false });
     if (!v) return;
     if (v.ok) {
       // keep the symbol on the anchor ("src/x.ts:198 (handleSubmit)"): the format round-trips
@@ -466,11 +483,11 @@ function applyVerdicts(graph, appRoot, opts) {
     res.dropped.push(Object.assign({ field, raw, status: v.status, why: v.why }, ctx));
   };
   for (const s of (graph || [])) {
-    fix(s, 'renders', { route: s.route, kind: 'screen' }, null);
+    fix(s, 'renders', { route: s.route, kind: 'screen' }, { isRender: true });
     for (const a of (s.actions || [])) {
       fix(a, 'file',    { route: s.route, action: a.action, kind: 'action' }, { symbol: a.symbol, feature: a.feature });
       fix(a, 'impl',    { route: s.route, action: a.action, kind: 'action' }, null);
-      fix(a, 'renders', { route: s.route, action: a.action, kind: 'action' }, null);
+      fix(a, 'renders', { route: s.route, action: a.action, kind: 'action' }, { isRender: true });
     }
   }
   return res;

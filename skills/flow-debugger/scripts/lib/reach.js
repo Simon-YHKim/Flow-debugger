@@ -186,21 +186,47 @@ function indexHelpers(appRoot, opts) {
 // ---------------------------------------------------------------- production render path
 // "which of these two components does the user actually see?" — the question the scan could
 // not answer, so it described the dead one. Find the app-wide delegation switch.
+// Do NOT take the first plausibly-named function in lib/ — that picked `isCaptureDraftMode()`
+// on a real app whose actual switch is `isDeepSpaceUI()`, i.e. it named the wrong thing with
+// full confidence, which is the exact failure this module exists to stop. Instead find the
+// function that ROUTE FILES actually branch on, and rank by how many of them do.
 function detectRenderMode(appRoot) {
-  const files = walk(appRoot, appRoot, []).filter(f => /^(src\/)?(lib|config|utils?)\//i.test(f));
-  for (const f of files) {
+  const routes = walk(appRoot, appRoot, []).filter(f => /^(src\/)?(app|pages|routes)\//i.test(f));
+  const votes = new Map();       // fnName -> {count, sample}
+  for (const f of routes) {
     const lines = readLines(appRoot, f);
     if (!lines) continue;
-    for (let i = 0; i < lines.length; i++) {
-      const m = lines[i].match(/export\s+(?:function|const)\s+(is\w*UI|use\w*UI|\w*Mode)\b/);
-      if (!m) continue;
-      const body = lines.slice(i, i + 12).join('\n');
-      const dflt = body.match(/!==\s*['"](\w[\w-]*)['"]|===\s*['"](\w[\w-]*)['"]|\?\?\s*['"](\w[\w-]*)['"]|\|\|\s*['"](\w[\w-]*)['"]/);
-      return { fn: m[1], file: f + ':' + (i + 1),
-        note: `${m[1]}() 가 어느 UI를 렌더할지 결정한다` + (dflt ? ` (기본값으로 보이는 값: ${dflt.slice(1).find(Boolean)})` : '') };
+    const head = lines.slice(0, 60).join('\n');
+    // `if (isXxx()) return <Yyy…` / `return isXxx() ? <A/> : <B/>`
+    const re = /(?:if\s*\(\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*\)\s*\{?\s*return\s*\(?\s*<?\s*([A-Z][\w.]*)|return\s*\(?\s*([A-Za-z_$][\w$]*)\s*\(\s*\)\s*\?\s*<?\s*([A-Z][\w.]*))/g;
+    let m;
+    while ((m = re.exec(head))) {
+      const fn = m[1] || m[3], target = m[2] || m[4];
+      if (!fn || !target) continue;
+      const v = votes.get(fn) || { count: 0, targets: new Set(), sample: f };
+      v.count++; v.targets.add(target);
+      votes.set(fn, v);
     }
   }
-  return null;
+  if (!votes.size) return null;
+  const [fn, v] = [...votes.entries()].sort((a, b) => b[1].count - a[1].count)[0];
+  // where is it defined, and what does it default to?
+  let file = null, dflt = null;
+  for (const f of walk(appRoot, appRoot, []).filter(x => /^(src\/)?(lib|config|utils?|hooks)\//i.test(x))) {
+    const lines = readLines(appRoot, f);
+    if (!lines) continue;
+    const i = lines.findIndex(l => new RegExp('export\\s+(?:function|const)\\s+' + fn + '\\b').test(l));
+    if (i < 0) continue;
+    file = f + ':' + (i + 1);
+    const body = lines.slice(i, i + 14).join('\n');
+    const d = body.match(/!==\s*['"]([\w-]+)['"]|===\s*['"]([\w-]+)['"]|\?\?\s*['"]([\w-]+)['"]|\|\|\s*['"]([\w-]+)['"]/);
+    if (d) dflt = d.slice(1).find(Boolean);
+    break;
+  }
+  return { fn, file: file || '(정의 위치 미상)', routes: v.count,
+    targets: [...v.targets].slice(0, 6),
+    note: `라우트 파일 ${v.count}개가 ${fn}() 로 갈라진다 → 사용자가 보는 화면은 ${fn}() 가 고르는 쪽` +
+          (dflt ? ` (기본값으로 보이는 값: ${dflt})` : '') };
 }
 
 module.exports = { scanGates, indexHelpers, detectRenderMode, walk };

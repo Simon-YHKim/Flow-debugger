@@ -1,6 +1,6 @@
 {
   "name": "flow-debugger-skill",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "private": true,
   "description": "flow-debugger pipeline scripts. Runtime = node only; playwright is needed for the optional capture + live-verify steps.",
   "license": "MIT",

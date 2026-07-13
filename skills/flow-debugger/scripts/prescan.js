@@ -59,8 +59,9 @@ console.log('PRESCAN -> ' + outPath + '\n');
 
 console.log('1) 프로덕션 렌더 경로');
 if (render) {
-  console.log('   ' + render.fn + '()  @ ' + render.file);
+  console.log('   ' + render.fn + '()  @ ' + render.file + '   (라우트 ' + render.routes + '개가 이걸로 갈라짐)');
   console.log('   ' + render.note);
+  if (render.targets && render.targets.length) console.log('   위임 대상 컴포넌트: ' + render.targets.join(', '));
   console.log('   → SCAN 프롬프트에 "사용자가 보는 화면은 이 함수가 고르는 쪽이다"를 명시할 것.');
   console.log('     이걸 안 알려주면 리더가 라우트 파일의 legacy 본문을 화면이라고 적는다(실측 10화면).');
 } else {

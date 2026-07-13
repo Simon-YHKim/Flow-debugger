@@ -65,7 +65,7 @@ const stats = {
   screensSeen: 0, screensMatched: 0, screensUnmatched: [],
   actionsSeen: 0, actionsMatched: 0, actionsUnmatched: [],
   matchExact: 0, matchNorm: 0, matchFeature: 0,
-  fileSet: 0, implSet: 0, rendersSet: 0, screenRendersSet: 0,
+  fileSet: 0, implSet: 0, rendersSet: 0, screenRendersSet: 0, symbolSet: 0,
   snapped: [], dropped: [],
 };
 const stacks = new Set();
@@ -106,9 +106,16 @@ for (const pf of patchFiles) {
       if (!ba) { stats.actionsUnmatched.push(`${ps.route} :: ${pa.action}`); continue; }
       stats.actionsMatched++;
       const ctx = `${ps.route} :: ${ba.action}`;
-      const sym = pa.feature || ba.feature;
+      // `symbol` is the action's real code identifier. Without it the verifier has nothing to
+      // compare the line against and every anchor degrades to "file and line exist" — which is
+      // exactly the 443 `unchecked` anchors this re-scan exists to promote to verified.
+      if (pa.symbol && /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/.test(String(pa.symbol).trim())) {
+        ba.symbol = String(pa.symbol).trim(); stats.symbolSet++;
+      }
+      const sym = ba.symbol || pa.feature || ba.feature;
+      // the screen handler's name must NOT judge an `impl` in a lib file (different function)
       if (applyAnchor(ba, 'file', pa.file, ctx, sym)) stats.fileSet++;
-      if (applyAnchor(ba, 'impl', pa.impl, ctx, sym)) stats.implSet++;
+      if (applyAnchor(ba, 'impl', pa.impl, ctx, null)) stats.implSet++;
       if (applyAnchor(ba, 'renders', pa.renders, ctx, null)) stats.rendersSet++;
     }
   }
@@ -133,7 +140,8 @@ console.log('actions:', stats.actionsMatched + '/' + stats.actionsSeen, 'matched
   `(exact ${stats.matchExact} · normalized ${stats.matchNorm} · by-feature ${stats.matchFeature})`,
   stats.actionsUnmatched.length ? '| ' + stats.actionsUnmatched.length + ' unmatched' : '');
 console.log('anchors set  -> file:', stats.fileSet, '| impl:', stats.implSet,
-  '| action.renders:', stats.rendersSet, '| screen.renders:', stats.screenRendersSet);
+  '| action.renders:', stats.rendersSet, '| screen.renders:', stats.screenRendersSet,
+  '| symbol:', stats.symbolSet, '  <- symbols are what let the verifier confirm a line');
 console.log('anchors SNAPPED to the real symbol line:', stats.snapped.length);
 if (stats.snapped.length) console.log('  ' + stats.snapped.slice(0, 20).join('\n  '));
 console.log('anchors DROPPED (invalid path/line/outside root):', stats.dropped.length);
