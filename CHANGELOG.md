@@ -3,6 +3,78 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.12.0] - 2026-07-14
+
+Driven by a real run that went wrong, and by an adversarial re-review of 0.11.0 that found the
+release's own headline feature was dead. Both are the same lesson: a green test suite is not
+evidence, and a tool that reports confidently is worse than one that reports nothing.
+
+### Fixed — 0.11.0 shipped a feature that never once ran
+- **The delegation warning never fired, in any built HTML.** `build.js` wrote the lookup key
+  with a stray **NUL byte** while the template read it with a space, so `delegWarn()` returned
+  null for every node — forever. The build console printed `DELEGATION TRAP: 4` and the report
+  said nothing. The unit test passed (it calls the library, which was fine) and the live check
+  passed (it only ever clicked the FIRST screen card, never a trapped one). The NUL also made
+  git treat `build.js` as a binary blob, so the diff was unreviewable and every grep-based audit
+  silently skipped the file. `verify-html.js` now asserts the warning fires end-to-end and
+  reaches the exported report; a repo-wide control-character check runs with the tests.
+- **✔ claimed a check it had not run.** 507 of the real map's 547 anchors are `unchecked` — the
+  file exists and the line is inside it, and nothing was compared to a function name, because
+  the scan gave no symbol. They rendered as **✔** under the sentence "그 줄에 해당 함수가 실제로
+  있어". The tool was lying about its own evidence to a reader who cannot check. There are now
+  three honest tiers: **✔ VERIFIED** (a named function was found at that line) · **· LOCATED**
+  (file and line are real; nothing was compared) · **~ CAUTION** · **⚠ BROKEN**.
+- **A symbol on an import line, a comment, or inside a string literal was confirmed `exact`.**
+  The blank/import/comment guard sat inside the no-symbol branch, so supplying a symbol bypassed
+  it. One such anchor was live in the real map, reported ✔ — it was a JSDoc comment.
+- **Snapping retargeted anchors to a different function with the same name**, and `resolve` took
+  the first textual mention (a dead copy inside a legacy helper) instead of the definition.
+  Definitions are matched now, the exported one wins, and an ambiguous name refuses to move.
+- **`--fix` destroyed correct anchors.** A whitelist of file extensions turned any `.dart`,
+  `.xml`, `.c`, `.astro` anchor into "prose" and deleted it. Nothing is ever deleted now; a
+  rejected anchor keeps its text in a note field.
+- **`build.js` overwrote an input file** when positional args were mixed with `--out`.
+
+### Added — from a post-mortem of a real 86-screen run (27 screens correct, 275 errors)
+Three of the five root causes were not "the model read the code badly". They were "the model was
+asked a question it could not answer from the file in front of it". So a script answers them now.
+- **`scripts/prescan.js` + `lib/reach.js` — pipeline step 0.**
+  · **Production render path.** The route file delegates (`if (isXxxUI()) return <NewScreen/>`),
+    so the scan described the dead legacy body: **10 screens were the wrong screen entirely.**
+  · **Reachability.** A scan read a screen correctly, saw its save button was a no-op, and told a
+    non-developer *"your 담기 button is fake, you are losing data."* The route is wrapped in
+    `DevOnlyRoute` and redirects in production — **nobody can reach that button.** The code was
+    right and the conclusion was false. **4 of 21 bug claims were this**, the most damaging error
+    this tool can make. Gated screens are now detected (5/5 on the real app, including the one
+    the false report was filed against), badged 🔒 on the card, and the bug report opens with
+    *"먼저 이 화면이 프로덕션에서 열리는지 확인해줘."*
+  · **Helper capabilities.** `createRecord()` calls an embedding model three frames down; the
+    screen file says nothing about it. **66 server calls and 7 AI calls went missing.** prescan
+    indexes every helper with the DB/AI it really touches (216 on the real app, 46 of them AI)
+    and the SCAN prompt now carries that table.
+- **An anchor on a JSX render line is no longer accepted.** A real run put all three home-screen
+  actions on `return <DeepSpaceShell />` — the handlers were not even in that file. (**43 wrong
+  anchors.**) It is now flagged and snapped to the handler.
+- **`impl` is no longer judged by the screen handler's name.** `symbol` names the screen's
+  handler; `impl` points into a lib function with a different name. That mismatch produced 15
+  "the function is not there" warnings on a real map, and **all 15 were false**.
+- **SKILL.md / scan-prompts.md: do not merge SCAN · ENRICH · ANNOTATE into one pass.** Merging
+  them to save tokens cost 90 missing actions, 66 missing server calls and 43 bad anchors — and
+  the saved tokens were paid back tenfold in verification and repair.
+
+### Changed — the map itself
+- **Two views instead of three co-equal toggles: 🖥 화면별 플로우 / 🌐 시스템 플로우.**
+- **화면별 플로우 grows to the RIGHT from one screen.** The catalog stacked all 86 screens
+  vertically, so the "tree" ran downward for a full screen before it ever went sideways. Now one
+  screen is the root on the left and everything cascades right: 동작 → 데이터·서버·AI → 그 동작이
+  데려가는 **다음 화면**, which you can open in place and then make the new root
+  (『이 화면으로 이동 →』) — walking the app one hop at a time.
+- **시스템 플로우** is the whole app: the screen-to-screen graph (layered left→right) plus the AI
+  wiring, with 경로 추적 / 경로 걷기.
+- A screen bug report now inherits its actions' verified anchors (29 of 86 screens had none).
+- Korean particles agree with the unit (`엔드포인트가`, not `엔드포인트이`).
+- The AI harness view gained a de-overlap pass; it had none.
+
 ## [0.11.0] - 2026-07-14
 
 The precision release. Everything the tool produces is downstream of one datum — the

@@ -33,6 +33,12 @@
 
   .help{font-size:12px;color:var(--muted);padding:8px 16px;background:var(--panel);border-bottom:1px solid var(--line);line-height:1.6}
   .help b{color:var(--text)}.help .faint{color:var(--faint)}
+  .viewseg{display:flex;gap:2px;background:var(--panel2);border:1px solid var(--line2);border-radius:9px;padding:2px}
+  .viewseg button{background:transparent;border:0;color:var(--muted);font:inherit;font-size:12.5px;font-weight:600;
+    padding:5px 11px;border-radius:7px;cursor:pointer;white-space:nowrap}
+  .viewseg button.on{background:var(--accent);color:#0c0c12}
+  .scrpick{background:var(--panel2);border:1px solid var(--line2);color:var(--text);font:inherit;font-size:12.5px;
+    border-radius:8px;padding:5px 8px;max-width:230px}
   .chips{display:flex;gap:5px;flex-wrap:wrap;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
   .chip{font-size:11px;padding:3px 9px;border-radius:99px;border:1px solid var(--line);color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:5px}
   .chip .gd{width:8px;height:8px;border-radius:2px}.chip.off{opacity:.32;text-decoration:line-through}
@@ -217,9 +223,13 @@
   <div class="grow"></div>
   <div class="ctrl">
     <button class="btn specbtn" id="specBtn" title="확인 중인 시스템의 스펙(스택·규모·서버작업·AI·위험 프로필)을 팝업으로 보기">📋 시스템 스펙</button>
+    <div class="viewseg" id="viewSeg">
+      <button data-v="screen" class="on" title="한 화면을 골라, 그 화면에서 무슨 일이 일어나는지 왼쪽에서 오른쪽으로 따라갑니다 (동작 → 데이터·서버·AI → 버튼이 데려가는 다음 화면)">🖥 화면별 플로우</button>
+      <button data-v="system" title="앱 전체가 어떻게 이어지는지 — 화면 사이 이동 그래프와 AI 배선">🌐 시스템 플로우</button>
+    </div>
+    <select class="scrpick" id="scrPick" title="볼 화면 고르기"></select>
     <input class="search" id="search" placeholder="화면·기능 검색">
     <button class="btn" id="aiOnly">AI 기능만</button>
-    <button class="btn" id="navFlowBtn" title="화면들이 버튼으로 어떻게 이어지는지 (버튼→다음 화면 이동 흐름)">화면 흐름</button>
     <button class="btn" id="harnessBtn" title="이 앱의 AI가 어떻게 엮여 도는지 — 스캔한 AI 호출에서 뽑은 배선 (목적 → 경유 → 모델)">AI 하네스</button>
     <button class="btn" id="expandAll">전체 펼치기</button>
     <button class="btn" id="collapseAll">모두 접기</button>
@@ -231,10 +241,14 @@
 </div>
 
 <div class="help">
-  <b>보는 법</b> · 가운데 흐름도의 <b>화면 카드</b>(캡처가 있으면 썸네일로, 없으면 종류 아이콘으로 보여요)를 누르면 → <b>왼쪽 '설명' 패널</b>에 쉬운 설명이 뜨고, 카드 오른쪽으로 <b>그 화면에서 할 수 있는 일</b> → <b>데이터·서버 작업</b>과 <b>AI 기능</b>이 펼쳐집니다. 안 되는 게 있으면 <b>화면 카드든 동작 카드든</b> 열어서 <b>'안 돼요 → 신고서 만들기'</b>를 누르세요.
-  카드에 마우스를 올리면 연결선이 강조돼요. <b>＋ 노드 추가</b>로 "이런 화면·기능이 있어야 해요"를 얹으면 프롬프트에 '만들어줘'로 담겨요. <b>화면 흐름</b>을 켜면 버튼으로 이어지는 화면 이동이 화살표로 보이고, 화면을 눌러 <b>🚩 여기서 출발 → 🎯 여기까지 경로</b>로 이동 경로를 찾고 <b>▶ 경로 걷기</b>로 캡처를 보며 한 단계씩 따라갈 수 있어요. <b>연결 편집</b>을 켜면 카드 오른쪽 점을 끌어 새 연결을 잇고, 선을 눌러 끊을 수 있어요(변경은 오른쪽 '수정 요청'에 자동 기록). <span class="faint">빈 곳 드래그=이동(빈 곳 클릭=선택 해제) · 휠/버튼/+−=확대축소 · 0=전체 맞춤 · 더블클릭=카드 확대 · 검색 후 Enter=이동 · Esc=해제 · 미니맵 클릭·드래그=이동</span>
+  <b>보는 법</b> · 위에서 <b>🖥 화면별 플로우</b> / <b>🌐 시스템 플로우</b> 를 고릅니다.
+  <b>화면별 플로우</b>는 고른 화면 하나를 왼쪽에 두고 <b>오른쪽으로</b> 펼칩니다 — <b>그 화면에서 할 수 있는 일</b> → <b>데이터·서버 작업</b>과 <b>AI 기능</b> → 그 동작이 데려가는 <b>다음 화면</b>. 다음 화면 카드의 <b>『이 화면으로 이동 →』</b>을 누르면 그 화면이 새 뿌리가 되어 계속 따라갈 수 있어요.
+  <b>시스템 플로우</b>는 앱 전체가 버튼으로 어떻게 이어지는지 화살표로 보여주고, <b>🚩 여기서 출발 → 🎯 여기까지 경로</b> 로 이동 경로를 찾아 <b>▶ 경로 걷기</b> 로 한 단계씩 따라갈 수 있어요.
+  안 되는 게 있으면 <b>화면 카드든 동작 카드든</b> 열어서 <b>'안 돼요 → 신고서 만들기'</b>를 누르세요.
+  <span class="faint">빈 곳 드래그=이동 · 휠/+−=확대축소 · 0=전체 맞춤 · 검색 후 Enter=이동 · Esc=해제 · 미니맵 클릭·드래그=이동</span>
 </div>
 
+<button id="navFlowBtn" style="display:none"></button>
 <div class="chips" id="chips"></div>
 
 <div class="main">
@@ -549,7 +563,7 @@ const STACK = ("Vanilla JS SPA + REST API(Express) + OpenAI 요약 1건. 화면�
    "unchecked"|"missing"|"range"|"outside"|"unparsable"}, stat}. This is what lets the
    bug report say which file:line is CONFIRMED and which is a guess — an unverified
    coordinate sends a coding agent to "fix" a file production never renders. */
-const ANCHORS = ({"checked":true,"index":{"src/auth.js:3 (signIn)":{"status":"exact","why":"그 줄에 'signIn' 가 실제로 있어요","value":"src/auth.js:3"},"src/auth.js:9 (signOut)":{"status":"exact","why":"그 줄에 'signOut' 가 실제로 있어요","value":"src/auth.js:9"},"src/notes.js:12 (loadNotes)":{"status":"exact","why":"그 줄에 'loadNotes' 가 실제로 있어요","value":"src/notes.js:12"},"src/notes.js:16 (saveNote)":{"status":"exact","why":"그 줄에 'saveNote' 가 실제로 있어요","value":"src/notes.js:16"},"src/notes.js:21 (summarizeNote)":{"status":"exact","why":"그 줄에 'summarizeNote' 가 실제로 있어요","value":"src/notes.js:21"},"src/ai.js:2 (summarize)":{"status":"exact","why":"그 줄에 'summarize' 가 실제로 있어요","value":"src/ai.js:2"},"src/notes.js:26 (deleteNote)":{"status":"exact","why":"그 줄에 'deleteNote' 가 실제로 있어요","value":"src/notes.js:26"},"src/notes.js:7":{"status":"unchecked","why":"파일과 줄은 확인했어요(대조할 함수 이름이 없어요)","value":"src/notes.js:7"},"src/settings.js:3 (loadSettings)":{"status":"exact","why":"그 줄에 'loadSettings' 가 실제로 있어요","value":"src/settings.js:3"},"src/settings.js:7 (saveSettings)":{"status":"exact","why":"그 줄에 'saveSettings' 가 실제로 있어요","value":"src/settings.js:7"}},"stat":{"total":10,"ok":10,"exact":9,"near":0,"resolved":0,"fileonly":0,"unchecked":1,"weak":0,"absent":0,"prose":0,"missing":0,"ambiguous":0,"range":0,"outside":0,"unparsable":0},"delegation":{"/notes\u0000On load":"NotesScreenV2","/notes\u0000Save note":"NotesScreenV2","/notes\u0000Delete note":"NotesScreenV2","/notes\u0000Go to settings":"NotesScreenV2"},"appRoot":"E:\\Coding Infra\\flow-debugger\\examples\\demo-notes"})||{checked:false,index:{}};
+const ANCHORS = ({"checked":true,"index":{"src/auth.js:3 (signIn)":{"status":"exact","why":"그 줄에 'signIn' 가 실제로 있어요","value":"src/auth.js:3"},"src/auth.js:9 (signOut)":{"status":"exact","why":"그 줄에 'signOut' 가 실제로 있어요","value":"src/auth.js:9"},"src/notes.js:12 (loadNotes)":{"status":"exact","why":"그 줄에 'loadNotes' 가 실제로 있어요","value":"src/notes.js:12"},"src/notes.js:16 (saveNote)":{"status":"exact","why":"그 줄에 'saveNote' 가 실제로 있어요","value":"src/notes.js:16"},"src/notes.js:21 (summarizeNote)":{"status":"exact","why":"그 줄에 'summarizeNote' 가 실제로 있어요","value":"src/notes.js:21"},"src/ai.js:2 (summarize)":{"status":"exact","why":"그 줄에 'summarize' 가 실제로 있어요","value":"src/ai.js:2"},"src/notes.js:26 (deleteNote)":{"status":"exact","why":"그 줄에 'deleteNote' 가 실제로 있어요","value":"src/notes.js:26"},"src/notes.js:7":{"status":"unchecked","why":"파일과 줄은 확인했어요(대조할 함수 이름이 없어 함수까지는 못 봤어요)","value":"src/notes.js:7"},"src/settings.js:3 (loadSettings)":{"status":"exact","why":"그 줄에 'loadSettings' 가 실제로 있어요","value":"src/settings.js:3"},"src/settings.js:7 (saveSettings)":{"status":"exact","why":"그 줄에 'saveSettings' 가 실제로 있어요","value":"src/settings.js:7"}},"stat":{"total":10,"ok":10,"exact":9,"near":0,"resolved":0,"fileonly":0,"unchecked":1,"weak":0,"absent":0,"prose":0,"missing":0,"ambiguous":0,"range":0,"outside":0,"unparsable":0},"delegation":{"/notes On load":"NotesScreenV2","/notes Save note":"NotesScreenV2","/notes Delete note":"NotesScreenV2","/notes Go to settings":"NotesScreenV2"},"gates":{},"appRoot":"E:\\Coding Infra\\flow-debugger\\examples\\demo-notes"})||{checked:false,index:{}};
 /* HARNESS_DATA = optional hand-authored AI wiring for THIS app (<graph>.harness.json).
    When absent the AI 하네스 view is derived from the AI calls in the graph — it never
    invents a pipeline the scanned app does not have. */
@@ -557,6 +571,13 @@ const HARNESS_DATA = (null)||null;
 // MODE = ui(화면) | backend(엔드포인트) | cli(명령). UNIT = 최상위 노드를 부르는 말.
 const MODE = "ui";
 const UNIT = ({ui:"화면",backend:"엔드포인트",cli:"명령"})[MODE] || "화면";
+/* Korean particles agree with the final consonant. 화면/명령 end in one, 엔드포인트 does not,
+   so a hard-coded "이"/"으로"/"이에요" produced "엔드포인트이 안 돼요" on the main CTA. */
+const HAS_JONG=(w=>{const c=String(w).slice(-1).charCodeAt(0);return c>=0xAC00&&c<=0xD7A3&&(c-0xAC00)%28!==0;})(UNIT);
+const JOSA={i:HAS_JONG?"이":"가",eun:HAS_JONG?"은":"는",eul:HAS_JONG?"을":"를",
+  euro:HAS_JONG?"으로":"로",ieyo:HAS_JONG?"이에요":"예요",ina:HAS_JONG?"이나":"나",
+  ieona:HAS_JONG?"이나":"나",eseo:"에서"};
+const U=(k)=>UNIT+JOSA[k];
 const GAPI = GLOSSARY.apis||{}, GAI = GLOSSARY.ai||{};
 
 /* Group labels/colours are DERIVED from the scanned data (see below) — no app's group
@@ -700,22 +721,30 @@ function dispLabel(n){if(n.type==="h")return n.label;if(n.type==="user")return n
      absent    file+line real, function NOT there              -> suspect
      missing / range / outside / unparsable                    -> broken
    Unbuilt with --app-root -> "unverified": say so, never imply confirmation. */
-/* status vocabulary — scripts/lib/anchors.js
-     CONFIRMED  exact(함수가 그 줄에 있음) · near(줄 보정) · resolved(줄을 찾아 채움)
-                · fileonly(파일만 확인) · unchecked(파일+줄 확인, 대조할 함수명 없음)
-     CAUTION    weak(빈 줄/import/주석을 가리킴 — 실제 로직은 근처의 다른 줄)
-     BROKEN     absent · prose · missing · ambiguous · range · outside · unparsable */
-const A_CONFIRMED=new Set(["exact","near","resolved","fileonly","unchecked"]);
+/* Anchor trust has THREE positive tiers, not one. Collapsing them was the worst thing this
+   page did: 507 of the real map's 547 anchors are `unchecked` — the file exists and the line
+   is inside it, and NOTHING was compared to a function name, because the scan gave no symbol.
+   They were rendered ✔ under the sentence "그 줄에 해당 함수가 실제로 있어". That is the tool
+   lying about its own evidence, to a reader who cannot check.
+     VERIFIED  exact · near · resolved   — a named function was found at that line
+     LOCATED   unchecked · fileonly      — file (and line) are real; no function to compare
+     CAUTION   weak                      — the line is blank / an import / a comment
+     BROKEN    absent · prose · missing · ambiguous · range · outside · unparsable */
+const A_VERIFIED=new Set(["exact","near","resolved"]);
+const A_LOCATED=new Set(["unchecked","fileonly"]);
 const A_CAUTION=new Set(["weak"]);
 function aRec(raw){ if(!raw)return null;
   if(!ANCHORS.checked)return {status:"unverified",why:"코드와 대조하지 않았어요 — 빌드할 때 --app-root 를 주면 확인돼요"};
-  return ANCHORS.index[raw]||{status:"unknown",why:"이 위치는 검증 기록에 없어요"}; }
+  const idx=ANCHORS.index||{};
+  return idx[raw]||{status:"unknown",why:"이 위치는 검증 기록에 없어요"}; }
 function aStat(raw){ const r=aRec(raw); return r?r.status:null; }
-function aTrusted(raw){ return A_CONFIRMED.has(aStat(raw)); }
+function aVerified(raw){ return A_VERIFIED.has(aStat(raw)); }
+function aLocated(raw){ return A_LOCATED.has(aStat(raw)); }
+function aTrusted(raw){ const s=aStat(raw); return A_VERIFIED.has(s)||A_LOCATED.has(s); }
 function aCaution(raw){ return A_CAUTION.has(aStat(raw)); }
 function aMark(raw){ const s=aStat(raw); if(!s)return "";
   if(s==="unverified")return " (미검증)";
-  return A_CONFIRMED.has(s)?" ✔":A_CAUTION.has(s)?" ~":" ⚠"; }
+  return A_VERIFIED.has(s)?" ✔":A_LOCATED.has(s)?" ·":A_CAUTION.has(s)?" ~":" ⚠"; }
 function aWhy(raw){ const r=aRec(raw); return r?(r.why||r.status):""; }
 
 /* codeRef = the code hint shown for a node. For actions we prefer `impl` (the real
@@ -732,14 +761,22 @@ function codeRef(n,verify){if(!n||n.type==="h"||n.type==="user")return "";if(n.t
    "confirmed location" from "guess, go find it" instead of blending them into one line */
 function nodeAnchors(n){ if(!n)return [];
   const d=n.data||{},out=[];
-  if(n.type==="screen"){ if(d.renders)out.push({label:"이 "+UNIT+"을 실제로 그리는 파일",raw:d.renders}); }
+  if(n.type==="screen"){
+    if(d.renders)out.push({label:"이 "+UNIT+"을 실제로 그리는 파일",raw:d.renders});
+    /* `renders` is only written for screens that DELEGATE, so most screens had no anchor at
+       all in their report — while their own action cards carried verified ones. Inherit them. */
+    const seen=new Set(d.renders?[d.renders]:[]);
+    (d.actions||[]).forEach(a=>{const loc=a.impl||a.file;
+      if(loc&&!seen.has(loc)){seen.add(loc);out.push({label:"동작 '"+actLabel(a)+"'",raw:loc});}});
+  }
   if(n.type==="action"){
     if(d.impl)out.push({label:"실제 로직",raw:d.impl});
     if(d.file&&d.file!==d.impl)out.push({label:d.impl?"화면 쪽 호출부":"동작 위치",raw:d.file});
     if(d.renders)out.push({label:"프로덕션 렌더 파일",raw:d.renders});
     if(n.screen&&n.screen.renders&&n.screen.renders!==d.renders)out.push({label:"이 화면을 실제로 그리는 파일",raw:n.screen.renders});
   }
-  return out.map(x=>Object.assign(x,{stat:aStat(x.raw),ok:aTrusted(x.raw),caution:aCaution(x.raw),why:aWhy(x.raw)}));}
+  return out.map(x=>Object.assign(x,{stat:aStat(x.raw),ok:aTrusted(x.raw),verified:aVerified(x.raw),
+    located:aLocated(x.raw),caution:aCaution(x.raw),why:aWhy(x.raw)}));}
 /* Notes the scan wrote into an anchor field that were never locations — verify-anchors
    moves them here (`fileNote`/`implNote`) instead of letting Korean prose masquerade as
    a file:line in the exported report. */
@@ -748,6 +785,15 @@ function nodeNotes(n){ const d=(n&&n.data)||{};
 /* THE trap: the anchor is valid, and the file it points at hands off to another component
    in production. Editing it changes nothing on screen while the build stays green. Only
    reading the source catches this, so build.js does it and ships the verdict. */
+/* Is this screen even reachable in production? A gate (dev-only route, feature flag, tier,
+   admin check) means the reader may be looking at something no real user can open — and a
+   "bug" found there is a false alarm dressed up as a data-loss warning. */
+function gateOf(n){
+  const G=ANCHORS.gates||{}; if(!n)return null;
+  const route=n.type==="screen"?(n.data.route||""):(n.screen?n.screen.route||"":"");
+  return G[route]||null;
+}
+const GATE_KO={"dev-only":"개발 전용","redirect":"조건부 리다이렉트","flag":"기능 플래그","tier":"등급/구독","auth":"로그인 필요","admin":"관리자 전용"};
 function delegWarn(n){
   const D=ANCHORS.delegation||{}; if(!n)return null;
   const route=n.type==="screen"?(n.data.route||""):(n.screen?n.screen.route||"":"");
@@ -763,15 +809,18 @@ function delegWarn(n){
 /* the panel's "코드 위치" box — shows the verdict, so a reader can see at a glance
    whether the coordinates their report will carry are confirmed or guessed */
 function anchorBox(n){
-  const anc=nodeAnchors(n),notes=nodeNotes(n),dw=delegWarn(n);
+  const anc=nodeAnchors(n),notes=nodeNotes(n),dw=delegWarn(n),gt=gateOf(n);
   let h="";
+  if(gt)h+=`<div class="dh" style="color:#d8a657">🔒 이 ${UNIT}은 조건이 맞아야 열려요 — ${esc(GATE_KO[gt.gate]||gt.gate)}</div>
+    <div class="kv" style="color:#d8a657">${esc(gt.why)}<div class="sm"><code>${esc(gt.evidence)}</code></div>
+    <div class="sm">여기서 발견한 문제는 <b>실제 사용자에게는 안 보일 수 있어요.</b> 신고서에 이 사실이 함께 나갑니다.</div></div>`;
   if(dw)h+=`<div class="dh" style="color:#e8896f">⚠ 이 코드 위치는 화면에 안 보일 수 있어요</div>
     <div class="kv" style="color:#e8896f">이 파일은 조건에 따라 <code>&lt;${esc(dw)}/&gt;</code> 를 대신 그려요. 그래서 이 파일을 고쳐도 <b>빌드는 통과하는데 화면은 그대로</b>일 수 있어요. 신고서에 이 경고가 함께 나가니, 개발자가 진짜 렌더되는 파일을 찾아 고칠 거예요.</div>`;
   if(!anc.length)h+=`<div class="dh">코드 위치</div><div class="hint">이 카드에는 코드 위치가 기록되지 않았어요. 신고하면 증상과 의존 작업에서 출발해 찾게 됩니다.</div>`;
   else{
     h+=`<div class="dh">코드 위치 ${ANCHORS.checked?`<span style="color:#7fd1b9">· 실제 코드와 대조함</span>`:`<span style="color:#e0a35c">· 미검증</span>`}</div>`;
-    anc.forEach(x=>{const c=!ANCHORS.checked?"#e0a35c":(x.ok?"#7fd1b9":x.caution?"#d8a657":"#e8896f");
-      const m=!ANCHORS.checked?"?":(x.ok?"✔":x.caution?"~":"⚠");
+    anc.forEach(x=>{const c=!ANCHORS.checked?"#e0a35c":x.verified?"#7fd1b9":x.located?"#9a9ab2":x.caution?"#d8a657":"#e8896f";
+      const m=!ANCHORS.checked?"?":x.verified?"✔":x.located?"·":x.caution?"~":"⚠";
       h+=`<div class="kv"><span style="color:${c}">${m}</span> <b>${esc(x.label)}</b><br><code>${esc(x.raw)}</code>${x.why?`<div class="sm" style="color:${c}">${esc(x.why)}</div>`:""}</div>`;});
   }
   notes.forEach(([l,t])=>{h+=`<div class="dh">${esc(l)}</div><div class="kv" style="color:var(--muted)">${esc(t)}</div>`;});
@@ -818,11 +867,30 @@ function matchSearch(n){ if(!searchTerm)return true;const t=searchTerm.toLowerCa
   if(dispLabel(n).toLowerCase().includes(t))return true;
   if(n.type==="screen")return(n.data.actions||[]).some(a=>(actLabel(a)+(a.plain||"")+(a.apis||[]).join(" ")).toLowerCase().includes(t))||(n.data.summaryKo||"").toLowerCase().includes(t);
   if(n.type==="action")return((n.data.plain||"")+(n.data.feature||"")+(n.data.apis||[]).join(" ")).toLowerCase().includes(t); return false; }
+/* ---------- the two views ----------
+   화면별 플로우 (screen)  ONE screen is the root on the left, and everything it does grows to
+                          the RIGHT: 동작 → 데이터/서버/AI → 이동 → 그 다음 화면(펼쳐서 계속).
+                          The old catalog stacked all 86 screens vertically, so the "tree"
+                          ran downward for a whole screenful before it ever went right.
+   시스템 플로우 (system)  the whole app at once: 화면→화면 이동 그래프, and the AI wiring.     */
+let viewMode="screen";      // 'screen' | 'system'
+let focusId=null;           // the screen at the root of 화면별 플로우
+function focusScreen(){ return (focusId&&nodes.get(focusId))?focusId:(screens[0]&&screens[0].id)||null; }
+function setFocus(id,keepSel){
+  const n=nodes.get(id); if(!n)return;
+  const sid=n.type==="navscreen"?n.data.sid:(n.type==="action"&&n.screen?n.screen.id:id);
+  if(!nodes.get(sid)||nodes.get(sid).type!=="screen")return;
+  focusId=sid; state.focusId=sid; expanded.add(sid); state.expanded[sid]=true;
+  if(!keepSel)selected=sid;
+  save(); render(); renderDetail(); renderSide(); fit();
+}
 function visibleNodes(){ const vis=new Set();
   if(harnessMode){ HARNESS.nodes.forEach(n=>vis.add(n.id)); return vis; }
-  if(navMode){ screens.forEach(s=>{if(groupOn(s.group)&&matchSearch(nodes.get(s.id)))vis.add(s.id);}); return vis; }
-  screens.forEach(s=>{if(groupOn(s.group)&&matchSearch(nodes.get(s.id))){vis.add(s.id);addKidsRec(s.id,vis);}});
-  for(const [id,nd] of nodes){if(nd.type==="user"&&matchSearch(nd))vis.add(id);} // user-added nodes are always shown
+  if(viewMode==="system"){ screens.forEach(s=>{if(groupOn(s.group)&&matchSearch(nodes.get(s.id)))vis.add(s.id);}); return vis; }
+  // 화면별 플로우: just this screen's tree — a left-to-right cascade, nothing stacked below it
+  const f=focusScreen(); if(!f)return vis;
+  vis.add(f); addKidsRec(f,vis);
+  for(const [id,nd] of nodes){if(nd.type==="user")vis.add(id);}   // user-added nodes are always shown
   return vis; }
 /* Which children of a node are currently shown (drives both visibility and layout).
    screen/preview → its actions when expanded (search virtual-expands a matched screen);
@@ -856,6 +924,8 @@ function addKidsRec(id,vis){ visKids(id).forEach(k=>{ if(vis.has(k))return; vis.
    spend cap, audit log) supplies them itself in a sibling `<graph>.harness.json`
    ({nodes:[{id,hx,hy,color,label,role,detail}], edges:[[from,to]]}). */
 let harnessMode=false;
+/* navMode is now "system view, showing the screen-to-screen graph" — kept as a variable so
+   every layout/edge/path check that already reads it keeps working unchanged. */
 let navMode=false;
 function buildHarness(){
   if(HARNESS_DATA&&Array.isArray(HARNESS_DATA.nodes)&&HARNESS_DATA.nodes.length)
@@ -869,7 +939,7 @@ function buildHarness(){
   const models=[...new Set(uses.map(u=>clean(u.model)).filter(Boolean))];
   const N=[],E=[],Y=(i,n)=>(i-(n-1)/2)*96;
   N.push({id:"h:in",hx:0,hy:0,color:"#8b93ff",label:"AI를 부르는 동작 "+uses.length+"개",
-    role:"화면의 이 동작들이 AI를 불러요. 여기서 시작해서 오른쪽으로 흘러갑니다.",
+    role:UNIT+"의 이 동작들이 AI를 불러요. 여기서 시작해서 오른쪽으로 흘러갑니다.",
     detail:uses.slice(0,14).map(u=>scrTitle(u.screen)+" · "+actLabel(u.action)).join(" / ")+(uses.length>14?" …":"")});
   purposes.forEach((p,i)=>{ const g=GAI[p]||{},n=uses.filter(u=>u.purpose===p).length;
     N.push({id:"h:p:"+p,hx:300,hy:Y(i,purposes.length),color:"#d8a657",label:aiKo(p),
@@ -899,6 +969,21 @@ HARNESS.edges.forEach(([from,to])=>edges.push({from,to,kind:"h"}));
 const COLX={screen:0,action:320,api:680,ai:680,nav:680,navscreen:1000};
 const colX=n=>COLX[n.type]||0;
 
+/* The harness view had NO de-overlap pass — y came from a constant 96px pitch chosen before
+   any card existed, while card height grows with the AI purpose's `desc` (which ENRICH is
+   asked to write). Stack each column by MEASURED height instead. */
+function packHarness(vis){
+  const cols=new Map();
+  vis.forEach(id=>{const n=nodes.get(id); if(!n||n.type!=="h")return;
+    const x=n.hx||0; if(!cols.has(x))cols.set(x,[]); cols.get(x).push(n);});
+  for(const [x,list] of cols){
+    list.sort((a,b)=>(a.hy||0)-(b.hy||0));
+    const H=list.reduce((t,n)=>t+(n.h||70)+18,0)-18;
+    let y=-H/2;
+    list.forEach(n=>{ n.x=x; n.y=y; y+=(n.h||70)+18; });
+  }
+}
+
 /* ---------- render (measure -> pack -> no overlap) ---------- */
 const applyView=()=>{world.style.transform=`translate(${view.x}px,${view.y}px) scale(${view.k})`;document.getElementById("zpct").textContent=Math.round(view.k*100)+"%";drawMinimapVP();var cb=document.getElementById("cutbtn");if(cb)cb.style.display="none";};
 function nodeHtml(n){
@@ -911,7 +996,7 @@ function nodeHtml(n){
     const gc=GROUP_COLOR[s.group]||"var(--accent)";
     const shot=SHOTS[s.route]?`<img class="thumb" src="${SHOTS[s.route]}" alt="">`:"";
     return `<div class="node screen${sel}${lit}" data-id="${n.id}" style="--gc:${gc}">${flag}
-      <div class="shead"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><div class="stitle">${lab}</div><span class="stype" style="--gc:${gc}">${TYPE_KO[ty]||""}</span><span class="ex">${expanded.has(n.id)?"▾":"▸"}</span></div>
+      <div class="shead"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><div class="stitle">${lab}</div><span class="stype" style="--gc:${gc}">${TYPE_KO[ty]||""}</span>${gateOf(n)?`<span class="stype" style="--gc:#d8a657" title="${esc((gateOf(n)||{}).why||"")}">🔒</span>`:""}<span class="ex">${expanded.has(n.id)?"▾":"▸"}</span></div>
       ${shot}<div class="pad"><div class="sub">${esc(s.summaryKo||"")}</div><div class="badges"><span class="pill">${nAct}개 동작</span>${nAi?`<span class="pill ai">AI ${nAi}</span>`:""}</div></div></div>`;
   }
   if(n.type==="action"){const a=n.data;
@@ -951,7 +1036,7 @@ function render(){
     const port=document.createElement("span");port.className="port";port.dataset.port=id;el.appendChild(port);
     nodesEl.appendChild(el);els[id]=el; }
   for(const id in els)nodes.get(id).h=els[id].offsetHeight;
-  if(harnessMode){groupLabelPos=[];}else if(navMode){packNav(vis);}else{packColumns(vis);}
+  if(harnessMode){groupLabelPos=[];packHarness(vis);}else if(navMode){packNav(vis);}else{packColumns(vis);}
   for(const id in els){const n=nodes.get(id);els[id].style.left=n.x+"px";els[id].style.top=n.y+"px";
     if(navMode)els[id].classList.toggle("pdim",!!navPath&&!navPath.nodes.has(id));}
   drawEdges(vis);drawGroupLabels();applyView();updateStat(vis);drawMinimap(vis);emptyHint(vis);
@@ -959,7 +1044,7 @@ function render(){
 function emptyHint(vis){let e=document.getElementById("emptyHint");
   if(vis.size){if(e)e.remove();return;}
   if(!e){e=document.createElement("div");e.id="emptyHint";e.style.cssText="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:14px;pointer-events:none;text-align:center;line-height:1.8;z-index:3";stage.appendChild(e);}
-  e.innerHTML=`표시할 ${UNIT}이 없어요.<br>위의 그룹 칩을 켜거나 검색어를 지워보세요.`;}
+  e.innerHTML=`표시할 ${U("i")} 없어요.<br>위의 그룹 칩을 켜거나 검색어를 지워보세요.`;}
 /* Strict mother-aligned tree. Each screen owns a vertical BAND; inside it every
    action owns a sub-block, and that action's OWN capability nodes (api+ai) sit in
    the capability column top-aligned to the action. So a data/server node always
@@ -987,12 +1072,12 @@ function packColumns(vis){const HEAD=30,GG=26,BANDGAP=20,VGAP=12,STEP=340;groupL
     n.x=depth*STEP; n.y=firstTop;
     if(n.y+(n.h||60)>kidsBottom) cy=n.y+(n.h||60)+VGAP;   // node taller than its kids -> reserve
   }
-  for(const g of GROUPS){
-    const scrs=screens.filter(s=>s.group===g&&vis.has(s.id)); if(!scrs.length)continue;
-    groupLabelPos.push({g,x:0,y:cy}); cy+=HEAD;
-    for(const s of scrs){ place(s.id,0); cy+=BANDGAP; }
-    cy+=GG;
-  }
+  // 화면별 플로우: one root, strictly left-to-right. The catalog used to stack every screen
+  // vertically, so the reader scrolled DOWN through 86 cards before the tree ever went right.
+  const f=focusScreen();
+  if(f&&vis.has(f)){ place(f,0); }
+  const users=[...vis].filter(id=>{const n=nodes.get(id);return n&&n.type==="user";});
+  users.forEach((id,i)=>{const n=nodes.get(id); if(state.pos[id])return; n.x=STEP*4; n.y=40+i*104;});
 }
 /* ---------- 화면 흐름(navigation) mode ---------- */
 /* Layered flow layout: isolated screens (no nav edges at all) go to a separate
@@ -1148,8 +1233,12 @@ nodesEl.addEventListener("pointerdown",e=>{const el=e.target.closest(".node");if
 nodesEl.addEventListener("pointermove",e=>{if(!drag)return;const dx=(e.clientX-drag.sx)/view.k,dy=(e.clientY-drag.sy)/view.k;if(Math.abs(dx)+Math.abs(dy)>3)drag.moved=true;const n=nodes.get(drag.id);n.x=drag.ox+dx;n.y=drag.oy+dy;if(drag.el){drag.el.style.left=n.x+"px";drag.el.style.top=n.y+"px";}scheduleEdges();});
 nodesEl.addEventListener("pointerup",()=>{if(!drag)return;const n=nodes.get(drag.id);
   if(drag.moved){const P=navMode?(state.navPos=state.navPos||{}):state.pos;P[drag.id]={x:n.x,y:n.y};save();drawMinimap(visibleNodes());}
-  else if(drag.jumpHit&&nodes.has(drag.jumpHit)){ // '이동하기' 버튼: 원본 노드로 점프 (펼침+선택+센터링)
+  else if(drag.jumpHit&&nodes.has(drag.jumpHit)){
+    /* '이 화면으로 이동 →' — in 화면별 플로우 this REFOCUSES the tree on the target screen, so a
+       non-developer walks 화면 → 버튼 → 다음 화면 → 그 화면의 버튼 … one hop at a time, always
+       reading left to right. In 시스템 플로우 it just centres the node. */
     const t=nodes.get(drag.jumpHit);
+    if(viewMode==="screen"&&!harnessMode&&t.type==="screen"){ drag=null; setFocus(t.id); return; }
     if(t.type==="screen"&&!navMode&&!expanded.has(t.id)){expanded.add(t.id);state.expanded[t.id]=true;save();}
     selected=t.id;setTab("detail");render();fitToNode(t.id);}
   else if(drag.exHit&&(n.type==="screen"||n.type==="navscreen")&&!navMode){ // ▸/▾ arrow = explicit expand/collapse toggle
@@ -1260,7 +1349,7 @@ function specHtml(){
       +row("파일만 확인(대조 불가)",t.unchecked,"#9a9ab2")
       +(t.absent?row("그 줄에 함수가 없음 — 의심",t.absent,"#e8896f"):"")
       +(bad?row("파일 없음/범위 밖 — 신고서에서 ⚠",bad,"#e8896f"):"");
-    h+=`<div class="hint">✔ 로 표시된 위치는 <b>파일이 존재하고, 줄이 범위 안이고, 그 줄에 해당 기능이 실제로 있는 것</b>까지 확인한 좌표예요.</div>`;}
+    h+=`<div class="hint"><b>✔</b> = 함수 이름까지 대조한 좌표 (${(t.exact||0)+(t.near||0)+(t.resolved||0)}개). <b>·</b> = 파일과 줄은 실재하지만 대조할 함수 이름이 흐름도에 없어 <b>그 줄이 맞는지는 확인하지 못한</b> 좌표 (${(t.unchecked||0)+(t.fileonly||0)}개) — 신고서에도 그렇게 적혀 나가요.</div>`;}
   return h;
 }
 function closeSpec(){const p=document.getElementById("specPop");if(p)p.remove();}
@@ -1339,7 +1428,7 @@ function renderDetail(){
     return;
   }
   if(n.type==="navscreen"){const t=nodes.get(n.data.sid);
-    if(!t){detailBody.innerHTML='<div class="empty">'+UNIT+' 정보를 찾을 수 없어요.</div>';return;}
+    if(!t){detailBody.innerHTML='<div class="empty">'+UNIT+JOSA.i+' 정보를 찾을 수 없어요.</div>';return;}
     const s=t.data,ty=screenType(s),gc=GROUP_COLOR[s.group];
     let hh=`<div class="dtitle"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><div><span class="typetag" style="background:${gc}22;color:${gc}">${UNIT} 미리보기 · ${TYPE_KO[ty]||""}</span></div></div>
       <div class="ed-label" style="cursor:default;margin-top:10px">${esc(scrTitle(s))}</div>`;
@@ -1381,7 +1470,7 @@ function renderDetail(){
         +`<button class="btn" id="pathFromBtn">🚩 여기서 출발</button>`
         +(pathFrom&&pathFrom!==n.id?`<button class="btn" id="pathToBtn" style="border-color:#7fd1b9;color:#7fd1b9">🎯 여기까지 경로</button>`:"")
         +(navPath?`<button class="btn" id="pathWalkBtn" style="border-color:var(--ai);color:var(--ai)">▶ 경로 걷기</button><button class="btn" id="pathClearBtn">지우기</button>`:"")+`</div>`;
-      if(pathFrom===n.id&&!navPath)h+=`<div class="hint">출발 ${UNIT}으로 지정됐어요 — 도착할 ${UNIT} 카드를 누른 뒤 <b>여기까지 경로</b>를 누르세요.</div>`;
+      if(pathFrom===n.id&&!navPath)h+=`<div class="hint">출발 ${UNIT+JOSA.euro} 지정됐어요 — 도착할 ${UNIT} 카드를 누른 뒤 <b>여기까지 경로</b>를 누르세요.</div>`;
       if(navPath&&navPath.steps.length){h+=`<div class="dh">경로 (${navPath.steps.length}단계)</div>`;
         navPath.steps.forEach((st,i)=>{h+=`<div class="item" data-go="${st.to}"><div><div>${i+1}. ${esc(st.fromT)} <span style="color:#7fd1b9">—[${esc(st.label)}]→</span> ${esc(st.toT)}</div></div></div>`;});}
     }
@@ -1390,7 +1479,7 @@ function renderDetail(){
     /* A non-developer's "안 돼요" is usually about the WHOLE screen ("빈 화면이에요",
        "로딩만 돌아요", "앱이 죽어요") — there used to be no way to report that, because
        the button only existed on action cards. */
-    h+=`<button class="btn" id="reportBug" style="width:100%;margin-top:14px;background:rgba(232,137,111,.14);border-color:#e8896f;color:#e8896f;font-weight:600">이 ${UNIT}이 안 돼요 → 신고서 만들기</button>`;
+    h+=`<button class="btn" id="reportBug" style="width:100%;margin-top:14px;background:rgba(232,137,111,.14);border-color:#e8896f;color:#e8896f;font-weight:600">이 ${U("i")} 안 돼요 → 신고서 만들기</button>`;
     h+=anchorBox(n);
     h+=`<details class="dev"><summary></summary><div class="kv">route: ${esc(s.route)}</div><div class="kv">group: ${esc(s.group)}</div></details>`;
   }else if(n.type==="action"){const a=n.data;
@@ -1435,7 +1524,7 @@ function renderDetail(){
     if(scr&&!navMode&&!expanded.has(scr.id)){expanded.add(scr.id);state.expanded[scr.id]=true;save();}
     selected=go;setTab("detail");render();fitToNode(go);});
   var pf=document.getElementById("pathFromBtn");if(pf)pf.onclick=()=>{pathFrom=selected;navPath=null;render();renderDetail();};
-  var pt=document.getElementById("pathToBtn");if(pt)pt.onclick=()=>{navPath=findNavPath(pathFrom,selected);render();renderDetail();if(!navPath)alert("경로를 찾지 못했어요 — 버튼 이동(한 방향) 기준으로 이어지지 않는 "+UNIT+"이에요.");};
+  var pt=document.getElementById("pathToBtn");if(pt)pt.onclick=()=>{navPath=findNavPath(pathFrom,selected);render();renderDetail();if(!navPath)alert("경로를 찾지 못했어요 — 버튼 이동(한 방향) 기준으로 이어지지 않는 "+UNIT+JOSA.ieyo+".");};
   var pc=document.getElementById("pathClearBtn");if(pc)pc.onclick=()=>{clearNavPath();render();renderDetail();};
   var pw=document.getElementById("pathWalkBtn");if(pw)pw.onclick=()=>openWalk();
   var rb=document.getElementById("reportBug"); if(rb)rb.onclick=()=>{state.bugs=state.bugs||{};if(!state.bugs[selected])state.bugs[selected]={};save();updateEditCount();setTab("bug");};
@@ -1493,25 +1582,35 @@ function buildBugReport(ids){
   if(STACK)out.push("[앱 스택] "+STACK,"");
   out.push("[코드 위치의 신뢰도 — 먼저 읽어줘]");
   if(ANCHORS.checked)out.push(
-    "· ✔ 가 붙은 위치는 흐름도를 만들 때 실제 소스트리와 대조해 확인한 좌표야 — 파일이 존재하고, 줄 번호가 범위 안이고, 그 줄에 해당 함수가 실제로 있어. 출발점으로 신뢰해도 돼.",
-    "· ⚠ 가 붙었거나 위치가 없으면 좌표를 믿지 말고 직접 찾아. 이유는 항목에 적혀 있어.");
+    "· ✔ = 파일·줄·**함수 이름까지** 실제 소스와 대조해 확인한 좌표. 출발점으로 신뢰해도 돼.",
+    "· · = 파일과 줄은 실제로 존재하지만, 대조할 함수 이름이 흐름도에 없어서 **그 줄이 맞는지는 확인하지 못했어**. 근처를 읽어보고 판단해줘(대부분의 좌표가 여기 해당한다).",
+    "· ~ = 그 줄이 빈 줄/import/주석이야. 파일은 맞지만 로직은 다른 줄이야.",
+    "· ⚠ = 대조에 실패했어. 좌표를 믿지 말고 직접 찾아 — 이유는 항목에 적혀 있어.");
   else out.push(
     "· 이 신고서의 코드 위치는 실제 소스와 대조되지 않았어(빌드 때 --app-root 미지정). 전부 추정이니 힌트로만 쓰고 반드시 직접 확인해줘.");
-  out.push("· '(렌더: …)' 는 프로덕션에서 실제로 그려지는 파일이야 — 같은 화면의 legacy 본문을 고치면 빌드는 초록인데 화면은 그대로다.","",
+  out.push("· '(렌더: …)' 는 프로덕션에서 실제로 그려지는 파일이야 — 같은 ${UNIT}의 legacy 본문을 고치면 빌드는 초록인데 화면은 그대로다.","",
     "[작업 규칙]",
     "· 먼저 증상을 재현하고, 실제 원인 함수를 추적해서 최소 수정해줘. '바란 것'이 실제로 관찰되면 완료야.",
     "· 완료 기준 밖은 건드리지 말고, 애매하면 추측하지 말고 물어봐.","");
   ready.forEach(id=>{const n=nodes.get(id),a=n.data||{},b=state.bugs[id],isScr=n.type==="screen";
     out.push(`■ 안 되는 ${isScr?UNIT:"동작"}: ${dispLabel(n)}${n.screen?`  (${UNIT}: ${scrTitle(n.screen)} ${n.screen.route||""})`:isScr?`  (${a.route||""})`:""}`);
+    const gt=gateOf(n);
+    if(gt)out.push(`  🔒 도달 가능성: 이 ${UNIT}은 [${GATE_KO[gt.gate]||gt.gate}] 게이트 뒤에 있어 — ${gt.why}`,
+                   `     근거: ${gt.evidence}`,
+                   `     ** 먼저 이 ${UNIT}이 프로덕션에서 실제로 열리는지 확인해줘. 안 열리면 이건 사용자에게 보이지 않는 문제이고,`,
+                   `        코드를 고치기 전에 그 사실부터 알려줘. (게이트를 안 물어서 확신에 찬 허위 신고가 나온 적이 있다.) **`);
     if(n.type==="action"&&a.feature)out.push(`  코드에서 부르는 이름: ${a.feature}`);
     const anc=nodeAnchors(n);
     if(!anc.length)out.push(`  코드 위치: 흐름도에 기록이 없어 — 아래 증상과 의존 작업으로 찾아줘.`);
     else if(!ANCHORS.checked){ out.push("  코드 위치 (미검증 — 직접 확인 필요):"); anc.forEach(x=>out.push(`    · ${x.label}: ${x.raw}`)); }
     else{
-      const good=anc.filter(x=>x.ok),caut=anc.filter(x=>x.caution),bad=anc.filter(x=>!x.ok&&!x.caution);
-      if(good.length){out.push("  확인된 코드 위치 ✔ (파일·줄·함수 대조 완료)");
-        good.forEach(x=>out.push(`    · ${x.label}: ${x.raw}${x.stat==="exact"?"":"  ("+x.why+")"}`));}
-      if(caut.length){out.push("  ~ 근처는 맞지만 그 줄이 코드가 아님 — 주변에서 실제 로직을 찾아:");
+      const ver=anc.filter(x=>x.verified),loc=anc.filter(x=>x.located),
+            caut=anc.filter(x=>x.caution),bad=anc.filter(x=>!x.ok&&!x.caution);
+      if(ver.length){out.push("  ✔ 함수까지 대조 완료:");
+        ver.forEach(x=>out.push(`    · ${x.label}: ${x.raw}  (${x.why})`));}
+      if(loc.length){out.push("  · 파일·줄은 실재하지만 함수 대조는 못 함 (그 줄이 맞는지는 직접 확인):");
+        loc.forEach(x=>out.push(`    · ${x.label}: ${x.raw}`));}
+      if(caut.length){out.push("  ~ 그 줄이 코드가 아님(빈 줄/import/주석) — 주변에서 실제 로직을 찾아:");
         caut.forEach(x=>out.push(`    · ${x.label}: ${x.raw}  — ${x.why}`));}
       if(bad.length){out.push("  ⚠ 믿을 수 없는 위치 — 직접 찾아야 해:");
         bad.forEach(x=>out.push(`    · ${x.label}: ${x.raw}  — ${x.why}`));}
@@ -1538,7 +1637,7 @@ function renderBug(){
   const ids=Object.keys(state.bugs||{}).filter(id=>nodes.has(id));
   let h=`<div class="dh">안 되는 것 신고</div>
     <div class="hint"><b>${UNIT}</b> 카드나 <b>동작</b> 카드를 열고 <b>'안 돼요 → 신고서 만들기'</b>를 누르면 여기에 추가돼요. 무슨 일이 있었는지만 적으면, 개발자(또는 AI)가 바로 고칠 수 있는 신고서가 만들어집니다.</div>`;
-  if(!ids.length){ h+=`<div class="empty">아직 신고한 게 없어요.<br><br>흐름도에서 안 되는 ${UNIT}이나 동작 카드를 열고<br><b>'안 돼요'</b>를 눌러보세요.</div>`; sideBody.innerHTML=h; return; }
+  if(!ids.length){ h+=`<div class="empty">아직 신고한 게 없어요.<br><br>흐름도에서 안 되는 ${UNIT+JOSA.ina} 동작 카드를 열고<br><b>'안 돼요'</b>를 눌러보세요.</div>`; sideBody.innerHTML=h; return; }
   ids.forEach(id=>{const n=nodes.get(id),b=state.bugs[id]||{},ok=bugReady(b);
     h+=`<div class="actrow" style="cursor:default">
       <div class="an">${esc(dispLabel(n))} <span class="rchip" style="background:${ok?"#e8896f":"#9a9ab2"}">${ok?"고장":"작성 중"}</span></div>
@@ -1559,7 +1658,7 @@ function renderBug(){
   const nReady=ids.filter(id=>bugReady(state.bugs[id])).length;
   h+=`<div class="dh">자동 생성된 신고서 (${nReady}건)</div>
     <textarea class="prompt" id="bugOut" style="min-height:200px" readonly>${esc(rep)}</textarea>
-    <button class="btn" id="copyBug" style="width:100%;margin-top:10px" ${nReady?"":"disabled style='opacity:.5;width:100%;margin-top:10px'"}>신고서 복사</button>
+    <button class="btn" id="copyBug" style="width:100%;margin-top:10px;opacity:${nReady?1:.45}" ${nReady?"":"disabled"}>신고서 복사</button>
     <div class="hint">복사해서 채팅에 붙여넣으면, ${ANCHORS.checked?"<b>검증된 코드 위치</b>부터":"적힌 힌트부터"} 원인을 찾아 고쳐드려요.</div>`;
   sideBody.innerHTML=h;
   const refresh=()=>{const o=document.getElementById("bugOut");if(o)o.value=buildBugReport(Object.keys(state.bugs));};
@@ -1607,9 +1706,10 @@ function syncModeButtons(){
   ["aiOnly","linkMode","expandAll","collapseAll"].forEach(id=>document.getElementById(id).classList.toggle("dis",navMode||harnessMode));
 }
 document.getElementById("harnessBtn").onclick=e=>{harnessMode=!harnessMode;
-  if(harnessMode&&navMode){navMode=false;document.getElementById("navFlowBtn").classList.remove("on");clearNavPath();}
-  if(harnessMode&&linkMode)setLinkMode(false);
-  syncModeButtons();e.target.classList.toggle("on",harnessMode);selected=null;hoverId=null;connected={has:()=>false};render();fit();renderDetail();};
+  if(harnessMode){navMode=false;clearNavPath();if(linkMode)setLinkMode(false);}
+  else{navMode=(viewMode==="system");}
+  syncModeButtons();renderScrPick();e.target.classList.toggle("on",harnessMode);
+  selected=null;hoverId=null;connected={has:()=>false};render();fit();renderDetail();};
 document.getElementById("navFlowBtn").onclick=e=>{navMode=!navMode;
   if(navMode&&harnessMode){harnessMode=false;document.getElementById("harnessBtn").classList.remove("on");}
   if(navMode&&linkMode)setLinkMode(false);
@@ -1645,7 +1745,7 @@ function anchorGuard(n){
   if(!anc.length)return "이 항목에는 코드 위치가 없어 — 증상과 의존 작업에서 출발해 찾아줘. ";
   if(!ANCHORS.checked)return HINT_GUARD+" ";
   const bad=anc.filter(x=>!x.ok);
-  const base="코드 위치는 빌드 때 실제 소스와 대조했어(✔ = 파일·줄·함수 확인). ✔ 는 출발점으로 신뢰해도 되지만, 원인이 거기 없으면 호출 경로를 따라가 줘. '(렌더: …)'가 프로덕션에서 실제로 그려지는 파일이야 — legacy 본문을 고치면 빌드는 초록인데 화면은 그대로다.";
+  const base="코드 위치는 빌드 때 실제 소스와 대조했어: ✔ = 함수까지 확인(신뢰 가능) · · = 파일·줄만 실재(함수 대조 못 함) · ~ = 그 줄이 코드가 아님. '(렌더: …)'가 프로덕션에서 실제로 그려지는 파일이야 — legacy 본문을 고치면 빌드는 초록인데 화면은 그대로다.";
   return base+(bad.length?` ⚠ 표시된 ${bad.length}개 위치는 대조에 실패했으니 믿지 말고 직접 찾아. `:" ");
 }
 function stackEntries(){
@@ -1672,7 +1772,8 @@ function stackEntries(){
       text:t.join(" · ")+(dep.length?"  ["+dep.join(" · ")+"]":""),
       accept:(bg.expected?`기대한 동작이 실제로 관찰되면 완료: ${bg.expected}`:"증상이 사라지고 정상 동작이 관찰되면 완료.")+" 재현 절차로 검증할 것.",
       guard:anchorGuard(n)+(dep.length?` 관련 의존[${dep.join(" · ")}]도 함께 점검. `:" ")+"완료 기준에 없는 범위는 건드리지 말고, 애매하면 추측하지 말고 물어봐."});}
-  (state.addedNodes||[]).forEach((u,i)=>{const link=(state.addedEdges||[]).find(e=>e.to===u.id&&nodes.get(e.from));const lf=link?nodes.get(link.from):null;const uk=UKIND[u.kind]||"노드";
+  (state.addedNodes||[]).forEach((u,i)=>{ if(!String(u.label||"").trim())return;   // an unnamed node is not a request
+    const link=(state.addedEdges||[]).find(e=>e.to===u.id&&nodes.get(e.from));const lf=link?nodes.get(link.from):null;const uk=UKIND[u.kind]||"노드";
     E.push({kind:"추가",color:"#8b93ff",addNode:i,nodeId:u.id,title:`새 ${uk} "${u.label||"(이름 없음)"}"${lf?` — ${origLabel(lf)}에 연결`:""}`,code:"",
       text:(u.kind==="note"?"이 메모를 반영해줘":`이런 ${uk}이 새로 필요해 — 만들어줘`)+(u.desc?": "+u.desc:""),
       accept:u.kind==="note"?"":`"${u.label||"이 "+uk}"에서 요청한 내용이 실제로 동작하고, 앱의 다른 ${UNIT}과 이질감 없이 네비게이션으로 연결됨.`,
@@ -1695,9 +1796,9 @@ function buildStackPrompt(){
   if(STACK)L.push("[앱 스택] "+STACK,"");
   L.push("[작업 규칙 — 먼저 읽어줘]",
     ANCHORS.checked
-      ? "1) 각 항목의 '코드 힌트'에 붙은 ✔ 는 이 흐름도를 만들 때 실제 소스트리와 대조해 확인한 좌표야(파일 존재 + 줄 범위 + 그 줄에 해당 함수). 출발점으로 신뢰해도 돼. ⚠ 가 붙었으면 대조에 실패한 좌표니 믿지 말고 직접 찾아. '@' 뒤가 진짜 로직 위치, '(렌더: …)'가 프로덕션 렌더 파일이야."
+      ? "1) 코드 힌트의 마크: ✔ = 파일·줄·함수까지 대조 완료(신뢰해도 됨) · · = 파일·줄만 실재(함수 대조 못 함 — 그 줄이 맞는지 직접 확인) · ~ = 그 줄이 빈 줄/import/주석 · ⚠ = 대조 실패(믿지 말 것). '@' 뒤가 진짜 로직 위치, '(렌더: …)'가 프로덕션 렌더 파일이야."
       : "1) 각 항목의 '코드 힌트'는 실제 소스와 대조되지 않은 추정치야(빌드 때 --app-root 미지정). 바로 고치지 말고, 먼저 증상을 재현하고 실제 로직이 있는 함수/파일을 추적해서 확인해줘. '@' 뒤가 진짜 로직 위치, '(렌더: …)'가 프로덕션 렌더 파일이야.",
-    "2) 같은 화면에 여러 버전의 파일이 있으면 실제로 프로덕션에서 렌더되는 파일을 찾아 고쳐줘 — 안 그러면 빌드는 통과해도 실제 화면은 안 바뀔 수 있어.",
+    `2) 같은 ${UNIT}에 여러 버전의 파일이 있으면 실제로 프로덕션에서 렌더되는 파일을 찾아 고쳐줘 — 안 그러면 빌드는 통과해도 실제 화면은 안 바뀔 수 있어.`,
     "3) 각 항목의 '완료 기준'을 충족하면 끝. 기준에 없는 범위는 건드리지 말고, 애매하면 추측하지 말고 한 줄로 물어봐.",
     "4) 새 비용/외부 연동(서버·푸시·결제 등)이 필요해지면 만들기 전에 알려줘.",
     "5) 흐름도 설명 자체가 틀렸으면 그 점도 정정해줘.","");
@@ -1808,6 +1909,35 @@ function renderAddNode(){
   sideBody.querySelectorAll("[data-udel]").forEach(b=>b.onclick=()=>deleteUserNode(b.dataset.udel));
   sideBody.querySelectorAll("[data-usel]").forEach(b=>b.onclick=()=>{const id=b.dataset.usel;if(nodes.get(id)){selected=id;render();renderDetail();fitToNode(id);renderAddNode();}});
 }
+/* ---------- view switch: 화면별 플로우 <-> 시스템 플로우 ---------- */
+function renderScrPick(){
+  const sel=document.getElementById("scrPick"); if(!sel)return;
+  sel.style.display=(viewMode==="screen"&&!harnessMode)?"":"none";
+  if(sel.style.display==="none")return;
+  const f=focusScreen();
+  sel.innerHTML=GROUPS.map(g=>{
+    const list=screens.filter(x=>x.group===g);
+    if(!list.length)return "";
+    return `<optgroup label="${esc(GROUP_LABEL[g]||g)}">`+
+      list.map(x=>`<option value="${esc(x.id)}" ${x.id===f?"selected":""}>${esc(scrTitle(x))}</option>`).join("")+
+      `</optgroup>`;
+  }).join("");
+  sel.onchange=()=>setFocus(sel.value);
+}
+function setView(v){
+  viewMode=v; state.viewMode=v;
+  if(harnessMode){harnessMode=false;const hb=document.getElementById("harnessBtn");if(hb)hb.classList.remove("on");}
+  navMode=(v==="system");                       // the system view IS the screen-to-screen graph
+  if(!navMode)clearNavPath();
+  if(v==="screen"&&!focusId&&selected){const n=nodes.get(selected);const sid=n&&n.type==="action"&&n.screen?n.screen.id:selected;
+    if(nodes.get(sid)&&nodes.get(sid).type==="screen"){focusId=sid;state.focusId=sid;expanded.add(sid);state.expanded[sid]=true;}}
+  document.querySelectorAll("#viewSeg button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));
+  syncModeButtons(); renderScrPick();
+  selected=null;hoverId=null;connected={has:()=>false};
+  save(); render(); fit(); renderDetail(); renderSide();
+}
+document.querySelectorAll("#viewSeg button").forEach(b=>b.onclick=()=>setView(b.dataset.v));
+
 document.getElementById("addNode").onclick=()=>setTab("addnode");
 document.getElementById("specBtn").onclick=openSpec;
 
@@ -1844,7 +1974,14 @@ function applyVocab(){
 if(!HAS_HARNESS){const hb=document.getElementById("harnessBtn");if(hb)hb.style.display="none";}
 
 injectAddedNodes();applyVocab();buildLegend();
-renderChips();render();renderDetail();renderSide();updateEditCount();
+/* boot the view: 화면별 플로우 opens on one screen, fully expanded, growing rightward */
+viewMode = (state.viewMode === "system") ? "system" : "screen";
+focusId  = (state.focusId && nodes.get(state.focusId)) ? state.focusId : ((screens[0] && screens[0].id) || null);
+navMode  = (viewMode === "system");
+if (focusId) { expanded.add(focusId); state.expanded[focusId] = true; }
+document.querySelectorAll("#viewSeg button").forEach(b => b.classList.toggle("on", b.dataset.v === viewMode));
+syncModeButtons(); renderScrPick();
+renderChips();render();renderDetail();renderSide();updateEditCount();fit();
 </script>
 </body>
 </html>

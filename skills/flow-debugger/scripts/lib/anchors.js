@@ -31,7 +31,10 @@ const path = require('path');
 const SNAP_WINDOW = 12;          // how far a drifted line may be and still be snapped
 const SKIP_DIRS = new Set(['node_modules', '.git', '.expo', 'dist', 'build', 'coverage',
   '.next', 'out', 'android', 'ios', '.worktrees', 'vendor', '__pycache__']);
-const CODE_EXT = /\.(tsx?|jsx?|mjs|cjs|vue|svelte|py|rb|go|java|kt|swift|rs|php|cs|sql|json|ya?ml|html?|css|scss|sh|ps1|toml)$/i;
+// A whitelist here DESTROYS data: an extension we forgot makes a perfectly correct anchor
+// parse as 'prose', and --fix then deletes it. Flutter/Dart, Android manifests, C, Astro
+// were all silently wiped. Keep it broad, and never delete on the strength of it alone.
+const CODE_EXT = /\.(tsx?|jsx?|mjs|cjs|vue|svelte|astro|py|rb|go|java|kt|kts|swift|rs|php|cs|dart|lua|ex|exs|scala|clj|c|h|cc|cpp|hpp|m|mm|sql|prisma|graphql|gql|proto|json|ya?ml|toml|xml|gradle|html?|css|scss|sass|less|sh|bash|zsh|ps1|bat|rake|erb)$/i;
 
 // ---------------------------------------------------------------- source tree index
 // Lazy basename -> [rel paths]. Lets us resolve "DeepSpaceShell.tsx:89" (a real thing
@@ -141,29 +144,89 @@ function resolveFile(appRoot, p) {
     if (!rel) return { fail: 'outside' };
     return readLines(appRoot, rel) ? { rel } : { fail: 'missing' };
   }
-  // bare filename: unique basename in the source tree, or nothing
-  const hits = tree(appRoot).get(p) || [];
+  // Bare filename ("DeepSpaceShell.tsx:89" — a real thing scans emit). Resolve it only when
+  // it is unambiguous, and prefer a source directory: the tree index also sees prototype
+  // clones and generated output, and confirming an anchor into one of those is exactly the
+  // "edit a file production never renders" failure this module exists to prevent.
+  const all = tree(appRoot).get(p) || [];
+  if (!all.length) return { fail: 'missing' };
+  const SRC = /^(src|app|lib|components|screens|pages|routes|views|packages)\//i;
+  const pref = all.filter(x => SRC.test(x));
+  const hits = pref.length ? pref : all;
   if (hits.length === 1) return { rel: hits[0], viaBasename: true };
-  return { fail: hits.length ? 'ambiguous' : 'missing' };
+  return { fail: 'ambiguous' };
 }
 
-function symbolRe(sym) {
-  const leaf = String(sym).split('.').pop();
-  return new RegExp('\\b' + leaf.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b');
+function esc(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function symbolRe(sym) { return new RegExp('\\b' + esc(String(sym).split('.').pop()) + '\\b'); }
+// The line with its string literals and trailing comments removed. A symbol that appears only
+// inside a quoted string (`const LABEL = "handleSubmit"`) or after `//` is a mention, not code
+// at that line — and confirming an anchor onto it is exactly the false ✔ that costs all trust.
+function codeOf(line) {
+  return String(line || '')
+    .replace(/(['"`])(?:\\.|(?!\1)[^\\])*\1/g, '""')   // string literals
+    .replace(/\/\/.*$/, '')                            // trailing line comment
+    .replace(/\/\*[\s\S]*?\*\//g, ' ');                // inline block comment
 }
+// Where the symbol is DEFINED, not merely mentioned. A bare `\bhandleSubmit\b` matches the
+// import that brings it in, the comment that names it, the string literal that labels it,
+// and every call site — which is how an anchor got confirmed onto an `import` line and how
+// `resolve` landed on a dead copy inside legacyCart() instead of the exported function.
+function defRe(sym) {
+  const s = esc(String(sym).split('.').pop());
+  return new RegExp(
+    '(?:^|\\s)(?:export\\s+)?(?:default\\s+)?(?:async\\s+)?function\\s+' + s + '\\b' +
+    '|(?:const|let|var)\\s+' + s + '\\s*[:=]' +
+    '|(?:^|\\s)class\\s+' + s + '\\b' +
+    '|(?:^|\\s)def\\s+' + s + '\\b' +
+    '|\\b' + s + '\\s*[:=]\\s*(?:async\\s*)?(?:function\\b|\\()' +   // obj method / arrow
+    '|(?:^|[{,]\\s*)' + s + '\\s*\\(' +                              // shorthand method
+    '|(?:^|\\s)(?:export\\s+)?(?:const|let|var)?\\s*\\{[^}]*\\b' + s + '\\b[^}]*\\}\\s*=\\s*(?!require|import)'  // destructure from a hook
+  );
+}
+// Lines we must never anchor an ACTION to, whatever text matches on them.
+//
+// The render line is the big one. A real run of this tool put all three of the home screen's
+// actions on `src/app/index.tsx:238`, which is `return <DeepSpaceShell />;` — the handlers do
+// not even exist in that file. A file:line that opens on a JSX return teaches a developer
+// nothing and, worse, points into the very component that gets delegated away.
+function isNonCodeLine(txt) {
+  const t = String(txt || '').trim();
+  if (!t) return '빈 줄을 가리켜요';
+  if (/^(import\b|export\s+\*|export\s+\{|from\s|require\()/.test(t)) return 'import 줄을 가리켜요';
+  if (/^(\/\/|\/\*|\*|#|<!--|\*\/)/.test(t)) return '주석 줄을 가리켜요';
+  // `return <Foo ... />` / `return (<Foo` / a bare JSX element — this is the screen being
+  // painted, not the action being handled.
+  if (/^return\s*\(?\s*<[A-Za-z]/.test(t) || /^<[A-Z][\w.]*[\s/>]/.test(t))
+    return '화면을 그리는 줄(JSX)을 가리켜요 — 동작을 처리하는 핸들러가 아니에요';
+  return null;
+}
+// Does this action's anchor look like a GATE rather than logic? (`if (!user) return ...`)
+const GATE_LINE = /^(if|when)\s*\(|^\s*(?:return\s+)?(?:null|undefined)\s*;?$/;
+// Find the line the symbol is DEFINED on. `near` restricts the search to a window and
+// prefers the closest definition. Returns null when there is no definition, or when the
+// window holds more than one candidate (ambiguous -> refuse to move rather than guess).
 function findSymbolLine(lines, syms, near) {
   for (const s of syms) {
-    const re = symbolRe(s);
-    if (near != null) {                        // prefer the closest occurrence to `near`
-      for (let d = 0; d <= SNAP_WINDOW; d++) {
-        for (const i of (d === 0 ? [near - 1] : [near - 1 - d, near - 1 + d])) {
-          if (i < 0 || i >= lines.length) continue;
-          if (re.test(lines[i])) return { line: i + 1, sym: s, dist: d };
-        }
-      }
-      continue;
+    const dre = defRe(s);
+    const hits = [];
+    const lo = near != null ? Math.max(0, near - 1 - SNAP_WINDOW) : 0;
+    const hi = near != null ? Math.min(lines.length - 1, near - 1 + SNAP_WINDOW) : lines.length - 1;
+    for (let i = lo; i <= hi; i++) {
+      if (isNonCodeLine(lines[i])) continue;
+      if (dre.test(codeOf(lines[i]))) hits.push(i + 1);
     }
-    for (let i = 0; i < lines.length; i++) if (re.test(lines[i])) return { line: i + 1, sym: s, dist: null };
+    if (!hits.length) continue;
+    // Two definitions of the same name -> prefer the EXPORTED one: a dead copy inside a legacy
+    // helper commonly sits ABOVE the real export, and "first hit wins" chose the dead one.
+    // Still ambiguous after that? Refuse to move rather than guess which function you meant.
+    let pick = hits;
+    if (pick.length > 1) {
+      const exp = pick.filter(l => /\bexport\b/.test(lines[l - 1]));
+      if (exp.length === 1) pick = exp;
+    }
+    if (pick.length > 1) return { ambiguous: true, sym: s, hits: pick };
+    return { line: pick[0], sym: s, dist: near == null ? null : Math.abs(pick[0] - near) };
   }
   return null;
 }
@@ -214,47 +277,54 @@ function validateAnchor(raw, appRoot, opts) {
   const lines = readLines(appRoot, r.rel);
   const base = { raw, rel: r.rel, extra: refs.length > 1 ? refs.slice(1).map(x => x.path + (x.line ? ':' + x.line : '')) : undefined };
 
-  // no line -> find it by symbol
+  // no line -> find where the symbol is DEFINED
   if (ref.line == null) {
     const f = syms.length ? findSymbolLine(lines, syms, null) : null;
-    if (f) return Object.assign(base, { ok: true, status: 'resolved', line: f.line,
-      value: r.rel + ':' + f.line, syms, symTail, why: `줄 번호가 없어 '${f.sym}' 를 찾아 채웠어요` });
+    if (f && f.line) return Object.assign(base, { ok: true, status: 'resolved', line: f.line,
+      value: r.rel + ':' + f.line, syms, symTail, why: `줄 번호가 없어 '${f.sym}' 가 정의된 줄을 찾아 채웠어요` });
     return Object.assign(base, { ok: true, status: 'fileonly', line: null, value: r.rel, syms, symTail,
-      why: '파일은 확인했지만 줄 번호는 몰라요' });
+      why: f && f.ambiguous
+        ? `파일은 확인했어요. '${f.sym}' 가 이 파일에 ${f.hits.length}군데 있어 줄을 못 정했어요`
+        : '파일은 확인했지만 줄 번호는 몰라요' });
   }
 
   if (ref.line < 1 || ref.line > lines.length) {
-    // the line is past EOF, but the symbol may still be findable -> recover instead of drop
     const f = syms.length ? findSymbolLine(lines, syms, null) : null;
-    if (f) return Object.assign(base, { ok: true, status: 'resolved', line: f.line,
-      value: r.rel + ':' + f.line, syms, symTail, why: `줄 번호(${ref.line})가 파일 길이(${lines.length})를 넘어서 '${f.sym}' 위치로 고쳤어요` });
+    if (f && f.line) return Object.assign(base, { ok: true, status: 'resolved', line: f.line,
+      value: r.rel + ':' + f.line, syms, symTail, why: `줄 번호(${ref.line})가 파일 길이(${lines.length})를 넘어서 '${f.sym}' 정의 위치로 고쳤어요` });
     return Object.assign(base, { ok: false, status: 'range', line: ref.line,
       why: `줄 ${ref.line}은 파일 길이(${lines.length})를 넘어요` });
   }
 
-  if (!syms.length) {
-    // Nothing to compare the line against by name — but we can still tell whether it points
-    // at CODE. An anchor on a blank line, an import, or a comment is the classic "the scan
-    // gave me the mount point, not the handler" failure the SCAN prompt warns about; sending
-    // an agent there is how the wrong file gets edited.
-    const txt = (lines[ref.line - 1] || '').trim();
-    const weak = !txt ? '빈 줄을 가리켜요'
-      : /^(import|export\s+\*|export\s+\{|from\s|require\()/.test(txt) ? 'import 줄을 가리켜요'
-      : /^(\/\/|\/\*|\*|#|<!--)/.test(txt) ? '주석 줄을 가리켜요' : null;
-    if (weak) return Object.assign(base, { ok: true, status: 'weak', line: ref.line,
-      value: r.rel + ':' + ref.line, syms, symTail, why: weak + ' — 실제 로직은 다른 줄일 수 있어요' });
-    return Object.assign(base, { ok: true, status: 'unchecked', line: ref.line,
-      value: r.rel + ':' + ref.line, syms, symTail, why: '파일과 줄은 확인했어요(대조할 함수 이름이 없어요)' });
+  // The weak check must run BEFORE the symbol check, not inside the no-symbol branch.
+  // `\bhandleSubmit\b` matches the import that brings it in and the comment that names it,
+  // so an anchor with a symbol used to be confirmed EXACT onto an import line. (There is one
+  // such anchor in the real 2nd-B map: a JSDoc comment, reported ✔.) A line that is blank,
+  // an import or a comment is never where the logic is, whatever text sits on it.
+  const nonCode = isNonCodeLine(lines[ref.line - 1]);
+  if (nonCode) {
+    const f = syms.length && o.snap !== false ? findSymbolLine(lines, syms, ref.line) : null;
+    if (f && f.line) return Object.assign(base, { ok: true, status: 'near', line: f.line,
+      value: r.rel + ':' + f.line, snapped: f.line, syms, symTail,
+      why: `${nonCode} — '${f.sym}' 가 정의된 ${f.line}행으로 고쳤어요` });
+    return Object.assign(base, { ok: true, status: 'weak', line: ref.line,
+      value: r.rel + ':' + ref.line, syms, symTail, why: nonCode + ' — 실제 로직은 다른 줄이에요' });
   }
 
-  const onLine = syms.find(s => symbolRe(s).test(lines[ref.line - 1] || ''));
+  if (!syms.length) return Object.assign(base, { ok: true, status: 'unchecked', line: ref.line,
+    value: r.rel + ':' + ref.line, syms, symTail, why: '파일과 줄은 확인했어요(대조할 함수 이름이 없어 함수까지는 못 봤어요)' });
+
+  const onLine = syms.find(s => symbolRe(s).test(codeOf(lines[ref.line - 1])));
   if (onLine) return Object.assign(base, { ok: true, status: 'exact', line: ref.line,
     value: r.rel + ':' + ref.line, syms, symTail, why: `그 줄에 '${onLine}' 가 실제로 있어요` });
 
   const f = o.snap === false ? null : findSymbolLine(lines, syms, ref.line);
-  if (f && f.dist != null) return Object.assign(base, { ok: true, status: 'near', line: f.line,
+  if (f && f.line) return Object.assign(base, { ok: true, status: 'near', line: f.line,
     value: r.rel + ':' + f.line, snapped: f.line, syms, symTail,
-    why: `줄이 ${Math.abs(f.line - ref.line)}줄 어긋나 '${f.sym}' 실제 위치로 고쳤어요` });
+    why: `줄이 ${Math.abs(f.line - ref.line)}줄 어긋나 '${f.sym}' 가 정의된 곳으로 고쳤어요` });
+  if (f && f.ambiguous) return Object.assign(base, { ok: true, status: 'absent', line: ref.line,
+    value: r.rel + ':' + ref.line, syms, symTail,
+    why: `그 줄에 '${syms[0]}' 가 없고, 같은 이름이 이 파일에 ${f.hits.length}군데라 어디로 옮길지 정할 수 없어요` });
 
   return Object.assign(base, { ok: true, status: 'absent', line: ref.line, value: r.rel + ':' + ref.line, syms, symTail,
     why: `그 줄에 '${syms[0]}' 가 없어요 — 위치가 틀렸을 수 있어요` });
@@ -352,7 +422,7 @@ function validateGraph(graph, appRoot, opts) {
     check(s.renders, { route: s.route, field: 'renders', kind: 'screen' }, null);
     for (const a of (s.actions || [])) {
       check(a.file,    { route: s.route, action: a.action, field: 'file',    kind: 'action' }, { symbol: a.symbol, feature: a.feature });
-      check(a.impl,    { route: s.route, action: a.action, field: 'impl',    kind: 'action' }, { symbol: a.symbol, feature: a.feature });
+      check(a.impl,    { route: s.route, action: a.action, field: 'impl',    kind: 'action' }, null);   // its own (symbol) only — see note above
       check(a.renders, { route: s.route, action: a.action, field: 'renders', kind: 'action' }, null);
     }
   }
@@ -388,6 +458,10 @@ function applyVerdicts(graph, appRoot, opts) {
       res.moved.push(Object.assign({ field, text: v.note }, ctx));
       return;
     }
+    // broken: move it OUT of the coordinate slot, but keep the text. "An empty field beats a
+    // wrong one" was right about the SLOT and wrong about the DATA — a whitelist miss (a .dart
+    // path, a path with a space) used to erase a perfectly correct anchor with no trace.
+    obj[field + 'Note'] = String(raw);
     delete obj[field];
     res.dropped.push(Object.assign({ field, raw, status: v.status, why: v.why }, ctx));
   };
@@ -395,7 +469,7 @@ function applyVerdicts(graph, appRoot, opts) {
     fix(s, 'renders', { route: s.route, kind: 'screen' }, null);
     for (const a of (s.actions || [])) {
       fix(a, 'file',    { route: s.route, action: a.action, kind: 'action' }, { symbol: a.symbol, feature: a.feature });
-      fix(a, 'impl',    { route: s.route, action: a.action, kind: 'action' }, { symbol: a.symbol, feature: a.feature });
+      fix(a, 'impl',    { route: s.route, action: a.action, kind: 'action' }, null);
       fix(a, 'renders', { route: s.route, action: a.action, kind: 'action' }, null);
     }
   }

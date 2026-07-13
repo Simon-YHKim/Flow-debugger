@@ -46,18 +46,21 @@ catch (e) { console.error('appRoot is not a directory: ' + appRoot); process.exi
 const { findings, stat } = A.validateGraph(graph, appRoot, { snap });
 const pct = n => stat.total ? ((n / stat.total) * 100).toFixed(1) + '%' : '-';
 const weakN = stat.weak || 0;
-const trusted = stat.exact + stat.near + stat.resolved + stat.fileonly + stat.unchecked + (stat.weak||0);
+const verified = stat.exact + stat.near + stat.resolved;                 // function name compared
+const located  = stat.fileonly + stat.unchecked;                          // file+line real, no symbol to compare
+const trusted  = verified + located;                                      // usable; NOT the same as verified
 const broken = stat.missing + stat.ambiguous + stat.range + stat.outside + stat.unparsable;
 
 if (!quiet) {
   console.log('anchors: ' + stat.total + ' checked against ' + appRoot + '\n');
-  console.log('  TRUSTWORTHY      ' + trusted + ' (' + pct(trusted) + ')');
-  console.log('    exact          ' + stat.exact + '   the named function is on that line');
-  console.log('    snapped        ' + stat.near + '   the line had drifted; moved to the function');
-  console.log('    line recovered ' + stat.resolved + '   no line was given; found it by the function name');
-  console.log('    file only      ' + stat.fileonly + '   real file, line unknown (honest, still useful)');
-  console.log('    unchecked      ' + stat.unchecked + '   file+line real, no function name to compare');
-  console.log('    weak           ' + stat.weak + '   real line, but it is blank / an import / a comment');
+  console.log('  VERIFIED         ' + verified + ' (' + pct(verified) + ')   a named function was found at that line');
+  console.log('    exact          ' + stat.exact + '   the function is on the line the scan gave');
+  console.log('    snapped        ' + stat.near + '   the line had drifted; moved to the definition');
+  console.log('    line recovered ' + stat.resolved + '   no line was given; found the definition');
+  console.log('  LOCATED          ' + located + ' (' + pct(located) + ')   file (and line) are real — but NOTHING was');
+  console.log('    unchecked      ' + stat.unchecked + '   compared to a function name, because the scan gave no');
+  console.log('    file only      ' + stat.fileonly + '   symbol. The report says so; it does not claim a check.');
+  console.log('  CAUTION          ' + stat.weak + ' (' + pct(stat.weak) + ')   the line is blank / an import / a comment');
   console.log('  SUSPECT          ' + stat.absent + ' (' + pct(stat.absent) + ')   file+line real, but the function is NOT there');
   console.log('  NOT A LOCATION   ' + stat.prose + ' (' + pct(stat.prose) + ')   prose in a file:line slot' + (flags.fix ? ' -> moved to a note' : ''));
   console.log('  BROKEN           ' + broken + ' (' + pct(broken) + ')   missing ' + stat.missing +
@@ -77,8 +80,10 @@ if (!quiet) {
     f => !f.ok && f.status !== 'prose', f => `[${f.status}] ${at(f)} = ${f.raw}  — ${f.why || ''}`);
   show('NOT A LOCATION' + (flags.fix ? ' — moved to <field>Note in --fix' : ''),
     f => f.status === 'prose', f => `${at(f)} = ${String(f.raw).slice(0, 90)}`, 10);
-  show('REPAIRED', f => f.ok && f.value && f.value !== f.raw,
-    f => `${at(f)}\n      ${String(f.raw).slice(0, 70)}\n      -> ${f.value}   (${f.why})`, 15);
+  // compare what --fix would actually WRITE (value + symbol tail), not the bare value —
+  // otherwise every already-correct anchor was listed as "REPAIRED" while --fix was a no-op
+  show('REPAIRED', f => f.ok && f.value && (f.value + (f.symTail || '')) !== f.raw,
+    f => `${at(f)}\n      ${String(f.raw).slice(0, 70)}\n      -> ${f.value + (f.symTail || '')}   (${f.why})`, 15);
 }
 
 // The trap this tool exists to prevent: an anchor into a file that hands off to another

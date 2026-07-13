@@ -108,6 +108,52 @@ catch (e) {
     } else bugFlow = 'no-button-on-screen-card';
   } catch (e) { bugFlow = 'error: ' + e.message; }
 
+  // THE test gap that let the flagship feature ship dead: build.js printed "DELEGATION TRAP: 4"
+  // while the page's lookup key never matched (a stray NUL vs a space), so delegWarn() returned
+  // null for every node — and both the unit test (which calls the library directly) and this
+  // script (which only clicked the FIRST screen card) passed. Assert the warning actually fires,
+  // end to end, on a route the build says is trapped.
+  const deleg = await page.evaluate(() => {
+    const D = (typeof ANCHORS !== 'undefined' && ANCHORS.delegation) || {};
+    const keys = Object.keys(D);
+    if (!keys.length) return { trapped: 0, fired: 0, inReport: null };
+    let fired = 0;
+    for (const k of keys) {
+      const route = k.split(' ')[0];
+      const sn = nodes.get('s:' + route);
+      if (sn && delegWarn(sn)) { fired++; continue; }
+      for (const n of nodes.values())
+        if (n.type === 'action' && n.screen && n.screen.route === route && delegWarn(n)) { fired++; break; }
+    }
+    // and it must reach the EXPORT, which is the only thing a coding agent ever reads
+    const route = keys[0].split(' ')[0];
+    const sn = nodes.get('s:' + route);
+    let inReport = null;
+    if (sn) {
+      state.bugs = state.bugs || {};
+      state.bugs[sn.id] = { symptom: '테스트' };
+      inReport = /위임 경고/.test(buildBugReport([sn.id]));
+      delete state.bugs[sn.id];
+    }
+    return { trapped: keys.length, fired, inReport };
+  });
+
+  // the harness view has its own layout pass — check it de-overlaps too (it used to have none)
+  let harnessOverlaps = null;
+  if (R.harnessBtn === 'shown') {
+    await page.click('#harnessBtn'); await page.waitForTimeout(700);
+    harnessOverlaps = await page.evaluate(() => {
+      const els = [...document.querySelectorAll('#nodes .node')].map(e => e.getBoundingClientRect());
+      let o = 0;
+      for (let i = 0; i < els.length; i++) for (let j = i + 1; j < els.length; j++) {
+        const a = els[i], b = els[j];
+        if (a.left < b.right - 2 && a.right - 2 > b.left && a.top < b.bottom - 2 && a.bottom - 2 > b.top) o++;
+      }
+      return o;
+    });
+    await page.click('#harnessBtn'); await page.waitForTimeout(300);
+  }
+
   if (flags.shot) { await page.screenshot({ path: flags.shot, fullPage: false }); }
   if (!flags['keep-open']) await browser.close();
 
@@ -123,12 +169,16 @@ catch (e) {
   console.log('anchors verified ' + R.anchorsChecked + '   (' + anchorLine + ')');
   console.log('harness          button=' + R.harnessBtn + ' derived=' + R.harnessDerived);
   console.log('bug flow         ' + bugFlow + '   (empty report must be gated, filled report must carry anchors)');
+  console.log('delegation warn  ' + (deleg.trapped ? deleg.fired + '/' + deleg.trapped + ' fired, in report: ' + deleg.inReport : 'no traps in this map'));
+  if (harnessOverlaps !== null) console.log('harness overlaps ' + harnessOverlaps);
   if (report) {
     console.log('\n--- exported bug report (first 24 lines) ---');
     console.log(report.split('\n').slice(0, 24).join('\n'));
   }
 
-  const fail = errors.length || R.overlaps || !R.nodes || bugFlow !== 'ok';
+  const fail = errors.length || R.overlaps || !R.nodes || bugFlow !== 'ok'
+    || (deleg.trapped > 0 && (deleg.fired < deleg.trapped || deleg.inReport === false))
+    || (harnessOverlaps !== null && harnessOverlaps > 0);
   console.log('\n' + (fail ? 'FAIL' : 'PASS'));
   process.exit(fail ? 1 : 0);
 })();

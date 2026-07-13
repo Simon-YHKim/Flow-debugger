@@ -13,7 +13,7 @@ description: >-
   per-action diagnostic checklists, connection editing, and a bug-report
   generator that turns a vague "안 돼요" into a precise, VERIFIED file:line report.
   Produces the HTML plus a copy-paste fix and bug prompt for the assistant.
-version: 0.11.0
+version: 0.12.0
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 compatibility: [claude-code]
 author: Simon Kim
@@ -75,11 +75,24 @@ echo "NO_SCREEN_CODE"
 (그 경로를 SCAN 프롬프트의 `<FILE LIST>` 로 그대로 넣으면 된다 — 별도 설정 파일은 없다).
 화면이 없는 대상(API 서버·CLI)이면 중단하지 말고 `<graph>.mode.txt` = `backend`/`cli` 로 진행한다.
 
-## 파이프라인 (6단계)
+## 파이프라인 (7단계)
 
 프롬프트 전문은 [references/scan-prompts.md](references/scan-prompts.md) 에 있다.
 화면이 많으면 Workflow(또는 `agent-delegate`)로 그룹별 병렬 fan-out 한다.
 출력 디렉터리는 `<project>/Output` 또는 사용자가 지정한 곳.
+
+### 0) PRESCAN — 리더가 스스로 알 수 없는 사실을 먼저 구한다 (**필수**)
+```bash
+node scripts/prescan.js <appRoot> --out Output/prescan.json
+```
+실측으로, 이 스킬을 86화면 앱에 돌렸을 때 **27화면만 정확**했고 275건의 오류가 났다. 원인 중 셋은
+모델이 아니라 **질문**의 문제였다 — 눈앞의 파일만 봐선 답할 수 없는 걸 물었다:
+- **프로덕션은 어느 컴포넌트를 그리는가** (위임을 못 따라가 화면 10개가 아예 다른 화면이 됐다)
+- **사용자가 이 코드에 닿는가** (dev 전용 라우트의 버튼을 "데이터 손실"로 신고 — **허위 버그 4건**)
+- **이 헬퍼가 속으로 뭘 하는가** (`createRecord` 안의 임베딩 호출 — 서버 66·AI 7 누락)
+
+prescan 이 셋을 스크립트로 답한다. 그 출력을 **SCAN 프롬프트 맨 위에 붙여서** 리더에게 준다
+(scan-prompts.md "0단계 PRESCAN").
 
 ### 1) 스캔 (필수)
 화면 목록을 그룹으로 나눠, 각 리더가 화면을 전수 읽고 동작별로
@@ -169,6 +182,15 @@ node scripts/verify-html.js Output/flow-debugger.html --template assets/flow-deb
 - 중간 데이터: `screenmap.json`, `screenmap.ko.json`, `screenmap.debug.json`,
   `glossary.ko.json`, `shots.json`
 - 사용자가 만든 **버그 신고서 / 수정 요청** 텍스트 (앱으로 다시 보내 고치는 입력)
+
+## 절대 하지 말 것
+
+**SCAN · ENRICH · ANNOTATE 를 한 패스로 합치지 말 것.** 토큰을 아끼려고 합쳤다가
+동작 90개·서버 호출 66개 누락, 앵커 43개 오류가 났고, **아낀 토큰을 검증·수리에 10배로 지불했다.**
+화면이 많으면 합치지 말고 그룹을 쪼개 병렬로 돌린다.
+
+**검증 없이 확신에 찬 헤드라인을 쓰지 말 것.** 앵커는 `verify-anchors.js` 로 전수 검증하고,
+버그 주장은 "프로덕션에서 이 화면이 열리는가"라는 도달 가능성 렌즈로 반박해 본 뒤에만 보고한다.
 
 ## 닫는 루프
 

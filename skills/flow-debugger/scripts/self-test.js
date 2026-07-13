@@ -41,13 +41,41 @@ w('src/lib/useSignInForm.ts', [
 w('src/components/Unique.tsx', 'export function UniqueView() { return null; }\n');
 w('src/a/Dup.tsx', 'export const Dup = 1;\n');
 w('src/b/Dup.tsx', 'export const Dup = 2;\n');
+// TWO functions with the same leaf name. Snapping to the nearest MENTION retargeted an anchor
+// from the sign-up handler to the ADMIN one, and called it a correction.
+w('src/lib/form.ts', [
+  "import { handleSubmit } from './pay';",         // 1  a mention, not a definition
+  'export function useAdminForm() {',              // 2
+  '  const handleSubmit = () => post("/admin");',  // 3  definition A
+  '  return { handleSubmit };',                    // 4  a mention
+  '}',                                             // 5
+  '',                                              // 6
+  '// handleSubmit lives below',                   // 7  a comment naming it
+  'const LABEL = "handleSubmit";',                 // 8  a string literal
+  '',                                              // 9
+  'export function useSignUpForm() {',             // 10
+  '  const handleSubmit = () => post("/signup");', // 11 definition B
+  '  return { handleSubmit };',                    // 12
+  '}',                                             // 13
+].join('\n') + '\n');
+// a dead copy ABOVE the real export — resolve() took the first textual hit
+w('src/lib/pay.ts', [
+  'function legacyCart() {',                       // 1
+  '  const checkout = () => 1;',                   // 2   dead
+  '  return checkout;',                            // 3
+  '}',                                             // 4
+  '',                                              // 5
+  'export const checkout = () => 2;',              // 6   production
+].join('\n') + '\n');
+w('lib/screens/login_screen.dart', 'void handleSubmit() {}\n');
 // a screen that hands off to another component in production — the exact trap this tool exists for
 w('src/app/legacy-home.tsx', [
   "import { isNewUI } from '../lib/flags';",   // 1
   'export default function Home() {',          // 2
   '  if (isNewUI()) return <NewHomeScreen/>;', // 3
-  '  return <OldBody onPress={handleTap} />;', // 4  <- a perfectly valid anchor into dead code
-  '}',                                         // 5
+  '  const handleTap = () => save();',         // 4  a real handler — in code production never runs
+  '  return <OldBody onPress={handleTap} />;', // 5  a JSX render line
+  '}',                                         // 6
 ].join('\n') + '\n');
 // an ordinary loading guard: same SHAPE, not a delegation. Must not be flagged.
 w('src/app/guarded.tsx', [
@@ -105,13 +133,61 @@ eq('../ escape refused', V('../../../etc/passwd.ts:1').status, 'outside');
 eq('missing file', V('src/nope.tsx:1').status, 'missing');
 
 // a lowercase slug is not an identifier — using it as one produced false "absent"
-eq('feature slug is not used as a symbol', VF('src/app/(auth)/sign-in.tsx:7', 'survey').status, 'unchecked');
-eq('camelCase feature IS used as a symbol', VF('src/app/(auth)/sign-in.tsx:7', 'handleSubmit').status, 'exact');
+eq('feature slug is not used as a symbol', VF('src/app/(auth)/sign-in.tsx:6', 'survey').status, 'unchecked');
+eq('camelCase feature IS used as a symbol', VF('src/app/(auth)/sign-in.tsx:6', 'handleSubmit').status, 'exact');
+
+// A JSX render line is NOT where an action is handled. A real run put all three of the home
+// screen's actions on `return <DeepSpaceShell />` — the handlers were not even in that file.
+eq('a JSX render line is never an action anchor',
+   V('src/app/(auth)/sign-in.tsx:7', 'handleSubmit').status, 'near');
+eq('  ...and it snaps to the handler instead',
+   V('src/app/(auth)/sign-in.tsx:7', 'handleSubmit').value, 'src/app/(auth)/sign-in.tsx:6');
+eq('a JSX line with no symbol to snap to is flagged weak',
+   V('src/app/legacy-home.tsx:5').status, 'weak');
+
+// An `impl` anchor must NOT be compared against the SCREEN handler's name: impl points into a
+// lib helper whose function has a different name. A real run produced 15 "function not there"
+// warnings this way, and all 15 were false.
+const implFP = A.validateGraph([{ route: '/p', actions: [{
+  action: 'Save', symbol: 'handleSubmit',                    // the screen's handler
+  file: 'src/app/(auth)/sign-in.tsx:6',
+  impl: 'src/lib/useSignInForm.ts:4' }] }], root);           // the lib function: submitSignIn
+eq('impl is not judged by the screen handler name', implFP.stat.absent, 0);
 // a symbol the scan DECLARED is trusted even if it is one lowercase word (`summarize`)
 eq('declared lowercase symbol is trusted', V('src/lib/useSignInForm.ts:4 (submitSignIn)').status, 'exact');
 
 // a wrapped path: "DevOnlyRoute(src/x.tsx:18)"
 eq('wrapped path unwraps', V('DevOnlyRoute(src/components/Unique.tsx:1)').value, 'src/components/Unique.tsx:1');
+
+console.log('\nadversarial (every case here is one a skeptic used to break the engine):');
+
+// A1 — a symbol on an IMPORT or COMMENT line must never be "exact". `\bhandleSubmit\b` matches
+// the import that brings it in; the weak check used to sit INSIDE the no-symbol branch, so
+// supplying a symbol bypassed it. One such anchor was live in the real 2nd-B map, reported ✔.
+eq('symbol on an import line is not exact', V('src/lib/form.ts:1 (handleSubmit)').status, 'weak');
+eq('symbol in a comment is not exact', V('src/lib/form.ts:7 (handleSubmit)').status, 'weak');
+
+// A2/A3 — a same-name symbol defined twice must NOT be snapped to whichever is nearest.
+// Snapping line 8 used to retarget the anchor into useAdminForm.
+const amb = V('src/lib/form.ts:8 (handleSubmit)');
+eq('ambiguous same-name symbol refuses to snap', amb.status, 'absent');
+eq('  ...and explains why', /군데/.test(amb.why || ''), true);
+
+// A4 — resolve() must find the DEFINITION, not the first textual mention (a dead copy)
+eq('resolve finds the export, not the dead copy above it',
+   V('src/lib/pay.ts (checkout)').value, 'src/lib/pay.ts:6');
+
+// A5 — an extension the whitelist forgot must never DESTROY a correct anchor
+const dartFixed = [{ route: '/l', actions: [{ action: 'Sign in', symbol: 'handleSubmit',
+  file: 'lib/screens/login_screen.dart:1 (handleSubmit)' }] }];
+A.applyVerdicts(dartFixed, root);
+eq('a .dart anchor survives --fix', dartFixed[0].actions[0].file, 'lib/screens/login_screen.dart:1 (handleSubmit)');
+
+// A6 — even a genuinely broken anchor keeps its text, moved out of the coordinate slot
+const gone = [{ route: '/x', actions: [{ action: 'a', file: 'src/nope.tsx:1' }] }];
+A.applyVerdicts(gone, root);
+eq('a broken anchor is not erased without trace',
+   [gone[0].actions[0].file, gone[0].actions[0].fileNote], [undefined, 'src/nope.tsx:1']);
 
 console.log('\ngraph repair:');
 const graph = [{
