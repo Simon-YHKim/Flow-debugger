@@ -1,5 +1,49 @@
 # flow-debugger — Session Handoff
 
+## Latest — 2026-07-14 / v0.12.0  (실전 포스트모템 + v0.11.0 적대적 재검증)
+
+### 한 줄
+v0.11.0 은 **간판 기능(위임 경고)이 모든 빌드에서 죽은 채** 출시됐다 — 단위 30/30 초록, 라이브 PASS 인 채로.
+원인은 `build.js` 키 문자열에 박힌 **NUL 바이트 한 개**. git 이 파일을 binary 로 취급해 diff 도 grep 도 그걸 못 봤다.
+v0.12.0 은 그걸 고치고, **초록 테스트를 증거로 믿지 않는 검증**을 추가하고, 실전 포스트모템의 5원인을 전부 도구로 막는다.
+
+### v0.12.0 에서 한 것
+**v0.11.0 자체 결함 (적대적 재검증 5-agent 가 잡음)**
+- NUL 키 → 위임 경고 사망. 이제 `delegKey()` 단일 정의 + `verify-html` 이 **경고가 신고서에 실제로 실리는지** 단언 + 제어문자 스캔이 테스트에 상주.
+- **✔ 가 안 한 검증을 했다고 말함**: 547 앵커 중 507이 `unchecked`(파일·줄만 확인)인데 "그 줄에 함수가 실제로 있어"로 나갔다.
+  → 3등급 분리: **✔ VERIFIED**(함수 대조) · **· LOCATED**(파일·줄만) · **~ CAUTION** · **⚠ BROKEN**.
+- import/주석/문자열 리터럴 위의 심볼이 `exact` 로 통과 · 스냅이 동명이인 함수로 재조준 · resolve 가 정의 아닌 첫 언급 선택
+  · `--fix` 가 화이트리스트 밖 확장자(.dart/.xml)의 **정확한 앵커를 삭제** · build.js 가 입력 파일 덮어씀 — 전부 수정 + 공격 케이스를 테스트로 상주.
+
+**실전 포스트모템 (86화면 앱, 초판 27화면만 정확 / 275 오류)**
+- `scripts/prescan.js` + `lib/reach.js` = **0단계**. 리더가 눈앞 파일만 봐선 답 못 하는 3가지를 스크립트가 답한다:
+  ① 프로덕션 렌더 경로(위임) ② **도달 가능성**(dev 전용 라우트 → 허위 버그 4건의 근원, 실앱 5/5 검출) ③ 헬퍼 속 DB/AI 호출(실앱 216개, AI 46개)
+- JSX 렌더 줄 앵커 거부(43건) · `impl` 을 화면 핸들러 이름으로 판정하지 않음(거짓 경고 15건) · 3패스 합치기 금지를 SKILL.md 에 명문화.
+
+**맵 UI (Simon 요청)**
+- **🖥 화면별 플로우 / 🌐 시스템 플로우** 2분할.
+- 화면별 플로우는 화면 하나가 왼쪽 뿌리, **오른쪽으로만** 뻗는다(86장 세로 적재 폐기). 이동 칩을 펴면 **다음 화면이 그 자리에 펼쳐지고**,
+  『이 화면으로 이동 →』으로 그 화면을 새 뿌리로 삼아 앱을 한 홉씩 걸어간다.
+- 시스템 플로우 = 화면→화면 그래프(좌→우 계층) + AI 하네스(겹침 해소 패스 추가).
+
+### 검증 (그대로 복붙)
+```bash
+cd "E:/Coding Infra/flow-debugger/skills/flow-debugger"
+node scripts/self-test.js                          # 41/41
+node scripts/prescan.js "E:/2ndB" --graph "E:/2ndB/Output/flow-debugger/screenmap.debug.json"
+node scripts/verify-anchors.js "E:/2ndB/Output/flow-debugger/screenmap.debug.json" "E:/2ndB"
+NODE_PATH="C:/Users/202502/.claude/skills/gstack/node_modules"   node scripts/verify-html.js "E:/2ndB/Output/flow-debugger/flow-debugger.html"        --template assets/flow-debugger.template.html
+# PASS 조건: 겹침0 · pageerror0 · 위임경고 발화+신고서 포함 · 하네스 겹침0 · 템플릿 누수0
+```
+
+### 절대 잊지 말 것
+1. **초록 테스트는 증거가 아니다.** 단위는 라이브러리를 직접 부르고, 라이브는 첫 카드만 눌렀다. **산출물을 봐라.**
+2. **검증관도 자신 있게 틀린다.** 모순이 나오면 원본 코드를 직접 연다(실측 3회 모두 검증관이 틀렸다).
+3. **heredoc 으로 소스 패치 금지** — NUL·백스페이스가 조용히 박힌다. Edit 툴을 쓴다.
+4. 변경할 때마다 **전역 사본 robocopy /MIR 동기화** (`/flow-debugger` 는 전역 사본을 로드).
+
+---
+
 ## Latest — 2026-07-14 / v0.11.0 정밀도 릴리스 (앵커 검증 + 하네스 leak 제거 + 3자 준비)
 
 ### 한 줄
