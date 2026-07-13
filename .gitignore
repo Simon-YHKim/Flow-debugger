@@ -1,0 +1,13 @@
+node_modules/
+package-lock.json
+
+# per-app artefacts, not part of the tool. `Output/` is the directory SKILL.md tells the
+# pipeline to write into. The demo under examples/ IS committed on purpose — it is the
+# regression fixture and the source of the README screenshots.
+Output/
+*.local.json
+
+# never
+.env
+.env.*
+!.env.example

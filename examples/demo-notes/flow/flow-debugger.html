@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>__APP_NAME__ 기능 흐름도 — 비주얼 맵</title>
+<title>메모장 데모 기능 흐름도 — 비주얼 맵</title>
 <!-- No external resources. This file is handed around offline and opened from disk;
      a CDN font would break exactly there (and this is the tool that flags "인터넷 필요"
      as a risk). Pretendard is used when the reader has it installed, else the platform
@@ -212,7 +212,7 @@
 <body>
 
 <div class="topbar">
-  <div class="brand">__APP_NAME__ <span>기능 흐름도</span></div>
+  <div class="brand">메모장 데모 <span>기능 흐름도</span></div>
   <div class="stat" id="stat"></div>
   <div class="grow"></div>
   <div class="ctrl">
@@ -290,22 +290,272 @@
 <div class="legend" id="legend"></div>
 
 <script>
-const GRAPH = (__GRAPH_JSON__)||[];
-const GLOSSARY = (__GLOSSARY_JSON__)||{};
-const SHOTS = (__SHOTS_JSON__)||{};
-const STACK = (__STACK_JSON__)||"";
+const GRAPH = ([
+  {
+    "route": "/sign-in",
+    "title": "Sign in",
+    "titleKo": "로그인",
+    "group": "auth",
+    "groupKo": "인증",
+    "type": "auth",
+    "summary": "Email + password sign-in",
+    "summaryKo": "이메일과 비밀번호로 앱에 들어가는 화면이에요.",
+    "example": "처음 앱을 켜서 내 계정으로 들어갈 때",
+    "actions": [
+      {
+        "action": "Sign in",
+        "actionKo": "로그인하기",
+        "plain": "이메일과 비밀번호를 서버에 보내 맞는지 확인하고, 맞으면 안으로 들여보내요.",
+        "example": "가입할 때 쓴 메일과 비밀번호를 넣고 로그인 버튼을 누를 때",
+        "feature": "email-login",
+        "symbol": "signIn",
+        "apis": [
+          "rest:POST:/api/auth/login"
+        ],
+        "ai": null,
+        "file": "src/auth.js:3 (signIn)",
+        "detail": "로그인 성공하면 토큰을 브라우저에 저장한다.",
+        "to": "/notes",
+        "risks": [
+          "network",
+          "weakpoint"
+        ],
+        "checklist": [
+          "인터넷이 연결돼 있나요?",
+          "메일 주소와 비밀번호를 정확히 넣었나요?"
+        ],
+        "failureModes": [
+          "서버가 느리면 눌러도 한참 반응이 없을 수 있어요",
+          "비밀번호가 틀리면 이유 없이 그대로 머무를 수 있어요"
+        ]
+      },
+      {
+        "action": "Sign out",
+        "actionKo": "로그아웃하기",
+        "plain": "저장된 로그인 정보를 지우고 서버에도 알려요.",
+        "example": "공용 컴퓨터에서 쓰고 나갈 때",
+        "feature": "logout",
+        "symbol": "signOut",
+        "apis": [
+          "rest:POST:/api/auth/logout"
+        ],
+        "ai": null,
+        "file": "src/auth.js:9 (signOut)",
+        "risks": [
+          "network"
+        ],
+        "checklist": [
+          "인터넷이 연결돼 있나요?"
+        ],
+        "failureModes": [
+          "서버에 못 알려도 이 기기에서는 로그아웃돼요"
+        ]
+      }
+    ]
+  },
+  {
+    "route": "/notes",
+    "title": "Notes",
+    "titleKo": "메모 목록",
+    "group": "notes",
+    "groupKo": "메모",
+    "type": "list",
+    "summary": "List, write and summarize notes",
+    "summaryKo": "적어둔 메모를 보고, 새로 쓰고, AI로 요약하는 화면이에요.",
+    "example": "회의에서 들은 걸 적어두고 나중에 요약해서 볼 때",
+    "actions": [
+      {
+        "action": "On load",
+        "actionKo": "화면 열 때 목록 불러오기",
+        "plain": "내가 적어둔 메모들을 서버에서 가져와 보여줘요.",
+        "example": "앱에 들어오면 지난주에 적은 메모가 쭉 나올 때",
+        "feature": "load-list",
+        "symbol": "loadNotes",
+        "apis": [
+          "rest:GET:/api/notes"
+        ],
+        "ai": null,
+        "file": "src/notes.js:12 (loadNotes)",
+        "risks": [
+          "network",
+          "auth"
+        ],
+        "checklist": [
+          "로그인돼 있나요?",
+          "인터넷이 연결돼 있나요?"
+        ],
+        "failureModes": [
+          "서버가 응답하지 않으면 빈 목록처럼 보일 수 있어요"
+        ]
+      },
+      {
+        "action": "Save note",
+        "actionKo": "메모 저장하기",
+        "plain": "적은 내용을 서버에 보내 저장해요.",
+        "example": "'우유 사기' 라고 적고 저장을 누를 때",
+        "feature": "save-note",
+        "symbol": "saveNote",
+        "apis": [
+          "rest:POST:/api/notes"
+        ],
+        "ai": null,
+        "file": "src/notes.js:16 (saveNote)",
+        "risks": [
+          "network",
+          "auth",
+          "weakpoint"
+        ],
+        "checklist": [
+          "인터넷이 연결돼 있나요?",
+          "내용이 비어 있지 않나요?"
+        ],
+        "failureModes": [
+          "저장 실패해도 성공한 것처럼 보일 수 있어요"
+        ]
+      },
+      {
+        "action": "Summarize with AI",
+        "actionKo": "AI로 요약하기",
+        "plain": "메모 내용을 AI에게 보내 짧게 줄여 달라고 해요.",
+        "example": "회의록이 너무 길 때 세 줄 요약을 받고 싶을 때",
+        "feature": "summarize",
+        "symbol": "summarizeNote",
+        "apis": [
+          "rest:GET:/api/notes"
+        ],
+        "ai": {
+          "purpose": "note_summarize",
+          "model": "gpt-4o-mini",
+          "via": "클라이언트 직접"
+        },
+        "file": "src/notes.js:21 (summarizeNote)",
+        "impl": "src/ai.js:2 (summarize)",
+        "risks": [
+          "network",
+          "ai",
+          "cost",
+          "external"
+        ],
+        "checklist": [
+          "인터넷이 연결돼 있나요?",
+          "AI 사용량이 남아 있나요?"
+        ],
+        "failureModes": [
+          "AI가 느리면 한참 기다릴 수 있어요",
+          "요약이 원문과 다를 수 있어요"
+        ]
+      },
+      {
+        "action": "Delete note",
+        "actionKo": "메모 삭제하기",
+        "plain": "고른 메모를 서버에서 지워요.",
+        "example": "잘못 적은 메모를 지울 때",
+        "feature": "delete-note",
+        "symbol": "deleteNote",
+        "apis": [
+          "rest:DELETE:/api/notes"
+        ],
+        "ai": null,
+        "file": "src/notes.js:26 (deleteNote)",
+        "risks": [
+          "network",
+          "auth"
+        ],
+        "checklist": [
+          "정말 지울 메모가 맞나요?"
+        ],
+        "failureModes": [
+          "지워도 화면에 잠깐 남아 있을 수 있어요"
+        ]
+      },
+      {
+        "action": "Go to settings",
+        "actionKo": "설정으로 가기",
+        "plain": "설정 화면으로 넘어가요.",
+        "feature": "nav-settings",
+        "apis": [],
+        "ai": null,
+        "file": "src/notes.js:7",
+        "to": "/settings",
+        "risks": [],
+        "checklist": [],
+        "failureModes": []
+      }
+    ]
+  },
+  {
+    "route": "/settings",
+    "title": "Settings",
+    "titleKo": "설정",
+    "group": "settings",
+    "groupKo": "설정",
+    "type": "settings",
+    "summary": "Read and update preferences",
+    "summaryKo": "알림이나 표시 방식 같은 내 설정을 보고 바꾸는 화면이에요.",
+    "example": "알림을 끄고 싶을 때",
+    "actions": [
+      {
+        "action": "On load",
+        "actionKo": "설정 불러오기",
+        "plain": "지금 내 설정이 어떻게 돼 있는지 서버에서 가져와요.",
+        "feature": "load-settings",
+        "symbol": "loadSettings",
+        "apis": [
+          "rest:GET:/api/settings"
+        ],
+        "ai": null,
+        "file": "src/settings.js:3 (loadSettings)",
+        "risks": [
+          "network",
+          "auth"
+        ],
+        "checklist": [
+          "로그인돼 있나요?"
+        ],
+        "failureModes": [
+          "못 불러오면 기본값처럼 보일 수 있어요"
+        ]
+      },
+      {
+        "action": "Save settings",
+        "actionKo": "설정 저장하기",
+        "plain": "바꾼 설정을 서버에 보내 저장해요.",
+        "feature": "save-settings",
+        "symbol": "saveSettings",
+        "apis": [
+          "rest:POST:/api/settings"
+        ],
+        "ai": null,
+        "file": "src/settings.js:7 (saveSettings)",
+        "risks": [
+          "network",
+          "auth"
+        ],
+        "checklist": [
+          "인터넷이 연결돼 있나요?"
+        ],
+        "failureModes": [
+          "저장 실패해도 바뀐 것처럼 보일 수 있어요"
+        ]
+      }
+    ]
+  }
+])||[];
+const GLOSSARY = ({"apis":{"rest:POST:/api/auth/login":{"ko":"로그인 확인 요청","kindKo":"서버 요청"},"rest:POST:/api/auth/logout":{"ko":"로그아웃 알리기","kindKo":"서버 요청"},"rest:GET:/api/notes":{"ko":"메모 가져오기","kindKo":"서버 요청"},"rest:POST:/api/notes":{"ko":"메모 저장하기","kindKo":"서버 요청"},"rest:DELETE:/api/notes":{"ko":"메모 지우기","kindKo":"서버 요청"},"rest:GET:/api/settings":{"ko":"내 설정 가져오기","kindKo":"서버 요청"},"rest:POST:/api/settings":{"ko":"내 설정 저장하기","kindKo":"서버 요청"}},"ai":{"note_summarize":{"ko":"메모 요약","desc":"길게 적은 메모를 AI가 짧게 줄여 줘요"}}})||{};
+const SHOTS = ({})||{};
+const STACK = ("Vanilla JS SPA + REST API(Express) + OpenAI 요약 1건. 화면은 src/*.js 의 *Screen 함수. isNewUI() 플래그가 켜지면 v2 컴포넌트가 대신 렌더된다.")||"";
 /* ANCHORS = the build-time verdict on every code anchor in the graph, from
    scripts/verify-anchors.js: {checked, index:{"<raw anchor>": "exact"|"near"|"absent"|
    "unchecked"|"missing"|"range"|"outside"|"unparsable"}, stat}. This is what lets the
    bug report say which file:line is CONFIRMED and which is a guess — an unverified
    coordinate sends a coding agent to "fix" a file production never renders. */
-const ANCHORS = (__ANCHORS_JSON__)||{checked:false,index:{}};
+const ANCHORS = ({"checked":true,"index":{"src/auth.js:3 (signIn)":{"status":"exact","why":"그 줄에 'signIn' 가 실제로 있어요","value":"src/auth.js:3"},"src/auth.js:9 (signOut)":{"status":"exact","why":"그 줄에 'signOut' 가 실제로 있어요","value":"src/auth.js:9"},"src/notes.js:12 (loadNotes)":{"status":"exact","why":"그 줄에 'loadNotes' 가 실제로 있어요","value":"src/notes.js:12"},"src/notes.js:16 (saveNote)":{"status":"exact","why":"그 줄에 'saveNote' 가 실제로 있어요","value":"src/notes.js:16"},"src/notes.js:21 (summarizeNote)":{"status":"exact","why":"그 줄에 'summarizeNote' 가 실제로 있어요","value":"src/notes.js:21"},"src/ai.js:2 (summarize)":{"status":"exact","why":"그 줄에 'summarize' 가 실제로 있어요","value":"src/ai.js:2"},"src/notes.js:26 (deleteNote)":{"status":"exact","why":"그 줄에 'deleteNote' 가 실제로 있어요","value":"src/notes.js:26"},"src/notes.js:7":{"status":"unchecked","why":"파일과 줄은 확인했어요(대조할 함수 이름이 없어요)","value":"src/notes.js:7"},"src/settings.js:3 (loadSettings)":{"status":"exact","why":"그 줄에 'loadSettings' 가 실제로 있어요","value":"src/settings.js:3"},"src/settings.js:7 (saveSettings)":{"status":"exact","why":"그 줄에 'saveSettings' 가 실제로 있어요","value":"src/settings.js:7"}},"stat":{"total":10,"ok":10,"exact":9,"near":0,"resolved":0,"fileonly":0,"unchecked":1,"weak":0,"absent":0,"prose":0,"missing":0,"ambiguous":0,"range":0,"outside":0,"unparsable":0},"delegation":{"/notes\u0000On load":"NotesScreenV2","/notes\u0000Save note":"NotesScreenV2","/notes\u0000Delete note":"NotesScreenV2","/notes\u0000Go to settings":"NotesScreenV2"},"appRoot":"E:\\Coding Infra\\flow-debugger\\examples\\demo-notes"})||{checked:false,index:{}};
 /* HARNESS_DATA = optional hand-authored AI wiring for THIS app (<graph>.harness.json).
    When absent the AI 하네스 view is derived from the AI calls in the graph — it never
    invents a pipeline the scanned app does not have. */
-const HARNESS_DATA = (__HARNESS_JSON__)||null;
+const HARNESS_DATA = (null)||null;
 // MODE = ui(화면) | backend(엔드포인트) | cli(명령). UNIT = 최상위 노드를 부르는 말.
-const MODE = "__MODE__";
+const MODE = "ui";
 const UNIT = ({ui:"화면",backend:"엔드포인트",cli:"명령"})[MODE] || "화면";
 const GAPI = GLOSSARY.apis||{}, GAI = GLOSSARY.ai||{};
 

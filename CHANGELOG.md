@@ -3,6 +3,98 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.11.0] - 2026-07-14
+
+The precision release. Everything the tool produces is downstream of one datum — the
+`file:line` it hands a coding agent — and until now nothing verified it. This release makes
+that anchor trustworthy, and says so honestly when it is not.
+
+### Added
+- **`scripts/verify-anchors.js` + `scripts/lib/anchors.js` — anchor verification, a new
+  pipeline step (4/6) that cannot be skipped.** Every code anchor is now resolved and
+  checked against the real source tree: the file exists, it is inside the app root (a `../`
+  escape used to be readable), the line is in range, and **the named function is actually on
+  that line**. Beyond checking, it *repairs*: an anchor with no line number is resolved BY
+  its symbol; a drifted line is snapped to where the function really is; a bare filename is
+  resolved against the tree when unique. Measured on the 2nd-B map (668 anchors): **51% were
+  a clean `path:line`, 19% a file with a symbol and no line, and 18% were Korean prose in the
+  coordinate slot** — shipped to developers as a "code hint" no editor can open. After
+  verification: 547 anchors, **99.8% trustworthy, 0 prose, 0 broken**.
+- **Delegation-trap detection.** An anchor can be perfectly valid and still useless: the file
+  it points at hands off to another component in production (`if (isDeepSpaceUI()) return
+  <XxxScreen/>`). Editing it leaves the build green and the screen unchanged — the exact
+  failure this whole tool exists to prevent, and no amount of validating the coordinate
+  catches it. `lintDelegation` reads the anchored file, and the bug report now carries a
+  loud warning naming the component that actually renders.
+- **Trust markers in the export.** The bug report separates **✔ confirmed** (file, line and
+  function all checked) from **~ caution** (the line is blank / an import / a comment) and
+  **⚠ unusable** (with the reason), so a coding agent knows what to trust and what to go find.
+  Built without `--app-root`, every coordinate is labelled unverified rather than implied true.
+- **`scripts/self-test.js`** — 30 unit tests for the anchor engine, every case taken from a
+  real scan shape. Node only, no browser, no network.
+- **`scripts/verify-html.js`** — live browser verification (overlaps, page errors, the empty-
+  report gate, the exported anchors, template leakage). Every "verify PASS" in this
+  changelog's history rested on scripts that lived in a temp directory and no longer exist;
+  this one lives with the code.
+- **`scripts/capture-shots.js` + `references/capture-shots.md`** — the screenshot procedure.
+  Thumbnails are how a non-developer recognises a screen, and nothing in the repo produced
+  them; `embed-shots.js` consumed a map a human had to build by a process nobody wrote down.
+- **`examples/demo-notes/`** — a small, committed, non-2nd-B app (REST + one AI call) with a
+  deliberate delegation trap. The README screenshots come from it, `npm test` runs against it,
+  and a first-time user can build a map in one command.
+- **RESCAN / PATCH prompt** (`references/scan-prompts.md`) — `apply-anchors.js` has existed
+  since 0.7.0 with **no producer**: no prompt told an agent to emit the patches it consumes,
+  and neither SKILL.md's pipeline nor the README mentioned it. The deterministic guard was
+  unreachable by anyone following the docs.
+- **`package.json`** (playwright declared), **`.gitignore`**, and a `symbol` / `type` /
+  `groupKo` field in the scan schema.
+
+### Fixed
+- **The AI harness no longer ships another app's internals.** It was a hand-written diagram of
+  ONE app — its gateway function, its edge proxy, its per-tier spend caps, its crisis hotline
+  numbers — rendered unconditionally for every target, and the README described it as "your
+  app's AI". A third party mapping their own app was shown a stranger's architecture as their
+  own, and the reader this tool is built for is by definition someone who cannot tell that it
+  is false. It is now **derived from the AI calls the scan actually found** (purpose → via →
+  model); an app with no AI has no button. A hand-authored pipeline can be supplied in
+  `<graph>.harness.json`.
+- **The scan's `ai` object shape is now in the prompt.** The only example was `"ai":null`, so a
+  reader would guess `"ai":"capture_classify"` — producing a node id of `ai:undefined` and a
+  blank AI card, while the build cheerfully reported "JS OK". `merge-readers.js` now
+  schema-checks reader output and stops instead of shipping a corrupted map.
+- **Backend neutrality finished.** 0.9.0 taught the SCAN prompt `rest:`/`graphql:`/`http:`/`fn:`
+  but left the template's colour and label tables hard-coded to Supabase's five primitives, so
+  a REST app's calls rendered grey with the English word "rest" on the card, under a static
+  legend of five colours that were nowhere on screen. Kinds are now open-ended (colour by hash,
+  Korean from the glossary) and **the legend is built from the data**. `SKILL.md` still
+  instructed Supabase-only tags; fixed.
+- **Group labels are Korean again.** They were derived by title-casing the raw id, so the
+  shipped map read "Home Shell", "Self Model", "Records Graph" — machine-translated English in
+  a tool whose one promise is plain Korean. ENRICH now asks for `groupKo`.
+- **A bug report can no longer be empty.** Pressing the button created the entry and every
+  field was optional, so "재현해서 고쳐줘" shipped with nothing to reproduce — and with an
+  invented completion criterion attached. A symptom is now required.
+- **You can report a broken *screen*, not just a broken action.** The button existed only on
+  action cards, while a non-developer's "안 돼요" is usually "빈 화면이에요" / "로딩만 돌아요".
+- **The 수정 요청 tab exported an incomplete prompt.** It built its own list from `state.edits`
+  only, silently dropping bug reports and added nodes — which its own badge counted. It now
+  emits the same complete text as the dock.
+- **`build.js` cannot silently swallow the wrong file.** The 4-argument form loaded
+  `shots.json` into the glossary slot (the natural way to skip the glossary) and shipped a map
+  with zero thumbnails, exit 0. Inputs are shape-checked; named flags are available.
+- **"Self-contained" is now true.** The template hot-linked a CDN font — so the one artifact
+  meant to be opened offline broke offline, in the tool that flags "인터넷 필요" as a risk.
+- **Screen icons work for any app.** The type map was a literal list of one app's ~64 routes;
+  every other app's cards came out as the same grey "detail" icon under a help text promising
+  you could recognise screens by them. Type now comes from the scan (`type`), with a
+  route-word heuristic as fallback.
+- **The `ui`/`backend`/`cli` vocabulary switch is complete** — 17 generated strings still said
+  "화면" on an API server.
+- **Versions agree.** plugin.json said 0.10.0, SKILL.md 0.1.0, cases.json 0.1.0, and HANDOFF
+  0.6.0. All four are 0.11.0.
+- The precheck accepts SvelteKit / Nuxt / Vue / pages-router layouts instead of stopping at
+  `NO_SCREEN_CODE` with no way to say where the screens are.
+
 ## [0.10.0] - 2026-07-11
 
 ### Added

@@ -1,11 +1,22 @@
 {
   "name": "flow-debugger",
-  "displayName": "Flow Debugger",
-  "description": "Visual workflow debugger for non-developers: maps every app screen to its user actions, data/server/AI calls, with risk markers, diagnostic checklists, connection editing, and a file:line bug-report generator. Produces one self-contained interactive HTML.",
-  "version": "0.10.0",
-  "author": { "name": "Simon Kim" },
+  "description": "Visual workflow debugger for non-developers: maps every app screen to its user actions, data/server/AI calls, with risk markers and diagnostic checklists. Every code anchor is VERIFIED against the real source tree, so the file:line bug report it generates can be trusted. Produces one self-contained interactive HTML (no network, no CDN).",
+  "version": "0.11.0",
+  "author": {
+    "name": "Simon Kim"
+  },
   "homepage": "https://github.com/Simon-YHKim/Flow-debugger",
   "repository": "https://github.com/Simon-YHKim/Flow-debugger",
   "license": "MIT",
-  "keywords": ["debugging", "flow", "workflow", "non-developer", "visual", "korean", "no-code"]
+  "keywords": [
+    "debugging",
+    "flow",
+    "workflow",
+    "non-developer",
+    "visual",
+    "korean",
+    "no-code",
+    "bug-report",
+    "code-anchors"
+  ]
 }

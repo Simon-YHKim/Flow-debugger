@@ -1,0 +1,14 @@
+{
+  "apis": {
+    "rest:POST:/api/auth/login": { "ko": "로그인 확인 요청", "kindKo": "서버 요청" },
+    "rest:POST:/api/auth/logout": { "ko": "로그아웃 알리기", "kindKo": "서버 요청" },
+    "rest:GET:/api/notes": { "ko": "메모 가져오기", "kindKo": "서버 요청" },
+    "rest:POST:/api/notes": { "ko": "메모 저장하기", "kindKo": "서버 요청" },
+    "rest:DELETE:/api/notes": { "ko": "메모 지우기", "kindKo": "서버 요청" },
+    "rest:GET:/api/settings": { "ko": "내 설정 가져오기", "kindKo": "서버 요청" },
+    "rest:POST:/api/settings": { "ko": "내 설정 저장하기", "kindKo": "서버 요청" }
+  },
+  "ai": {
+    "note_summarize": { "ko": "메모 요약", "desc": "길게 적은 메모를 AI가 짧게 줄여 줘요" }
+  }
+}

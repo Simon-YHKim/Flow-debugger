@@ -1,0 +1,16 @@
+{
+  "name": "flow-debugger-skill",
+  "version": "0.11.0",
+  "private": true,
+  "description": "flow-debugger pipeline scripts. Runtime = node only; playwright is needed for the optional capture + live-verify steps.",
+  "license": "MIT",
+  "scripts": {
+    "verify-anchors": "node scripts/verify-anchors.js",
+    "verify-html": "node scripts/verify-html.js",
+    "build": "node scripts/build.js",
+    "test": "node scripts/self-test.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  }
+}

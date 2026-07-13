@@ -1,0 +1,1 @@
+Vanilla JS SPA + REST API(Express) + OpenAI 요약 1건. 화면은 src/*.js 의 *Screen 함수. isNewUI() 플래그가 켜지면 v2 컴포넌트가 대신 렌더된다.

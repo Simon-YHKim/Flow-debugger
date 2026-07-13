@@ -1,84 +1,84 @@
 # flow-debugger — Session Handoff
 
-## Latest — 2026-07-11 / v0.10.0 명령·엔드포인트 모드 + 스펙 팝업 + 미니맵 드래그 · v0.9.0 스펙·중립스캔
+## Latest — 2026-07-14 / v0.11.0 정밀도 릴리스 (앵커 검증 + 하네스 leak 제거 + 3자 준비)
+
+### 한 줄
+이 도구가 산출하는 모든 것은 **코딩 에이전트에게 넘기는 `file:line` 한 줄** 아래에 있다.
+그 한 줄을 아무도 검증하지 않고 있었다. v0.11.0이 그걸 검증하고, 못 믿을 때는 못 믿는다고 말한다.
 
 ### 어디까지 왔나
-- main HEAD: v0.10.0 (아래 커밋). origin == local, working tree clean.
-- **backend 모드 실증**: 화면 없는 Express API 서버(주문 API + PostgreSQL + 외부 결제 + JWT)를 `backend` 모드로 실제 스캔→빌드(scratchpad/backendapp + backend-flow.html). 4엔드포인트·11동작, 어휘가 전부 "엔드포인트"로 전환(제목·통계·라벨·스펙·범례), db/auth/rest 태그·위험프로필·실제버그(auth우회 stub·무음 refund) 정상, pageerror0. ui(2nd-B·메모장)/backend 모두 verify PASS.
-- 이번 세션 머지된 커밋(직접 push to main):
-  - **v0.10.0** — ①**명령/엔드포인트 모드**(`<graph>.mode.txt`=ui|backend|cli, MODE/UNIT로 화면→엔드포인트/명령 어휘 전환, build.js 주입, scan-prompts "대상 모드" 가이드) ②**스펙=탭→상단 📋버튼+팝업**(닫기/Esc/바깥클릭, 우측은 3탭 복귀) ③**미니맵 드래그**(클릭+포인터캡처 드래그로 이동). 3타깃 verify PASS.
-- **범용성 실증**: 2nd-B(RN/Supabase)와 전혀 다른 타깃 — 프레임워크 없는 바닐라 JS 웹앱(REST fetch + OpenAI) — 을 스킬로 실제 스캔→빌드해 정상 작동 확인(scratchpad/testapp + testapp-flow.html, 3화면 9동작 pageerror0, 제목 "메모장"). 발견: 시각화·한글 enrich·위험 annotate·file/impl 추적은 백엔드 무관하게 완벽, **유일한 결함=태그 어휘가 Supabase 5종 하드코딩**(REST면 GLOSSARY가 "기타"로 오분류)→v0.9.0에서 SCAN/GLOSSARY 중립화.
-- 3자 이용 경로: 플러그인 **미설치** → `/flow-debugger`는 전역 스킬 로드(정본과 byte-identical). 3자 설치=`/plugin marketplace add Simon-YHKim/Flow-debugger` → `/plugin install flow-debugger@flow-debugger`(marketplace.json 유효, MIT).
-- 이번 세션 머지된 커밋(직접 push to main):
-  - **v0.9.0** — ①우측 **시스템 스펙 탭**(스택·규모·서버작업 인벤토리·AI목록·위험 프로필 자동집계, 앱/웹/프로그램 무관) ②**프레임워크 중립 스캔**(scan-prompts SCAN에 rest:/graphql:/http:/fn: 범용 태그 + GLOSSARY kindKo에 서버요청 매핑, "기타" 덤핑 금지). 2nd-B+testapp 양쪽 verify PASS.
-  - **v0.8.1** — 3자 배포 준비: 템플릿에 하드코딩된 `2nd-B` 제목/브랜드를 `__APP_NAME__` 토큰화(build.js가 sibling `<graph>.appname.txt`로 채움, 없으면 "앱"). 남의 앱 이름 유출 방지. SKILL/README에 appname/stack sidecar 문서화. 스크립트는 원래 경로-클린이었음.
-  - **v0.8.0** — `＋ 노드 추가`를 모달 다이얼로그 → **우측 패널 탭**(버그신고/수정요청 옆)으로 이동. 폼+추가노드 목록(흐름도에서 보기/삭제), 툴바 버튼은 탭 오픈, 입력값 재렌더 보존, 배지 카운트, 옛 .adlg 모달 제거. playwright PASS(탭 3개·add→캔버스+목록·삭제·overlap0·pageerror0).
-  - `1e634c0` **v0.7.0** — 2nd-B 재스캔으로 0.6.0이 비워둔 앵커 정확도 필드 실채움 + apply-anchors.js + 버그신고서 codeRef 픽스 + stack 주입 + A'(divergent 4화면 액션SET prod 재도출)
-- 직전: `869829b` v0.6.0(프롬프트 품질 측정·강화 46.7%→88.3%), `6dc7e62` v0.5.0.
-- 테스트 상태: CI 없음. `build.js`가 `new Function`으로 JS 구문 자가검증 + playwright 라이브검증(pageerror0·overlap0·export 내용확인).
+- main HEAD: v0.11.0. 전역 스킬 사본(`C:\Users\202502\.claude\skills\flow-debugger`)과 **byte-identical 동기화 완료**(drift 0).
+- **전체 회귀 PASS**: 단위 30/30 · 데모앱(비-2ndB, 레포에 커밋) 앵커 100% · 2nd-B 86화면 99.8% · 양쪽 라이브 pageerror0·overlap0·템플릿 누수 0.
+- 버전 4곳 통일(plugin.json / SKILL.md / cases.json / package.json = **0.11.0**).
 
-### 이번 세션에 한 일 (요약) — Task A "honest completion"
-1. **문제 확인** — 0.6.0이 스키마·템플릿엔 impl/renders/stack을 추가했지만 **실데이터(screenmap.debug.json, 07-10 스캔)엔 0개**였다: 82화면/310동작 중 impl=0·renders=0·screen.renders=0. 앵커가 `src/app/*.tsx` legacy 위임파일을 가리켜 "빌드 초록인데 화면 그대로"의 원흉.
-2. **framework-aware 재스캔(Workflow, 8병렬 Opus)** — 그룹당 1에이전트가 실2nd-B 소스를 읽어 `isDeepSpaceUI()` 위임을 해소 → `screenRenders`(프로덕션 렌더 파일), 핸들러 추적 → `file`/`impl`, DeepSpace 렌더위치 → `renders`. 화면별 **컴팩트 패치**만 반환(한글 enrichment·annotation 보존).
-3. **`scripts/apply-anchors.js`(신규)** — 패치를 base에 route+exact-action 키로 병합, 나머지 필드 전부 보존. **결정적 환각가드**: 모든 path:line을 실트리에 존재+범위검증→불통과는 드롭("빈 값 > 틀린 값"). 결과: 82/82화면·310/310동작 매칭, impl=128·action.renders=38·screen.renders=79, **드롭 0(환각 0)**. 158동작이 이제 deepspace 프로덕션 파일을 직접 가리킴.
-4. **버그신고서 codeRef 픽스** — `buildBugReport`가 raw `file`로 코드힌트를 만들어 impl/renders가 **최중요 산출물에 안 닿던** 버그. 이제 `codeRef()` 사용 + 화면 프로덕션 렌더파일 라인 별도 노출.
-5. **stack 주입** — `build.js`가 sibling `<graph>.stack.txt`를 `STACK` 상수로 임베드, `buildBugReport`/`buildStackPrompt`가 `[앱 스택]` 프리앰블 추가(코딩에이전트가 프레임워크·위임 메커니즘을 먼저 인지).
-6. **라이브검증 PASS** — pageerror0·overlap0(82노드), 내보낸 버그신고서가 impl/renders/[앱 스택]/렌더파일 라인 모두 포함(sign-in·ttfv 샘플 확인).
-7. 산출물: `E:\2ndB\Output\flow-debugger\flow-debugger.html`(재빌드, 2.12MB) · `screenmap.debug.json`(v2) · `screenmap.debug.stack.txt` · 백업 `screenmap.debug.pre-anchor.json`.
+### v0.11.0에서 실제로 고친 것 (감사 14건 전부)
+
+**정밀도 (핵심)**
+1. `scripts/lib/anchors.js` + `verify-anchors.js` = **앵커 검증 엔진**, 파이프라인 4단계로 정식 편입.
+   파일 존재 · 루트 안(`../` 탈출 차단) · 줄 범위 · **그 줄에 그 함수가 실제로 있는지**까지 확인.
+   나아가 **복구**한다: 줄 없으면 심볼로 찾아 채우고, 어긋난 줄은 스냅하고, 파일명만 있으면 트리에서 해석.
+   - 실측(2nd-B 668앵커): **51%만 깔끔한 path:line, 19%는 줄 없는 파일+심볼, 18%는 좌표 자리에 한국어 산문**.
+   - 검증 후: 547앵커 · **신뢰 99.8% · 산문 0 · 깨짐 0**.
+2. **위임 트랩 검출**(`lintDelegation`). 앵커가 완벽히 유효한데도 쓸모없는 경우 —
+   그 파일이 `if (isDeepSpaceUI()) return <XxxScreen/>` 로 다른 컴포넌트를 대신 렌더할 때.
+   좌표 검증으로는 절대 못 잡는다(파일도 줄도 진짜다). 파일을 **읽어야** 잡힌다.
+   2nd-B 실맵에서 진짜 3건 발견(`/rlss` → `<RlssDeepSpace/>`, renders 미기록). 신고서가 경고를 싣는다.
+3. **신고서에 신뢰 등급**: ✔ 확인됨 / ~ 주의(빈 줄·import·주석) / ⚠ 못 믿음(이유 포함).
+   `--app-root` 없이 빌드하면 전부 "미검증"으로 표기 — 확인된 척하지 않는다.
+4. `self-test.js` 30 케이스(브라우저·네트워크 불필요) · `verify-html.js` 라이브 검증(레포 안에 있음).
+
+**leak / 정직성**
+5. **AI 하네스가 남의 앱 내부를 뿌리던 것 제거.** 한 앱의 게이트웨이·엣지 프록시·스펜드캡·위기 핫라인을
+   하드코딩해 **모든 대상에** 무조건 렌더했고 README는 "당신 앱의 AI"라고 설명했다.
+   이제 **스캔한 AI 호출에서 파생**(목적 → 경유 → 모델). AI 없으면 버튼도 없음. `<graph>.harness.json`로 직접 그릴 수도 있음.
+6. docs 스크린샷 3장을 **레포의 데모 앱**으로 재촬영(전 버전은 JWT role·spend cap·핫라인 번호가 판독 가능했음).
+
+**중립성 / 비개발자 약속**
+7. 백엔드 중립화 완성 — kind 개방(색=해시, 한국어=용어집), **범례를 데이터에서 생성**. SKILL.md의 Supabase 전용 지시 제거.
+8. 그룹 라벨이 영문("Home Shell")로 나오던 것 → ENRICH `groupKo`.
+9. 화면 아이콘이 한 앱의 라우트 리터럴이던 것 → 스캔 `type` + 라우트 휴리스틱.
+10. **화면 카드에서도** "안 돼요" 신고 가능(기존엔 동작 카드만). 빈 신고서 export 차단(증상 필수).
+11. '수정 요청' 탭이 버그·추가노드를 빠뜨리던 것 → dock과 동일한 전체 프롬프트.
+12. `ui/backend/cli` 어휘 누수 17곳 정리.
+
+**위생**
+13. `ai` 객체 스키마를 SCAN 프롬프트에 명시 + `merge-readers.js` 스키마 검사(문자열이면 중단).
+14. RESCAN/PATCH 프롬프트 신설(0.7.0의 `apply-anchors.js`는 **생산자가 없어 문서대로 하면 절대 실행 안 됐음**).
+15. CDN 폰트 제거(진짜 자체완결) · `package.json`(playwright) · `.gitignore` · `capture-shots.js`+문서
+    (대표 기능인데 캡처 뜨는 법이 레포 어디에도 없었음) · `examples/demo-notes/`(3자 온보딩 + 회귀 픽스처).
 
 ### 활성 인프라
 - 레포: `github.com/Simon-YHKim/Flow-debugger` (PUBLIC, main). 로컬 정본 `E:\Coding Infra\flow-debugger`.
-- 대상 앱 데이터: `E:\2ndB\Output\flow-debugger\` (screenmap.debug.json 82화면 · glossary.ko.json · shots.json 59캡처 · 빌드 flow-debugger.html · scan-*.json).
-- 전역 설치본(`/flow-debugger`가 로드): `C:\Users\202502\.claude\skills\flow-debugger\` — **template.html·scan-prompts.md 정본과 동기화됨**.
+- 전역 설치본(`/flow-debugger`가 로드): `C:\Users\202502\.claude\skills\flow-debugger\` — **정본과 동기화됨**.
+- 대상 앱 데이터: `E:\2ndB\Output\flow-debugger\` (screenmap.debug.json 86화면·342동작 · glossary · shots 58 · 빌드 HTML).
+  백업: `screenmap.debug.pre-v11.json`.
+- 데모(레포 내): `examples/demo-notes/` — 소스 + flow/screenmap.debug.json + 빌드 HTML.
 
-### 다음 작업 큐
-| # | 작업 | 크기 | 권장 |
+### 남은 것
+| # | 작업 | 크기 | 메모 |
 |---|---|---|---|
-| ~~A~~ | ~~개선된 SCAN으로 2nd-B 재스캔 → impl/renders/stack 채우기 → 재빌드~~ | ~~medium~~ | ✅ **v0.7.0 완료** (1e634c0) |
-| ~~A'~~ | ~~액션SET divergence — divergent DeepSpace 화면 액션SET 재도출~~ | ~~medium~~ | ✅ **완료** (Simon 결정=Prod기준 재도출). divergent 5화면 정밀식별(48은 이미 prod-anchored, 29 native) → /theme·/manual·/account·/inbox 4화면 액션SET을 실 DeepSpace 화면 기준으로 교체(legacy 유령액션 제거: manual 언어토글/권한/리서치, account privacy행, inbox source-mgmt), /deepspace-preview=0액션. 13 prod액션·앵커 전부 valid·재빌드·verify PASS. 310→309동작. |
-| B | HTML에 "AI로 다듬기" 버튼(복사 전 인앱 프롬프트 개선) | small~med | Simon이 AskUserQuestion서 ①②만 선택(③ 미채택) — 보류 |
-| C | 완료기준/주의를 화면 카드에도 선택적 노출(progressive disclosure) | small | Simon이 원하면 |
-| D | 캡처 갱신: not-found 화면 재export 후 재캡처(모든 82route는 소스존재—캡처만 갭) | small | 아이콘 폴백 중 |
+| A | 2nd-B `/rlss` 3건 + weak 23건 RESCAN | small | 도구가 이미 지목함. `references/scan-prompts.md` "RESCAN / PATCH" 그대로 |
+| B | 2nd-B `unchecked` 507건 → SCAN 재실행 시 `symbol` 필드 채우면 대부분 `exact` 로 승격 | medium | 새 스키마가 이미 요구함. 다음 전수 스캔 때 자연 해소 |
+| C | 캡처 갱신(86라우트 중 58장) | small | `capture-shots.js` 로 이제 재현 가능 |
+| D | git tag(v0.1.0~v0.11.0 태그가 하나도 없음 — 롤백할 불변 ref 부재) | small | |
 
 ### 적용 중인 정책 (영구)
-1. **Flow-debugger 레포는 main 직접 push**(Simon 승인). **auto-PR·auto-merge 금지**(글로벌 정책).
-2. flow-debugger 변경 시마다: **정본↔전역 스킬 사본 동기화** → 2nd-B HTML 재빌드 → playwright 검증(겹침0·pageerror0) → 버전 bump → **plugin.json 무결성 검증**(`wc -c`+`json.load` — 과거 동시쓰기로 0바이트 사고) → Conventional Commits(+`Claude Fable 5` trailer) → push.
-3. 커밋 본문에 **큰따옴표·em-dash 금지**(here-string pathspec 사고 2회) → `git commit -F <파일>`.
-4. `git add -A`/`.` 금지 → 명시적 경로만 stage(멀티에이전트 stray 휩쓸림 방지).
-5. playwright는 `NODE_PATH="C:/Users/202502/.claude/skills/gstack/node_modules"`, `channel:'chrome'`. 합성 pointer 이벤트의 `setPointerCapture "No active pointer"`는 테스트 아티팩트 → pageError 필터링.
+1. **Flow-debugger 레포는 main 직접 push**(Simon 승인). auto-PR·auto-merge 금지.
+2. 변경 시마다: **정본 ↔ 전역 스킬 사본 동기화** → `node scripts/self-test.js` → 데모+2ndB 재빌드 →
+   `verify-html.js`(겹침0·pageerror0·템플릿 누수0) → 버전 bump(4곳) → Conventional Commits → push.
+3. 커밋 본문에 **큰따옴표·em-dash 금지**(here-string pathspec 사고) → `git commit -F <파일>`.
+4. `git add -A`/`.` 금지 → 명시적 경로만 stage.
+5. playwright는 `NODE_PATH="C:/Users/202502/.claude/skills/gstack/node_modules"`, `channel:'chrome'`.
 
-### 핵심 파일 위치
-```
-E:\Coding Infra\flow-debugger\                                  정본 플러그인 레포(origin Simon-YHKim/Flow-debugger)
-  .claude-plugin/plugin.json                                    버전 매니페스트(현재 0.6.0)
-  skills/flow-debugger/assets/flow-debugger.template.html       단일파일 HTML 템플릿(핵심 편집 대상)
-  skills/flow-debugger/references/scan-prompts.md               SCAN/ENRICH/GLOSSARY/ANNOTATE 프롬프트
-  skills/flow-debugger/scripts/{build,merge-readers,apply-anchors,embed-shots,extract-prompt}.js
-    apply-anchors.js = 재스캔 패치를 base에 병합(route+action키) + path:line 존재검증 환각가드
-  skills/flow-debugger/evals/prompt-quality.md                  프롬프트 품질 eval(루브릭·before/after·재현)
-  CHANGELOG.md
-C:\Users\202502\.claude\skills\flow-debugger\                   전역 설치본(/flow-debugger 로드 — 동기화 필수)
-E:\2ndB\Output\flow-debugger\                                   대상앱 데이터 + 빌드 HTML + 리포트
-```
-
-### 검증
+### 검증 (그대로 복붙)
 ```bash
-cd "E:/Coding Infra/flow-debugger"
-node skills/flow-debugger/scripts/build.js \
-  skills/flow-debugger/assets/flow-debugger.template.html \
-  "E:/2ndB/Output/flow-debugger/screenmap.debug.json" \
-  "E:/2ndB/Output/flow-debugger/glossary.ko.json" \
-  "E:/2ndB/Output/flow-debugger/shots.json" \
-  "E:/2ndB/Output/flow-debugger/flow-debugger.html"   # "... JS OK" = 구문 통과
-# 라이브 검증(겹침/에러): scratchpad의 verify-final.js 등을 NODE_PATH 지정해 실행
-```
-
-### 다음 세션 시작하는 법
-```bash
-cd "E:/Coding Infra/flow-debugger"
-git fetch origin main && git pull origin main
-cat docs/HANDOFF.md
-# A 작업(2nd-B 재스캔)부터 시작 권장
+cd "E:/Coding Infra/flow-debugger/skills/flow-debugger"
+node scripts/self-test.js                                  # 30/30
+node scripts/verify-anchors.js ../../examples/demo-notes/flow/screenmap.debug.json ../../examples/demo-notes
+node scripts/verify-anchors.js "E:/2ndB/Output/flow-debugger/screenmap.debug.json" "E:/2ndB"
+NODE_PATH="C:/Users/202502/.claude/skills/gstack/node_modules" \
+  node scripts/verify-html.js "E:/2ndB/Output/flow-debugger/flow-debugger.html" \
+       --template assets/flow-debugger.template.html
 ```
 
 ---
