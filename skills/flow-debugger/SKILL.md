@@ -160,13 +160,22 @@ node scripts/verify-html.js Output/flow-debugger.html --template assets/flow-deb
   (`{nodes:[{id,hx,hy,color,label,role,detail}], edges:[[from,to]]}`). 없으면 스캔한 AI 호출에서
   **자동 파생**한다(없는 단계를 지어내지 않는다).
 
-### 6.5) **stale 점검 — 지도가 낡았는지 스스로 말하게 한다**
+### 6.5) **낡음 점검 → 좌표 이사** (드리프트 대응)
 ```bash
-node scripts/check-stale.js <graph.json> <appRoot> --strict   # CI 에 넣을 것
+node scripts/check-stale.js   <graph.json> <appRoot> --strict        # 낡았나? (CI 에 넣을 것)
+node scripts/rebase-anchors.js <graph.json> <appRoot> --from <커밋>   # 낡았으면 좌표를 옮긴다
+node scripts/verify-anchors.js <graph.json> <appRoot> --strict       # 그리고 다시 증명한다
 ```
-`build.js` 가 지도를 만들 때 **지문**(커밋 + 앵커한 모든 소스 파일의 해시)을 남긴다.
-앱이 바뀌면 이 스크립트가 **무엇이 바뀌었는지 숫자로** 답한다. 이게 없으면 지도는
-틀려도 틀린 줄 모르고, 낡은 좌표를 계속 내보낸다 — 이 도구의 존재 이유와 정반대다.
+`build.js` 는 지도를 만들 때 **지문**(커밋 + 앵커한 모든 파일의 해시)을 남긴다. 앱이 바뀌면
+`check-stale` 이 **무엇이 바뀌었는지 숫자로** 답한다.
+
+드리프트는 대개 무해하다 — import 한 줄 추가되면 아래가 전부 한 줄씩 밀린다. 그때 전면
+재스캔을 요구하는 지도는 아무도 다시 안 만든다. 그래서 `rebase-anchors` 는 **지도를 만든 커밋에서
+그 줄의 코드 내용을 읽어, 지금 파일에서 같은 줄을 다시 찾는다.** 옮겨간 줄은 여전히 같은 줄이다.
+
+- 그 줄이 **재작성/삭제**됐다면 **추측하지 않고 목록으로 뱉는다** — 그 화면만 재스캔하면 된다.
+- `make-handoff` 는 깨진 좌표가 남아 있으면 **핸드오프 생성을 거부한다**(`--allow-stale` 로만 강행).
+  낡은 지도에 오늘 날짜 도장을 찍어주는 게 이 도구가 막으려는 바로 그 실패이기 때문이다.
 
 ### 7) 핸드오프 — **새 세션이 앱 구조를 이어받게 한다**
 ```bash

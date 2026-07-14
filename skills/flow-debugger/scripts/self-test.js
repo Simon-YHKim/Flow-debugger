@@ -309,7 +309,50 @@ eq('fresh right after building', F.checkStale(fp2, app2).stale, false);
 fs.appendFileSync(path.join(app2, 'src/app/checkout/page.tsx'), '// touched\n');
 const st2 = F.checkStale(fp2, app2);
 eq('an edit to an anchored file makes it STALE', [st2.stale, st2.changed], [true, ['src/app/checkout/page.tsx']]);
+
+// ---- drift repair: detecting staleness is only half of it -------------------------------------
+// Real drift is mostly innocent: someone adds an import and every line below moves down by one.
+// A map that must be fully re-scanned for that is a map nobody re-scans. So: the anchor's line of
+// code is looked up at the commit the map was built from, and found again where it lives now.
+console.log('\ndrift repair (the code moved; the coordinates follow it):');
+const { execFileSync } = require('child_process');
+const app3 = fs.mkdtempSync(path.join(os.tmpdir(), 'fdbg3-'));
+const g3run = (...a) => execFileSync('git', a, { cwd: app3, encoding: 'utf8', stdio: 'pipe' });
+const w3 = (rel, body) => { const q = path.join(app3, rel); fs.mkdirSync(path.dirname(q), { recursive: true }); fs.writeFileSync(q, body, 'utf8'); };
+w3('src/Home.tsx', ['import React from "react";', '', 'export function Home() {', '  const handleSave = () => save();', '  return <B onPress={handleSave} />;', '}'].join('\n') + '\n');
+g3run('init', '-q'); g3run('config', 'user.email', 't@t'); g3run('config', 'user.name', 't');
+g3run('add', '-A'); g3run('commit', '-qm', 'base');
+const baseSha = g3run('rev-parse', 'HEAD').trim();
+
+// the drift: two lines added at the top. handleSave is now at 6, not 4.
+w3('src/Home.tsx', ['import React from "react";', 'import { save } from "./api";', '', '', 'export function Home() {', '  const handleSave = () => save();', '  return <B onPress={handleSave} />;', '}'].join('\n') + '\n');
+const g3path = path.join(app3, 'map.json');
+fs.writeFileSync(g3path, JSON.stringify([{ route: '/', group: 'g', renders: 'src/Home.tsx:3',
+  actions: [{ action: 'Save', symbol: 'handleSave', file: 'src/Home.tsx:4', impl: 'src/Home.tsx:4' }] }]), 'utf8');
+
+// line 4 is now blank, so this lands in `weak`, not `absent` — either way it no longer holds
+const beforeFix = A.validateGraph(JSON.parse(fs.readFileSync(g3path, 'utf8')), app3, { snap: false });
+eq('after the drift the old anchor no longer holds', beforeFix.stat.absent + beforeFix.stat.weak > 0, true);
+
+execFileSync(process.execPath, [path.join(__dirname, 'rebase-anchors.js'), g3path, app3, '--from', baseSha], { encoding: 'utf8', stdio: 'pipe' });
+const g3after = JSON.parse(fs.readFileSync(g3path, 'utf8'));
+eq('the anchor followed its line of code', g3after[0].actions[0].file, 'src/Home.tsx:6');
+eq('the render anchor followed too', g3after[0].renders, 'src/Home.tsx:5');
+eq('and now it verifies clean', A.validateGraph(g3after, app3, { snap: false }).stat.absent, 0);
+
+// a line that was REWRITTEN, not moved, must not be guessed at
+w3('src/Home.tsx', ['import React from "react";', 'import { save } from "./api";', '', '', 'export function Home() {', '  const onSaveClicked = () => save();', '  return <B onPress={onSaveClicked} />;', '}'].join('\n') + '\n');
+fs.writeFileSync(g3path, JSON.stringify([{ route: '/', group: 'g',
+  actions: [{ action: 'Save', symbol: 'handleSave', file: 'src/Home.tsx:4' }] }]), 'utf8');
+let rebaseExit = 0;
+try { execFileSync(process.execPath, [path.join(__dirname, 'rebase-anchors.js'), g3path, app3, '--from', baseSha], { encoding: 'utf8', stdio: 'pipe' }); }
+catch (e) { rebaseExit = e.status; }
+eq('a rewritten line is reported, not invented', rebaseExit, 1);
+eq('and the anchor is left alone rather than moved somewhere wrong',
+  JSON.parse(fs.readFileSync(g3path, 'utf8'))[0].actions[0].file, 'src/Home.tsx:4');
+
 fs.rmSync(app2, { recursive: true, force: true });
+fs.rmSync(app3, { recursive: true, force: true });
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

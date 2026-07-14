@@ -52,6 +52,23 @@ const verified = st.exact + st.near + st.resolved;
 const located = st.unchecked + st.fileonly;
 const broken = st.absent + st.prose + st.missing + st.ambiguous + st.range + st.outside + st.unparsable;
 
+// A handoff is a promise: "these coordinates are real, start here." If the graph no longer matches
+// the tree — because the app moved on since it was scanned — then writing the handoff anyway
+// stamps today's date on yesterday's map, and the next session walks straight into wrong lines
+// wearing a checkmark. That is the exact failure this tool exists to prevent, so it is the one
+// thing it must not do quietly.
+if (broken > 0 && !flags['allow-stale']) {
+  console.error(`\n이 지도는 지금 코드와 맞지 않습니다 — 좌표 ${broken}개가 틀렸어요.`);
+  console.error(`(그 줄에 해당 함수가 없음 ${st.absent} · 파일 없음 ${st.missing} · 그 외 ${broken - st.absent - st.missing}`
+    + ` — 스캔 이후 코드가 움직였다는 뜻입니다.)`);
+  console.error(`핸드오프를 이대로 쓰면, 다음 세션은 틀린 줄을 '확인됨' 표시와 함께 받게 됩니다.\n`);
+  console.error(`먼저 좌표를 지금 코드로 옮기세요:`);
+  console.error(`  node scripts/rebase-anchors.js <graph.json> "${path.resolve(appRoot)}" --from <지도를 만든 커밋>`);
+  console.error(`  node scripts/verify-anchors.js <graph.json> "${path.resolve(appRoot)}" --fix <graph.json> --strict`);
+  console.error(`\n그래도 그냥 내보내려면 --allow-stale (권하지 않습니다).`);
+  process.exit(1);
+}
+
 const outPath = (flags.out && flags.out !== true) ? flags.out : 'FLOW-HANDOFF.md';
 const jsonPath = (flags.json && flags.json !== true) ? flags.json : path.join(path.dirname(outPath), 'flow-map.json');
 const htmlRel = (flags.html && flags.html !== true) ? flags.html : null;
@@ -106,6 +123,14 @@ const map = {
 fs.mkdirSync(path.dirname(path.resolve(jsonPath)), { recursive: true });
 fs.writeFileSync(jsonPath, JSON.stringify(map, null, 2), 'utf8');
 
+// The handoff is a set of claims about source code at one commit. The moment the app moves past
+// it, every coordinate in it is a guess wearing a checkmark. So it leaves with the evidence it
+// was built from, and the next session can ask — in one command — whether it still holds.
+const { fingerprint } = require('./lib/fingerprint');
+const fpPath = jsonPath.replace(/\.json$/, '.fingerprint.json');
+const fp = fingerprint(graph, appRoot, new Date().toISOString());
+fs.writeFileSync(fpPath, JSON.stringify(fp, null, 2), 'utf8');
+
 // ================================================================ the MD (what you read)
 const L = []; const p = (...x) => L.push(...x);
 
@@ -116,6 +141,18 @@ p(`> 자동 생성 — 손으로 고치지 말고 \`make-handoff.js\` 로 재생
 p(`**${graph.length}개 화면 · ${acts.length}개 동작 · 서버/데이터 ${apiTags.length}종 · AI ${aiPurposes.length}종**  `);
 p(`코드 좌표 ${st.total}개 전부 실제 소스와 대조: **✔ 함수까지 확인 ${verified}** · **· 파일·줄만 확인 ${located}** · ⚠ ${broken + st.weak}`, '');
 if (stack) p('**스택** — ' + stack, '');
+
+// A map that cannot say when it went out of date is worse than no map: it hands out coordinates
+// with the same confidence whether they are right or not. So the first thing the next session sees
+// is what this map rests on, and the one command that checks it.
+p(`### 0. 먼저 — 이 문서가 아직 맞는지 30초 안에 확인`, '');
+p(`이 지도는 커밋 \`${fp.git.commit || '?'}\`${fp.git.dirty ? ' (+ 커밋 안 된 변경)' : ''} 의 코드를 읽고 만들었다.`);
+p(`그 뒤로 코드가 바뀌었다면 아래 좌표들은 **틀린 채로 자신 있어 보인다.** 바로 확인할 것:`, '');
+p('```bash');
+p(`node <flow-debugger>/scripts/check-stale.js ${rel(jsonPath)} . --strict`);
+p('```');
+p(`- **exit 0** — 앵커한 파일 ${Object.keys(fp.files || {}).length}개가 그대로다. 이 문서를 믿고 시작해도 된다.`);
+p(`- **exit 1** — 바뀐 파일 목록이 그대로 출력된다. **그 화면들만** 다시 스캔하면 된다(§6 재생성).`, '');
 
 // ---------------------------------------------------------------- the traps
 p('---', '', '## 1. 코드 만지기 전에 반드시 아는 3가지', '');

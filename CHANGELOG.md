@@ -8,6 +8,19 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 The four things the plugin claimed to do, actually done — and done for **any** codebase, not the
 one it was written against.
 
+### Added — ④ …and when it is stale, the coordinates move instead of being re-scanned
+`scripts/rebase-anchors.js`. Detecting drift is only half of it. Real drift is mostly innocent —
+someone adds an import and every line below shifts down by one — and a map that demands a full
+LLM re-scan for that is a map nobody ever re-runs. So the repair reads **the actual line of code**
+the anchor pointed at *in the commit the map was built from* (the fingerprint knows which), and
+finds that same line where it lives today. A line that moved is still the same line.
+On the reference app after 4 upstream merges: **823 unchanged, 121 moved, 0 rewritten** — the map
+came back to `exact 509 / broken 0` with no re-scan at all.
+A line that was genuinely **rewritten** is not guessed at: it is listed, and only those screens
+need a real re-scan. `make-handoff` now **refuses to write a handoff over broken anchors**
+(`--allow-stale` to override) — stamping today's date on yesterday's map is precisely the failure
+this tool exists to prevent, and it was doing it.
+
 ### Added — ④ the map now says when it is stale
 `scripts/lib/fingerprint.js` + `scripts/check-stale.js`. Every claim this tool makes is a claim
 about source code at a moment in time. The moment the app changes, the map drifts — silently — and
