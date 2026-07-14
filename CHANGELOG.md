@@ -3,7 +3,7 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
-## [0.14.0] - 2026-07-14
+## [0.14.1] - 2026-07-14
 
 The four things the plugin claimed to do, actually done — and done for **any** codebase, not the
 one it was written against.
