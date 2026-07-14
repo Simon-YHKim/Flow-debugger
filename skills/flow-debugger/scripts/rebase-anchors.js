@@ -59,6 +59,18 @@ if (!base) {
 }
 
 const git = (args) => execFileSync('git', args, { cwd: appRoot, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+
+// A file that was MOVED between the base commit and now is not gone — the anchor should follow it
+// to its new home. git already tracked the rename; we just read it out once. oldPath -> newPath.
+const renameMap = new Map();
+try {
+  const out = git(['diff', '-M90%', '--name-status', `${base}`, 'HEAD']);
+  for (const line of out.split('\n')) {
+    const m = line.match(/^R\d+\t(.+)\t(.+)$/);
+    if (m) renameMap.set(m[1].replace(/\\/g, '/'), m[2].replace(/\\/g, '/'));
+  }
+} catch (e) { /* not a git range we can diff; renames simply won't be followed */ }
+
 const blobCache = new Map();
 function oldFile(rel) {
   if (blobCache.has(rel)) return blobCache.get(rel);
@@ -77,9 +89,10 @@ function nowFile(rel) {
 }
 
 const norm = s => String(s).replace(/\s+/g, ' ').trim();
-const stat = { same: 0, moved: 0, lost: 0, skipped: 0, nofile: 0 };
+const stat = { same: 0, moved: 0, lost: 0, skipped: 0, nofile: 0, renamed: 0 };
 const moved = [];
 const lost = [];
+const renamed = [];
 
 function rebaseRef(raw) {
   const refs = findRefs(raw);
@@ -88,13 +101,24 @@ function rebaseRef(raw) {
   if (!r.path || !r.line) return null;
   r.file = r.path;
   const before = oldFile(r.file);
-  const after = nowFile(r.file);
+  // the file may have been renamed since the base commit — if so, read it at its new path
+  const newPath = renameMap.get(r.file) || r.file;
+  const after = nowFile(newPath);
   if (!before || !after) { stat.nofile++; return null; }
 
+  const renamedTo = (newPath !== r.file) ? newPath : null;
   const oldTxt = before[r.line - 1];
-  if (oldTxt == null || !norm(oldTxt)) { stat.skipped++; return null; }   // blank then: nothing to trace
+  if (oldTxt == null || !norm(oldTxt)) {
+    // blank line: nothing to trace by content. But if the FILE moved, the path is still wrong.
+    if (renamedTo) { stat.renamed++; renamed.push(`${r.file} -> ${renamedTo} (line ${r.line} unchanged)`); return raw.replace(r.file, renamedTo); }
+    stat.skipped++; return null;
+  }
 
-  if (after[r.line - 1] != null && after[r.line - 1] === oldTxt) { stat.same++; return null; }  // still there
+  if (after[r.line - 1] != null && after[r.line - 1] === oldTxt) {
+    // the line is exactly where it was. If the file was renamed, follow the path; else nothing to do.
+    if (renamedTo) { stat.renamed++; renamed.push(`${r.file} -> ${renamedTo} (line ${r.line} unchanged)`); return raw.replace(r.file, renamedTo); }
+    stat.same++; return null;
+  }
 
   const exact = [];
   const loose = [];
@@ -118,10 +142,11 @@ function rebaseRef(raw) {
     lost.push(`${r.file}:${r.line}  ${norm(oldTxt).slice(0, 60)}`);
     return null;
   }
-  stat.moved++;
-  moved.push(`${r.file}:${r.line} -> :${hit}   ${norm(oldTxt).slice(0, 52)}`);
-  // only the number changes — anything else in the field (a symbol tail, a wrapper) stays as it is
-  return raw.replace(`${r.file}:${r.line}`, `${r.file}:${hit}`);
+  if (renamedTo) { stat.renamed++; renamed.push(`${r.file}:${r.line} -> ${renamedTo}:${hit}`); }
+  else stat.moved++;
+  moved.push(`${r.file}:${r.line} -> ${renamedTo ? renamedTo + ':' : ':'}${hit}   ${norm(oldTxt).slice(0, 52)}`);
+  // only path+line change — anything else in the field (a symbol tail, a wrapper) stays as it is
+  return raw.replace(`${r.file}:${r.line}`, `${newPath}:${hit}`);
 }
 
 const graph = JSON.parse(fs.readFileSync(graphPath, 'utf8'));
@@ -139,10 +164,12 @@ for (const s of graph) {
 console.log(`map built at ${base} · rebased onto the working tree`);
 console.log(`  unchanged     ${stat.same}\tthe line is still exactly where it was`);
 console.log(`  moved         ${stat.moved}\tsame line of code, new line number`);
+if (stat.renamed) console.log(`  followed rename ${stat.renamed}\tthe file itself moved; the anchor followed it`);
 console.log(`  rewritten     ${stat.lost}\tthe line itself is gone — these need a real re-scan`);
 if (stat.skipped) console.log(`  untraceable   ${stat.skipped}\tanchored at a blank line to begin with`);
 if (stat.nofile) console.log(`  file gone     ${stat.nofile}`);
 
+if (renamed.length) { console.log('\nfollowed renames:'); renamed.slice(0, 15).forEach(m => console.log('  ' + m)); if (renamed.length > 15) console.log(`  … +${renamed.length - 15}`); }
 if (moved.length) { console.log('\nmoved:'); moved.slice(0, 25).forEach(m => console.log('  ' + m)); if (moved.length > 25) console.log(`  … +${moved.length - 25}`); }
 if (lost.length) {
   console.log('\nREWRITTEN — I will not guess at these. Re-scan the screens that own them:');

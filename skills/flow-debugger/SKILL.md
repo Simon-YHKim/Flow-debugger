@@ -13,7 +13,7 @@ description: >-
   per-action diagnostic checklists, connection editing, and a bug-report
   generator that turns a vague "안 돼요" into a precise, VERIFIED file:line report.
   Produces the HTML plus a copy-paste fix and bug prompt for the assistant.
-version: 0.14.1
+version: 0.14.2
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 compatibility: [claude-code]
 author: Simon Kim
@@ -171,7 +171,8 @@ node scripts/verify-anchors.js <graph.json> <appRoot> --strict       # 그리고
 
 드리프트는 대개 무해하다 — import 한 줄 추가되면 아래가 전부 한 줄씩 밀린다. 그때 전면
 재스캔을 요구하는 지도는 아무도 다시 안 만든다. 그래서 `rebase-anchors` 는 **지도를 만든 커밋에서
-그 줄의 코드 내용을 읽어, 지금 파일에서 같은 줄을 다시 찾는다.** 옮겨간 줄은 여전히 같은 줄이다.
+그 줄의 코드 내용을 읽어, 지금 파일에서 같은 줄을 다시 찾는다.** 옮겨간 줄은 여전히 같은 줄이고,
+파일이 통째로 **이동/개명**돼도 (git rename 추적) 따라간다.
 
 - 그 줄이 **재작성/삭제**됐다면 **추측하지 않고 목록으로 뱉는다** — 그 화면만 재스캔하면 된다.
 - `make-handoff` 는 깨진 좌표가 남아 있으면 **핸드오프 생성을 거부한다**(`--allow-stale` 로만 강행).

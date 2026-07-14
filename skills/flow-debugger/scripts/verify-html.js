@@ -154,6 +154,104 @@ catch (e) {
     await page.click('#harnessBtn'); await page.waitForTimeout(300);
   }
 
+  // ---- 🗄 서버·데이터 (the second half of "system flow") -----------------------------------------
+  // A map whose system view stops at the tag name is a screen map wearing a server's coat. If the
+  // app has a backend, this layer must actually draw: screen -> server call -> function -> table.
+  let stack = { has: false };
+  if (await page.evaluate(() => typeof HAS_STACK !== 'undefined' && HAS_STACK)) {
+    await page.evaluate(() => setView('system'));
+    await page.click('#sysSeg button[data-s="stack"]');
+    await page.waitForTimeout(700);
+    stack = await page.evaluate(() => {
+      const drawn = t => [...nodes.values()].filter(n => n.type === t && document.querySelector(`[data-id="${CSS.escape(n.id)}"]`)).length;
+      const els = [...document.querySelectorAll('#nodes .node')].map(e => e.getBoundingClientRect());
+      let o = 0;
+      for (let i = 0; i < els.length; i++) for (let j = i + 1; j < els.length; j++) {
+        const a = els[i], b = els[j];
+        if (a.left < b.right - 2 && a.right - 2 > b.left && a.top < b.bottom - 2 && a.bottom - 2 > b.top) o++;
+      }
+      // and the panels must EXPLAIN them — a table card that cannot say whether RLS is on is decoration
+      const t = [...nodes.values()].find(n => n.type === 'svt');
+      const h = [...nodes.values()].find(n => n.type === 'svh');
+      let tablePanel = '', handlerPanel = '';
+      if (t) { selected = t.id; renderDetail(); tablePanel = document.getElementById('detailBody').innerText; }
+      if (h) { selected = h.id; renderDetail(); handlerPanel = document.getElementById('detailBody').innerText; }
+      selected = null;
+      // what the page KNOWS exists behind the screens — if this is non-empty the view must draw
+      const be = (typeof BACKEND !== 'undefined' && BACKEND && BACKEND.counts) ? BACKEND.counts : { handlers: 0, tables: 0 };
+      return { has: true, view: sysView, handlers: drawn('svh'), tables: drawn('svt'), calls: drawn('svapi'),
+        knownHandlers: be.handlers, knownTables: be.tables,
+        edges: document.querySelectorAll('#edges path').length, overlaps: o,
+        tableExplained: /행 수준 보안|RLS 없음|RLS/.test(tablePanel), handlerExplained: /코드 위치|로그인 확인/.test(handlerPanel) };
+    });
+    await page.evaluate(() => { const b = document.querySelector('#sysSeg button[data-s="nav"]'); if (b) b.click(); });
+    await page.waitForTimeout(400);
+  }
+
+  // ---- 🔀 순서 편집 — driven as a REAL DRAG, not by calling the function ------------------------
+  // The flagship feature of v0.11 shipped dead because the unit test called the library and the
+  // page's own lookup was broken. So this grabs a screen card with the mouse, drops it on an arrow,
+  // and then reads the EXPORT — the only artifact a coding agent ever sees.
+  let reorder = { ran: false };
+  if (await page.evaluate(() => typeof NAV !== 'undefined' && NAV.length > 2)) {
+    const plan = await page.evaluate(() => {
+      setView('system');
+      const rb = document.getElementById('reorderBtn');
+      if (!rb || rb.classList.contains('on')) return null;
+      rb.click();                                   // reorderMode on -> drawEdges() fills edgeHit
+      return null;
+    });
+    void plan;
+    await page.waitForTimeout(500);
+    const geo = await page.evaluate(() => {
+      if (!reorderMode || !edgeHit.length) return { err: 'reorder mode did not arm (edgeHit empty)' };
+      // a screen that is not either end of the arrow, and is on screen
+      for (const h of edgeHit) {
+        const c = [...nodes.values()].find(n => n.type === 'screen' && n.id !== h.from && n.id !== h.to
+          && document.querySelector(`[data-id="${CSS.escape(n.id)}"]`));
+        if (!c) continue;
+        const el = document.querySelector(`[data-id="${CSS.escape(c.id)}"]`);
+        const r = el.getBoundingClientRect();
+        const cx = c.x + (el.offsetWidth / 2), cy = c.y + ((c.h || 60) / 2);   // world centre of the card
+        return {
+          from: h.from, to: h.to, node: c.id,
+          fromRoute: nodes.get(h.from).data.route, toRoute: nodes.get(h.to).data.route, midRoute: c.data.route,
+          startX: r.left + r.width / 2, startY: r.top + Math.min(20, r.height / 2),   // grab the card's header
+          dx: (h.mx - cx) * view.k, dy: (h.my - cy) * view.k,
+        };
+      }
+      return { err: 'no third screen to splice' };
+    });
+    if (geo.err) reorder = { ran: false, err: geo.err };
+    else {
+      await page.mouse.move(geo.startX, geo.startY);
+      await page.mouse.down();
+      await page.mouse.move(geo.startX + geo.dx * 0.5, geo.startY + geo.dy * 0.5, { steps: 8 });
+      await page.mouse.move(geo.startX + geo.dx, geo.startY + geo.dy, { steps: 8 });
+      await page.waitForTimeout(150);
+      await page.mouse.up();
+      await page.waitForTimeout(400);
+      reorder = await page.evaluate((g) => {
+        const eff = effNav();
+        const has = (a, b) => eff.some(e => e.from === a && e.to === b);
+        const prompt = buildStackPrompt();
+        return {
+          ran: true,
+          edits: (state.navEdits || []).length,
+          spliced: has(g.from, g.node) && has(g.node, g.to),   // A->C->B
+          oldGone: !has(g.from, g.to),
+          // the export must name the BUTTON to retarget, with its code location — an abstract
+          // "reorder the graph" instruction is not something anyone can implement
+          promptHasEdit: prompt.includes(g.midRoute) && /버튼|이동/.test(prompt),
+          promptHasAnchor: /:\d+/.test(prompt),
+          // and it must not decide for the user what it was never told
+          promptAsks: /물어봐|의논/.test(prompt),
+        };
+      }, geo);
+      await page.evaluate(() => { clearNavEdits(); const rb = document.getElementById('reorderBtn'); if (rb && rb.classList.contains('on')) rb.click(); });
+    }
+  }
+
   if (flags.shot) { await page.screenshot({ path: flags.shot, fullPage: false }); }
   if (!flags['keep-open']) await browser.close();
 
@@ -171,14 +269,34 @@ catch (e) {
   console.log('bug flow         ' + bugFlow + '   (empty report must be gated, filled report must carry anchors)');
   console.log('delegation warn  ' + (deleg.trapped ? deleg.fired + '/' + deleg.trapped + ' fired, in report: ' + deleg.inReport : 'no traps in this map'));
   if (harnessOverlaps !== null) console.log('harness overlaps ' + harnessOverlaps);
+  console.log('서버·데이터 뷰    ' + (stack.has
+    ? `함수 ${stack.handlers} · 테이블 ${stack.tables} · 서버작업 ${stack.calls} · 엣지 ${stack.edges}`
+      + ` · 겹침 ${stack.overlaps} · 패널설명 표=${stack.tableExplained} 함수=${stack.handlerExplained}`
+    : '이 앱에는 서버 계층이 없음 (정상)'));
+  console.log('순서 편집(실드래그) ' + (reorder.ran
+    ? `A→C→B ${reorder.spliced} · 기존 A→B 제거 ${reorder.oldGone} · 편집 ${reorder.edits}건`
+      + ` · 프롬프트: 버튼지목 ${reorder.promptHasEdit} 좌표 ${reorder.promptHasAnchor} 의논요구 ${reorder.promptAsks}`
+    : 'not run — ' + (reorder.err || 'nav graph too small')));
   if (report) {
     console.log('\n--- exported bug report (first 24 lines) ---');
     console.log(report.split('\n').slice(0, 24).join('\n'));
   }
 
+  // A feature that is not asserted here is a feature that can die in the next build with every
+  // test still green. That has happened once; it is not allowed to happen to these two.
+  // if the page knows there is a backend, the view drawing NOTHING is the whole-layer-dead
+  // regression (the way the NUL byte killed delegation). Catch it against the embedded truth.
+  const stackBad = stack.has && (stack.overlaps > 0
+    || ((stack.knownHandlers + stack.knownTables) > 0 && (stack.handlers + stack.tables) === 0)
+    || (stack.tables > 0 && !stack.tableExplained) || (stack.handlers > 0 && !stack.handlerExplained));
+  const reorderBad = !!reorder.err
+    || (reorder.ran && !(reorder.spliced && reorder.oldGone && reorder.promptHasEdit
+      && reorder.promptHasAnchor && reorder.promptAsks));
+
   const fail = errors.length || R.overlaps || !R.nodes || bugFlow !== 'ok'
     || (deleg.trapped > 0 && (deleg.fired < deleg.trapped || deleg.inReport === false))
-    || (harnessOverlaps !== null && harnessOverlaps > 0);
+    || (harnessOverlaps !== null && harnessOverlaps > 0)
+    || stackBad || reorderBad;
   console.log('\n' + (fail ? 'FAIL' : 'PASS'));
   process.exit(fail ? 1 : 0);
 })();

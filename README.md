@@ -79,14 +79,28 @@ robocopy ".\skills\flow-debugger" "$env:USERPROFILE\.claude\skills\flow-debugger
 
 ## 쓰는 법
 
-스킬 발동 후 6단계 파이프라인을 돈다(프롬프트 전문: `skills/flow-debugger/references/scan-prompts.md`):
+스킬 발동 후 파이프라인을 돈다(프롬프트 전문: `skills/flow-debugger/references/scan-prompts.md`):
 
+0. **프리스캔** `prescan.js` — 프로덕션 렌더 경로·게이트·헬퍼 인덱스를 **먼저** 파악(위임/숨은 AI 함정 예방)
 1. **스캔** 화면 → 동작 → api/ai/앵커 추출 → `merge-readers.js`로 병합(+스키마 검사)
 2. **한국어 보강** titleKo/groupKo/summaryKo/actionKo/plain + 용어집
 3. **디버그 주석** risks / checklist / failureModes
 4. **앵커 검증·보정** `verify-anchors.js` ← **정밀도의 전부. 건너뛰지 말 것**
 5. **스크린샷**(선택) `capture-shots.js` → `embed-shots.js`
-6. **빌드** `build.js`로 토큰 주입 + JS 자가검증 → `flow-debugger.html`
+6. **빌드** `build.js`로 토큰 주입 + 백엔드 스캔 + 지문 기록 + JS 자가검증 → `flow-debugger.html`
+7. **핸드오프** `make-handoff.js` — 새 세션이 읽는 `FLOW-HANDOFF.md` + 조회용 `flow-map.json` + 지문
+
+앱이 바뀌면 지도는 낡는다. 그때:
+
+```bash
+node scripts/check-stale.js   <graph.json> <앱루트> --strict     # 낡았나? (CI 에 넣을 것)
+node scripts/rebase-anchors.js <graph.json> <앱루트> --from <커밋>  # 낡았으면 좌표를 옮긴다(재스캔 없이)
+node scripts/verify-anchors.js <graph.json> <앱루트> --strict     # 그리고 다시 증명한다
+```
+
+`rebase-anchors` 는 지도를 만든 커밋의 **그 줄 코드**를 읽어 지금 파일에서 같은 줄을 다시 찾는다 —
+import 한 줄 추가로 아래가 전부 밀려도, 파일이 통째로 **이동/개명**돼도 좌표가 따라간다.
+줄 자체가 **재작성**된 것만 목록으로 뱉고(추측 금지), 그 화면만 재스캔한다.
 
 직접 돌리는 예 (스킬 폴더 기준):
 
@@ -99,7 +113,7 @@ node scripts/build.js assets/flow-debugger.template.html \
   Output/screenmap.debug.json Output/glossary.ko.json Output/shots.json \
   Output/flow-debugger.html --app-root <앱루트>
 
-# 라이브 검증(선택): 겹침0 · pageerror0 · 빈 신고서 차단 · 템플릿 누수 없음
+# 라이브 검증(선택): 겹침0 · pageerror0 · 위임경고 발화 · 서버뷰 · 순서편집(실드래그) · 템플릿 누수 없음
 npm install && node scripts/verify-html.js Output/flow-debugger.html --template assets/flow-debugger.template.html
 ```
 
@@ -122,6 +136,13 @@ npm install && node scripts/verify-html.js Output/flow-debugger.html --template 
 - **코드 위치 패널**: 카드마다 검증 결과와 이유를 한국어로
 - **시스템 스펙**(📋): 스택·규모·서버작업·AI·위험 프로필 + **코드 위치 신뢰도**
 - **AI 하네스**: 이 앱의 AI 호출에서 파생한 배선(목적 → 경유 → 모델). AI가 없으면 버튼도 없음
+- **🌐 시스템 플로우 = 2층**
+  - `↔ 이동 그래프` + **🔀 순서 편집**: 화면을 화살표 위에 드롭하면 그 사이에 끼워짐(A→B 에 C → **A→C→B**).
+    화살표는 **버튼**이므로, 바뀐 순서는 *"홈의 『담기』 버튼(src/…:120)이 이제 C로 가야 해"* 라는 **실제 코드 변경 요청**으로 나감
+  - `🗄 서버·데이터`: **화면 → 서버작업 → 서버함수 → 테이블(RLS·정책)**. 앱의 서버 코드·스키마에서 파생
+    (Supabase 엣지·Next 라우트·Express·Netlify / SQL·Prisma·Drizzle). 서버 없는 앱이면 안 뜸
+- **내보내는 프롬프트가 "의논하라"고 요구**: LLM 을 부르지 않고 **명령 패턴**만 쓴다. 방법이 둘 이상이면 바로 고르지 말고
+  장단점·영향 범위를 정리해 사용자와 정한 뒤 진행하라고 지시(플러그인 자체는 AI 호출 없음)
 - **연결 편집 / 노드 추가 / 프롬프트 스택**(수정 요청을 프롬프트로 모아 복사)
 - 겹침 방지 자동 배치, 한국어, 미니맵/줌, 그룹 필터, localStorage 저장
 
@@ -136,17 +157,24 @@ Flow-debugger/
     package.json                         playwright (캡처·라이브검증용 devDep)
     assets/flow-debugger.template.html   토큰: __GRAPH_JSON__ __GLOSSARY_JSON__ __SHOTS_JSON__
                                                __STACK_JSON__ __ANCHORS_JSON__ __HARNESS_JSON__
-                                               __APP_NAME__ __MODE__
+                                               __BACKEND_JSON__ __STAMP_JSON__ __APP_NAME__ __MODE__
     scripts/
       lib/anchors.js        앵커 파싱·해석·검증 엔진 (이 도구의 심장)
       verify-anchors.js     앵커를 실제 소스트리에 대조·보정  ← 4단계
       merge-readers.js      리더 출력 병합 + 스키마 검사
       apply-anchors.js      RESCAN 패치 병합 (한국어·위험 보존)
+      prescan.js            프로덕션 렌더 경로·게이트·헬퍼 인덱스 (0단계)
       capture-shots.js      라우트별 스크린샷
       embed-shots.js        base64 임베드
-      build.js              토큰 주입 + 앵커 감사 + JS 자가검증
-      verify-html.js        라이브 검증(브라우저)
-      self-test.js          앵커 엔진 단위 테스트 (node만, 25 케이스)
+      lib/backend.js        서버 핸들러·테이블·RLS 스캔 → 서버·데이터 뷰
+      lib/fingerprint.js    지문(커밋 + 앵커한 파일 해시)
+      lib/reach.js          렌더 모드·게이트·헬퍼(AI SDK import) 탐지
+      build.js              토큰 주입 + 앵커 감사 + 백엔드 + 지문 + JS 자가검증
+      check-stale.js        지도가 낡았는지 숫자로 답함 (CI 용)
+      rebase-anchors.js     코드가 움직이면 좌표를 따라 옮김(이동/개명/줄밀림)
+      make-handoff.js       새 세션용 핸드오프 3종 생성
+      verify-html.js        라이브 검증(브라우저): 위임경고·서버뷰·순서편집까지
+      self-test.js          앵커 엔진 + 드리프트 복구 단위 테스트 (node만, 59 케이스)
     references/
       scan-prompts.md       SCAN / ENRICH / GLOSSARY / ANNOTATE / RESCAN
       capture-shots.md      캡처 뜨는 법
@@ -158,7 +186,7 @@ Flow-debugger/
 
 ```bash
 cd skills/flow-debugger
-node scripts/self-test.js      # 앵커 엔진 25 케이스, 브라우저·네트워크 불필요
+node scripts/self-test.js      # 앵커 엔진 + 드리프트 복구 59 케이스, 브라우저·네트워크 불필요
 npm install && node scripts/verify-html.js <built.html> --template assets/flow-debugger.template.html
 ```
 

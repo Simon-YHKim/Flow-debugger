@@ -351,6 +351,18 @@ eq('a rewritten line is reported, not invented', rebaseExit, 1);
 eq('and the anchor is left alone rather than moved somewhere wrong',
   JSON.parse(fs.readFileSync(g3path, 'utf8'))[0].actions[0].file, 'src/Home.tsx:4');
 
+// a file that MOVED is not a file that is gone — the anchor follows it to its new path.
+// put the base content back (so the moved file's line still matches), then git-mv and commit.
+w3('src/Home.tsx', ['import React from "react";', '', 'export function Home() {', '  const handleSave = () => save();', '  return <B onPress={handleSave} />;', '}'].join('\n') + '\n');
+fs.mkdirSync(path.join(app3, 'src/screens'), { recursive: true });   // this git does not auto-create the mv target dir
+g3run('mv', '-f', 'src/Home.tsx', 'src/screens/Home.tsx');     // same content, new path (one commit records the rename)
+g3run('add', '-A'); g3run('commit', '-qm', 'move Home');
+fs.writeFileSync(g3path, JSON.stringify([{ route: '/', group: 'g',
+  actions: [{ action: 'Save', symbol: 'handleSave', file: 'src/Home.tsx:4' }] }]), 'utf8');
+execFileSync(process.execPath, [path.join(__dirname, 'rebase-anchors.js'), g3path, app3, '--from', baseSha], { encoding: 'utf8', stdio: 'pipe' });
+eq('the anchor followed the file to its new path',
+  JSON.parse(fs.readFileSync(g3path, 'utf8'))[0].actions[0].file, 'src/screens/Home.tsx:4');
+
 fs.rmSync(app2, { recursive: true, force: true });
 fs.rmSync(app3, { recursive: true, force: true });
 

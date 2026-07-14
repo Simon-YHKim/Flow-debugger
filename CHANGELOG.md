@@ -3,6 +3,32 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.14.2] - 2026-07-15
+
+Two features shipped in 0.14 without a test that could catch them dying, and one that gave up too
+early. Fixed all three — the way this tool is supposed to prevent, by proving each against a
+deliberately broken build.
+
+### Added — the server view and drag-reorder are now asserted end-to-end
+`verify-html.js` drives both in a real browser: it opens 🗄 서버·데이터 and checks the layer draws
+(against the page's own embedded backend counts, so a whole-layer-dead regression fails), that the
+table/handler panels actually explain RLS and auth; and it grabs a screen card **with the mouse**,
+drops it on an arrow, and asserts the result is A→C→B with an export that names the button, its
+`file:line`, and the "먼저 물어봐줘" guard. Proven by sabotage: nulling `spliceInto` and emptying the
+server graph both turn the run RED. This is the gap that let v0.11's delegation warning ship dead
+under green tests.
+
+### Added — drift repair follows a file that was moved or renamed
+`rebase-anchors.js` used to give up when a file's path changed ("file gone"). It now reads git's
+rename record between the map's commit and HEAD and carries the anchor to the file's new home,
+line and all. 42 → **59 self-tests** (drift: line-shift, rewritten-line-not-guessed, and now
+follow-a-rename).
+
+### Fixed — docs had drifted from the tool
+README described a 6-step pipeline and 25 tests; it now documents prescan, the backend scan, the
+fingerprint, check-stale/rebase-anchors, the two-layer system view, and the no-LLM "discuss first"
+prompt.
+
 ## [0.14.1] - 2026-07-14
 
 The four things the plugin claimed to do, actually done — and done for **any** codebase, not the
