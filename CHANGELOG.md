@@ -3,6 +3,59 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.14.0] - 2026-07-14
+
+The four things the plugin claimed to do, actually done — and done for **any** codebase, not the
+one it was written against.
+
+### Added — ④ the map now says when it is stale
+`scripts/lib/fingerprint.js` + `scripts/check-stale.js`. Every claim this tool makes is a claim
+about source code at a moment in time. The moment the app changes, the map drifts — silently — and
+keeps handing out coordinates that *used to be* right. That is the exact failure the anchor tiers
+exist to prevent, and the map itself had no such discipline.
+`build.js` now records the evidence the map was built from (the commit, and the content hash of
+every file it anchors into) and `check-stale.js` answers *what changed under this map?* with a
+number rather than an opinion. **Put it in CI.** The page and both exported prompts now open by
+stating the commit they rest on.
+
+### Added — ② a system flow that actually reaches the system
+`scripts/lib/backend.js`. The map used to stop at the tag: a screen called `edge:send-mail` and
+then **nothing** — what that function does, which tables it writes, whether a policy will refuse
+it, all invisible. "System flow" was screen flow with the server's name on a card.
+🌐 시스템 플로우 now has two layers: `↔ 이동 그래프` and **`🗄 서버·데이터`** —
+**화면 → 서버 작업 → 서버 함수 → 테이블(RLS·정책)**. Handlers are found wherever the ecosystem puts
+them (Supabase edge functions, Next route handlers, Express/Fastify, Netlify/Cloud functions) and
+the schema wherever it lives (SQL migrations, Prisma, Drizzle). On the reference app: 9 handlers,
+42 tables, 80 tags linked, and one handler with **no auth guard** surfaced.
+
+### Added — ③ drag a screen onto an arrow to reorder the flow
+🔀 순서 편집 in the nav view. Drop C onto the A→B arrow and the order becomes **A→C→B**.
+But an arrow between screens is not an abstract edge — **it is a button**. So the export does not
+say "reorder the graph"; it says *"the 『담기』 button on 홈 (src/app/home.tsx:120 ✔) must now open
+미리보기, and 미리보기 has no way to reach 담기 yet"*. That is what a developer implements.
+When several buttons lead to the same screen, the tool **does not decide for you** — it lists them
+and the prompt says *"나는 전부 바꾸라고 한 적 없어. 먼저 물어봐줘."*
+
+### Added — the exported prompt asks the agent to think, then discuss
+Per request, no LLM is called from the plugin. Instead every export now opens with:
+*"먼저 어떻게 처리하는 게 최선인지 생각해줘. 방법이 두 가지 이상이면 바로 고르지 말고, 장단점과
+영향 범위를 정리해서 나에게 물어봐. 내가 동의한 다음에 고치기 시작해."*
+
+### Fixed — ① the captures were built and then left out
+58 screenshots existed and the committed map shipped with **zero**. They are in the build now.
+
+### Fixed — GENERALITY: it only worked on the app it was written for
+- **The AI gateway was a list of one product's function names** (`callGemini`, `embedTexts`…), so
+  an app whose gateway is called `askAI()` simply had "no AI". It is now **discovered from the
+  app's own imports**: a file that imports a model SDK (OpenAI, Anthropic, Google, Cohere,
+  Mistral, Bedrock, LangChain…) or hits a model endpoint *is* the gateway, whatever it is called.
+- **Backend recognition was Supabase-only.** Prisma, Drizzle, Kysely, Knex, Mongoose, Firebase,
+  raw SQL, axios and GraphQL are recognised now.
+- Deleted `extract-prompt.js` — an undocumented leftover with one app's routes hard-coded in it.
+- `self-test.js` gained a synthetic **Next + Prisma + OpenAI** app: the suite now proves the tool
+  finds a gateway it was never told the name of, a route handler, a Prisma schema, and a stale map
+  — on a codebase that looks nothing like the one this was built against. 42 → **52 tests**.
+
 ## [0.13.1] - 2026-07-14
 
 ### Fixed — the handoff was a dump, not a handoff

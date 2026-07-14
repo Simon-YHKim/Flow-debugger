@@ -119,23 +119,53 @@ function scanGates(appRoot, graph) {
 // ---------------------------------------------------------------- helper capabilities
 // What a helper REALLY does. `createRecord()` looks like a plain save and calls an embedding
 // model three frames down.
+//
+// GENERALITY: these must not be one backend's idioms. The first version only knew Supabase's
+// five primitives and one app's AI function names — so a Prisma/Drizzle/REST app scanned as a
+// blank, and an app whose LLM gateway is called `askAI()` had no AI at all. The recognisers
+// below cover the common ORMs and clients; the AI gateway is DISCOVERED from the app's own
+// imports (see aiGateways) rather than named in advance.
 const CAP_PATTERNS = [
+  // Supabase
   [/\.from\(\s*['"]([\w.]+)['"]\s*\)\s*\.\s*(select|insert|update|delete|upsert)/g, (m) => `db:${m[1]}:${m[2]}`],
   [/\.rpc\(\s*['"]([\w.]+)['"]/g, (m) => `rpc:${m[1]}`],
   [/functions\.invoke\(\s*['"]([\w.-]+)['"]/g, (m) => `edge:${m[1]}`],
   [/storage\.from\(\s*['"]([\w.-]+)['"]/g, (m) => `storage:${m[1]}`],
   [/\bauth\.(signIn\w*|signUp|signOut|getSession|getUser|resetPasswordForEmail|updateUser)/g, (m) => `auth:${m[1]}`],
+  // Prisma
+  [/\bprisma\.(\w+)\.(findMany|findUnique|findFirst|create|createMany|update|updateMany|upsert|delete|deleteMany|count|aggregate)/g,
+    (m) => `db:${m[1]}:${m[2]}`],
+  // Drizzle / Kysely / knex-style query builders
+  [/\bdb\s*\.\s*(select|insert|update|delete)\s*\(\s*\)?\s*\.?\s*(?:from|into)\s*\(\s*(\w+)/g, (m) => `db:${m[2]}:${m[1]}`],
+  [/\bknex\(\s*['"](\w+)['"]\s*\)\s*\.\s*(select|insert|update|del|delete)/g, (m) => `db:${m[1]}:${m[2]}`],
+  // Mongoose / Mongo
+  [/\b([A-Z]\w+)\.(find|findOne|findById|create|insertMany|updateOne|updateMany|deleteOne|deleteMany|aggregate)\s*\(/g,
+    (m) => `db:${m[1]}:${m[2]}`],
+  [/\bcollection\(\s*['"](\w+)['"]\s*\)\s*\.\s*(find|insertOne|insertMany|updateOne|deleteOne)/g, (m) => `db:${m[1]}:${m[2]}`],
+  // Firebase
+  [/\b(?:doc|collection)\(\s*\w+\s*,\s*['"]([\w/]+)['"]/g, (m) => `db:${m[1]}:read`],
+  // raw SQL
+  [/\b(?:query|execute|sql)\s*\(\s*[`'"]\s*(SELECT|INSERT|UPDATE|DELETE)\s+[\s\S]{0,40}?\b(?:FROM|INTO|UPDATE)\s+["'`]?(\w+)/gi,
+    (m) => `db:${m[2]}:${m[1].toLowerCase()}`],
+  // HTTP clients
+  [/\baxios\.(get|post|put|patch|delete)\s*\(\s*[`'"]([^`'"]+)/g, (m) => `rest:${m[1].toUpperCase()}:${m[2].slice(0, 40)}`],
+  [/\bfetch\(\s*[`'"]([^`'"]+)[`'"]\s*,\s*\{[^}]*method\s*:\s*['"](\w+)/g, (m) => `rest:${m[2].toUpperCase()}:${m[1].slice(0, 40)}`],
   [/\bfetch\(\s*[`'"]([^`'"]+)[`'"]/g, (m) => `http:${m[1].slice(0, 48)}`],
+  // GraphQL
+  [/\b(?:useQuery|useMutation|gql)\s*[(`]\s*(?:query|mutation)?\s*(\w+)?/g, (m) => `graphql:${m[1] || 'op'}`],
+  // auth libs
+  [/\b(signIn|signOut|useSession|getServerSession|currentUser|auth)\(\)/g, (m) => `auth:${m[1]}`],
 ];
-// `classify\w*` / `transcribe\w*` matched ordinary error-classifier functions and marked them
-// as AI — a handoff that says a URL cleaner calls a language model is worse than no handoff,
-// because the reader stops trusting the whole file. Name the ACTUAL entry points; the call-graph
-// propagation below finds everything downstream of them (that is how `createRecord()` is caught).
-const AI_PATTERNS = new RegExp(
-  '\\b(callGemini|callAdvisor|embedTexts|embedAndStoreRecord|transcribeAudio|generateContent' +
-  '|createCompletion|generateText|invokeModel)\\b' +
-  '|\\b(openai|anthropic|genai|GoogleGenAI)\\s*\\.' +
-  '|chat\\.completions'
+
+// The packages an app imports when it talks to a model. If a file imports one of these, the
+// functions IT exports are the app's AI gateway — whatever they happen to be called. This is
+// how `askAI()` in someone else's codebase gets found without us knowing the name.
+const AI_SDK = /(^|['"/@])(openai|@anthropic-ai\/|@google\/genai|@google\/generative-ai|@google-cloud\/aiplatform|cohere|mistralai|replicate|together-ai|groq-sdk|@aws-sdk\/client-bedrock|langchain|llamaindex|ai)(\/|$|['"])/;
+// direct call shapes, for files that hit an HTTP model API without an SDK
+const AI_CALL = new RegExp(
+  '\\bchat\\.completions\\b|\\bmessages\\.create\\b|\\bgenerateContent\\b|\\bgenerateText\\b' +
+  '|\\bembeddings?\\.create\\b|\\bcreateCompletion\\b|\\binvokeModel\\b|\\bstreamText\\b' +
+  '|api\\.(?:openai|anthropic)\\.com|generativelanguage\\.googleapis\\.com'
 );
 
 // Every exported function in the app's non-screen source, with the capabilities its BODY uses.
@@ -145,6 +175,18 @@ function indexHelpers(appRoot, opts) {
   const files = walk(appRoot, appRoot, []).filter(f =>
     /^(src\/)?(lib|services?|api|data|db|utils?|hooks|store|features)\//i.test(f) ||
     (/^src\//.test(f) && !/^src\/(app|screens|pages|components|views|routes)\//i.test(f)));
+  // Which files import a model SDK? Whatever THEY export is this app's AI gateway — we do not
+  // need to know it is called `callGemini` or `askAI`. This is the generality fix: the previous
+  // version hard-coded one product's function names, so any other app had "no AI".
+  const aiFiles = new Set();
+  for (const f of files) {
+    const lines = readLines(appRoot, f);
+    if (!lines) continue;
+    const head = lines.slice(0, 40).join('\n');
+    const importedSdk = (head.match(/(?:from\s+|require\(\s*)['"]([^'"]+)['"]/g) || [])
+      .some(x => AI_SDK.test(x));
+    if (importedSdk || AI_CALL.test(lines.join('\n'))) aiFiles.add(f);
+  }
   const idx = {};
   for (const f of files.slice(0, o.maxFiles || 600)) {
     const lines = readLines(appRoot, f);
@@ -170,7 +212,9 @@ function indexHelpers(appRoot, opts) {
         re.lastIndex = 0;
         let m; while ((m = re.exec(body))) apis.add(mk(m));
       }
-      const ai = AI_PATTERNS.test(body);
+      // AI if this file talks to a model SDK/endpoint at all, and this function's body actually
+      // performs a call (a type-only helper in an AI file is not itself an AI call).
+      const ai = aiFiles.has(f) && (AI_CALL.test(body) || /\b\w+\s*\.\s*(chat|messages|models|embeddings|completions)\b/.test(body));
       // Which other helpers does it call? Propagating through EVERY lowercase call was how
       // `normalizeAnalyticsUrl()` (a URL string cleaner) ended up listed as calling an AI:
       // a name collision with some indexed helper. A callee only counts if this file actually

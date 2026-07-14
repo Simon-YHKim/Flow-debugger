@@ -119,6 +119,10 @@
 
   /* white-space:nowrap — a Korean group name ("인증·시작") wrapped to one glyph per line
      inside the flex box the moment the label stopped being a short English id. */
+  .navedge.chg{stroke:#7fd1b9;stroke-width:2.6;stroke-dasharray:7 4}
+  .navedge.drop{stroke:#d8a657;stroke-width:5;filter:drop-shadow(0 0 6px rgba(216,166,87,.7))}
+  body.reorder .node.screen{cursor:grab}
+  body.reorder .node.screen:active{cursor:grabbing}
   .glabel{position:absolute;font-size:11.5px;font-weight:700;letter-spacing:.04em;color:var(--faint);display:flex;align-items:center;gap:7px;white-space:nowrap}
   .glabel .gd{width:10px;height:10px;border-radius:3px}
 
@@ -228,9 +232,14 @@
       <button data-v="system" title="앱 전체가 어떻게 이어지는지 — 화면 사이 이동 그래프와 AI 배선">🌐 시스템 플로우</button>
     </div>
     <select class="scrpick" id="scrPick" title="볼 화면 고르기"></select>
+    <div class="viewseg" id="sysSeg" style="display:none">
+      <button data-s="nav" class="on" title="화면들이 버튼으로 어떻게 이어지는지">↔ 이동 그래프</button>
+      <button data-s="stack" title="화면 뒤에 무엇이 있는지 — 서버 작업 → 서버 함수 → 테이블(RLS)">🗄 서버·데이터</button>
+    </div>
     <input class="search" id="search" placeholder="화면·기능 검색">
     <button class="btn" id="aiOnly">AI 기능만</button>
     <button class="btn" id="harnessBtn" title="이 앱의 AI가 어떻게 엮여 도는지 — 스캔한 AI 호출에서 뽑은 배선 (목적 → 경유 → 모델)">AI 하네스</button>
+    <button class="btn" id="reorderBtn" title="화면 순서 바꾸기 — 화면을 화살표 위에 떨구면 그 사이에 끼워집니다 (A→B 에 C를 떨구면 A→C→B). 바뀐 순서는 수정 요청 프롬프트로 나갑니다">🔀 순서 편집</button>
     <button class="btn" id="expandAll">전체 펼치기</button>
     <button class="btn" id="collapseAll">모두 접기</button>
     <button class="btn" id="addNode" title="새 화면·동작·메모 노드를 추가 — '이런 게 있어야 해요'를 흐름도에 얹고 프롬프트로 보내기">＋ 노드 추가</button>
@@ -314,6 +323,17 @@ const STACK = (__STACK_JSON__)||"";
    bug report say which file:line is CONFIRMED and which is a guess — an unverified
    coordinate sends a coding agent to "fix" a file production never renders. */
 const ANCHORS = (__ANCHORS_JSON__)||{checked:false,index:{}};
+/* STAMP = what this map rests on: the commit it was built from and how many source files it
+   anchors into. A map that cannot say what it rests on cannot be checked, and an unchecked map
+   drifts silently — it keeps handing out coordinates that used to be right. The page states its
+   basis; `check-stale.js` answers what changed under it. */
+const STAMP = (__STAMP_JSON__)||null;
+/* BACKEND = what is BEHIND the screens: the server handlers each api tag actually reaches, the
+   tables they touch, and whether RLS guards them. Without it the "system flow" stopped at the
+   tag — a screen called `edge:send-mail` and then nothing: what that function does, which tables
+   it writes, whether a policy will refuse it, all invisible. Derived from the app's own server
+   code; null when the app has none (a pure client). */
+const BACKEND = (__BACKEND_JSON__)||null;
 /* HARNESS_DATA = optional hand-authored AI wiring for THIS app (<graph>.harness.json).
    When absent the AI 하네스 view is derived from the AI calls in the graph — it never
    invents a pipeline the scanned app does not have. */
@@ -597,7 +617,7 @@ GROUPS.forEach((g,i)=>{
 const LSKEY="flowdbg-v5:"+(()=>{let h=0;const s=GRAPH.map(x=>(x&&x.route)||"").join("|");for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0;return(h>>>0).toString(36);})();
 /* pos = catalog-mode drag positions, navPos = 화면 흐름-mode drag positions —
    separate maps so dragging in one mode never corrupts the other's layout. */
-let state={pos:{},navPos:{},edits:{},expanded:{},groupsOff:{},globalNote:"",addedEdges:[],removedEdges:[],bugs:{},navOpen:{},promptExtra:[],dockOpen:true,addedNodes:[]};
+let state={pos:{},navPos:{},edits:{},expanded:{},groupsOff:{},globalNote:"",addedEdges:[],removedEdges:[],bugs:{},navOpen:{},promptExtra:[],dockOpen:true,addedNodes:[],navEdits:[]};
 try{state={...state,...JSON.parse(localStorage.getItem(LSKEY)||"{}")};}catch(e){}
 const save=()=>localStorage.setItem(LSKEY,JSON.stringify(state));
 let selected=null,hoverId=null,aiOnly=false,searchTerm="",tab="bug"; // tab = 우측 패널(버그신고/수정요청). 설명은 좌측 고정 패널.
@@ -624,6 +644,7 @@ function matchSearch(n){ if(!searchTerm)return true;const t=searchTerm.toLowerCa
                           ran downward for a whole screenful before it ever went right.
    시스템 플로우 (system)  the whole app at once: 화면→화면 이동 그래프, and the AI wiring.     */
 let viewMode="screen";      // 'screen' | 'system'
+let sysView="nav";          // inside 시스템 플로우: 'nav'(화면 이동) | 'stack'(서버·데이터)
 let focusId=null;           // the screen at the root of 화면별 플로우
 function focusScreen(){ return (focusId&&nodes.get(focusId))?focusId:(screens[0]&&screens[0].id)||null; }
 function setFocus(id,keepSel){
@@ -636,6 +657,14 @@ function setFocus(id,keepSel){
 }
 function visibleNodes(){ const vis=new Set();
   if(harnessMode){ HARNESS.nodes.forEach(n=>vis.add(n.id)); return vis; }
+  if(viewMode==="system"&&sysView==="stack"&&HAS_STACK){
+    /* 서버·데이터: only the screens that actually reach the server, plus the layers behind them */
+    const touch=new Set();
+    SV.edges.forEach(([a,b])=>{ if(String(a).startsWith("s:"))touch.add(a); });
+    screens.forEach(s=>{ if(groupOn(s.group)&&matchSearch(nodes.get(s.id))&&touch.has(s.id))vis.add(s.id); });
+    SV.nodes.forEach(n=>vis.add(n.id));
+    return vis;
+  }
   if(viewMode==="system"){ screens.forEach(s=>{if(groupOn(s.group)&&matchSearch(nodes.get(s.id)))vis.add(s.id);}); return vis; }
   // 화면별 플로우: just this screen's tree — a left-to-right cascade, nothing stacked below it
   const f=focusScreen(); if(!f)return vis;
@@ -674,6 +703,9 @@ function addKidsRec(id,vis){ visKids(id).forEach(k=>{ if(vis.has(k))return; vis.
    spend cap, audit log) supplies them itself in a sibling `<graph>.harness.json`
    ({nodes:[{id,hx,hy,color,label,role,detail}], edges:[[from,to]]}). */
 let harnessMode=false;
+/* 순서 편집: drag a screen ONTO an arrow to splice it into that chain (A->B becomes A->C->B).
+   Only in 시스템 플로우 — that is the only view where the screen-to-screen order is on screen. */
+let reorderMode=false, dropEdge=null, edgeHit=[];
 /* navMode is now "system view, showing the screen-to-screen graph" — kept as a variable so
    every layout/edge/path check that already reads it keeps working unchanged. */
 let navMode=false;
@@ -707,6 +739,45 @@ function buildHarness(){
     if(v){ add(p,v); add(v,m); } else { add(p,m); } });
   return {nodes:N,edges:E};
 }
+/* ---------- 서버·데이터 흐름 (시스템 플로우의 두 번째 층) ----------
+   화면 → 서버 작업(태그) → 그 작업을 처리하는 서버 함수 → 그 함수가 건드리는 테이블(RLS).
+   Nothing here is invented: every node comes from the app's own server code and schema. An app
+   with no server side simply has no second layer, and the toggle does not appear. */
+const SV={nodes:[],edges:[]};
+let HAS_STACK=false;
+(function buildStack(){
+  if(!BACKEND||!(BACKEND.counts&&(BACKEND.counts.handlers||BACKEND.counts.tables)))return;
+  const L=BACKEND.links||{}, H=BACKEND.handlers||{}, T=BACKEND.tables||{};
+  const usedTags=new Map();           // tag -> Set(screen ids)
+  screens.forEach(s=>(s.actions||[]).forEach(a=>(a.apis||[]).forEach(t=>{
+    if(!usedTags.has(t))usedTags.set(t,new Set()); usedTags.get(t).add(s.id); })));
+  if(!usedTags.size)return;
+  const E=[],mk=(id,o)=>{ if(!nodes.has(id)){const n=Object.assign({id},o); nodes.set(id,n); SV.nodes.push(n);} return nodes.get(id); };
+  const tables=new Set(), handlers=new Set();
+  usedTags.forEach((scrs,tag)=>{
+    const k=tag.split(":")[0], link=L[tag]||{};
+    const aid="sv:api:"+tag;
+    mk(aid,{type:"svapi",kind:k,data:{tag,kind:k,link},h:52});
+    scrs.forEach(sid=>E.push([sid,aid]));
+    if(link.handler&&H[link.handler]){
+      const hid="sv:h:"+link.handler; handlers.add(link.handler);
+      mk(hid,{type:"svh",data:Object.assign({name:link.handler},H[link.handler]),h:70});
+      E.push([aid,hid]);
+      Object.keys(H[link.handler].tables||{}).forEach(tb=>{
+        const tid="sv:t:"+tb; tables.add(tb);
+        mk(tid,{type:"svt",data:Object.assign({name:tb},T[tb]||{}),h:52});
+        E.push([hid,tid]);
+      });
+    }
+    if(link.table){
+      const tid="sv:t:"+link.table; tables.add(link.table);
+      mk(tid,{type:"svt",data:Object.assign({name:link.table},T[link.table]||{}),h:52});
+      E.push([aid,tid]);
+    }
+  });
+  SV.edges=E; HAS_STACK=SV.nodes.length>0;
+})();
+
 const HARNESS=buildHarness();
 const HAS_HARNESS=HARNESS.nodes.length>0;
 const HARNESS_DERIVED=!(HARNESS_DATA&&Array.isArray(HARNESS_DATA.nodes)&&HARNESS_DATA.nodes.length);
@@ -722,6 +793,22 @@ const colX=n=>COLX[n.type]||0;
 /* The harness view had NO de-overlap pass — y came from a constant 96px pitch chosen before
    any card existed, while card height grows with the AI purpose's `desc` (which ENRICH is
    asked to write). Stack each column by MEASURED height instead. */
+/* 화면 → 서버작업 → 서버함수 → 테이블. Four measured columns, stacked by real height. */
+function packStack(vis){
+  groupLabelPos=[];
+  const COL=[[],[],[],[]];
+  vis.forEach(id=>{const n=nodes.get(id); if(!n)return;
+    if(n.type==="screen")COL[0].push(n); else if(n.type==="svapi")COL[1].push(n);
+    else if(n.type==="svh")COL[2].push(n); else if(n.type==="svt")COL[3].push(n);});
+  const X=[0,380,760,1140], LBL=["화면","서버 작업","서버 함수","테이블"];
+  COL.forEach((list,i)=>{
+    if(!list.length)return;
+    list.sort((a,b)=>String(a.id).localeCompare(String(b.id)));
+    let y=46;
+    list.forEach(n=>{ n.x=X[i]; n.y=y; y+=(n.h||60)+14; });
+    groupLabelPos.push({label:LBL[i]+" ("+list.length+")",color:["#8b93ff","#6fb6ff","#e0a35c","#7fd1b9"][i],x:X[i],y:12});
+  });
+}
 function packHarness(vis){
   const cols=new Map();
   vis.forEach(id=>{const n=nodes.get(id); if(!n||n.type!=="h")return;
@@ -768,6 +855,19 @@ function nodeHtml(n){
       <div class="shead"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><div class="stitle">${esc(scrTitle(s2))}</div><span class="stype" style="--gc:${gc}">${TYPE_KO[ty]||""}</span><span class="ex">${open?"▾":"▸"}</span></div>
       ${shot}<div class="pad"><div class="sub">${esc(s2.summaryKo||"")}</div><div class="badges"><span class="pill">${nAct}개 동작</span>${nAi?`<span class="pill ai">AI ${nAi}</span>`:""}<span class="pill" style="color:var(--accent);border-color:rgba(139,147,255,.45)">${open?"펼침 — 하위 기능":"눌러서 펼치기"}</span></div>
       <button class="gobtn" data-jump="${esc(n.data.sid)}">원본 카드로 →</button></div></div>`;}
+  if(n.type==="svapi"){const d=n.data,c=kindColor(d.kind);
+    return `<div class="node api${sel}${lit}" data-id="${n.id}" style="width:300px;border-left:3px solid ${c}"><div class="pad">
+      <div class="t"><span class="kd" style="background:${c}"></span><span>${esc(apiKo(d.tag))}</span></div>
+      <div class="sub mono" style="font-size:10.5px">${esc(d.tag)}</div></div></div>`;}
+  if(n.type==="svh"){const d=n.data;
+    return `<div class="node${sel}${lit}" data-id="${n.id}" style="width:300px;border-top:3px solid #e0a35c"><div class="pad">
+      <div class="t">⚙ ${esc(d.name)}</div>
+      <div class="sub">${esc(d.kind==="edge"?"서버 함수":d.kind==="route"?"API 라우트":"서버")} · ${d.lines||0}줄${d.guarded?"":" · <b style='color:#e8896f'>인증 확인 없음</b>"}</div>
+      <div class="badges">${Object.keys(d.tables||{}).length?`<span class="pill">테이블 ${Object.keys(d.tables).length}</span>`:""}${(d.outbound||[]).length?`<span class="pill">외부 ${d.outbound.length}</span>`:""}${d.guarded?'<span class="pill">🔒 인증</span>':""}</div></div></div>`;}
+  if(n.type==="svt"){const d=n.data;
+    return `<div class="node${sel}${lit}" data-id="${n.id}" style="width:260px;border-left:3px solid #7fd1b9"><div class="pad">
+      <div class="t">🗄 ${esc(d.name)}</div>
+      <div class="sub">${d.rls?`<span style="color:#7fd1b9">RLS 켜짐${(d.policies||[]).length?" · 정책 "+d.policies.length+"개":""}</span>`:'<span style="color:#e8896f">RLS 없음 — 누구나 읽을 수 있어요</span>'}</div></div></div>`;}
   if(n.type==="h"){const c=n.color||"#8b93ff";
     return `<div class="node${sel}${lit}" data-id="${n.id}" style="width:208px;border-top:3px solid ${c}"><div class="pad"><div class="t">${esc(n.label)}</div><div class="sub">${esc(n.role)}</div></div></div>`;}
   if(n.type==="user"){const d=n.data;
@@ -775,7 +875,9 @@ function nodeHtml(n){
   return "";
 }
 let connected={has:()=>false};
-function neighborsOf(id){const c=new Set([id]);(navMode?NAV:effEdges()).forEach(e=>{if(e.from===id)c.add(e.to);if(e.to===id)c.add(e.from);});return c;}
+function stackEdges(){ return SV.edges.map(([a,b])=>({from:a,to:b,kind:"sv"})); }
+function inStack(){ return viewMode==="system"&&sysView==="stack"&&HAS_STACK&&!harnessMode; }
+function neighborsOf(id){const c=new Set([id]);(inStack()?stackEdges():navMode?NAV:effEdges()).forEach(e=>{if(e.from===id)c.add(e.to);if(e.to===id)c.add(e.from);});return c;}
 function render(){
   const vis=visibleNodes();
   if(selected&&!hoverId)connected=neighborsOf(selected); // selection keeps its neighbourhood lit (not hover-only)
@@ -786,7 +888,9 @@ function render(){
     const port=document.createElement("span");port.className="port";port.dataset.port=id;el.appendChild(port);
     nodesEl.appendChild(el);els[id]=el; }
   for(const id in els)nodes.get(id).h=els[id].offsetHeight;
-  if(harnessMode){groupLabelPos=[];packHarness(vis);}else if(navMode){packNav(vis);}else{packColumns(vis);}
+  if(harnessMode){groupLabelPos=[];packHarness(vis);}
+  else if(viewMode==="system"&&sysView==="stack"&&HAS_STACK){packStack(vis);}
+  else if(navMode){packNav(vis);}else{packColumns(vis);}
   for(const id in els){const n=nodes.get(id);els[id].style.left=n.x+"px";els[id].style.top=n.y+"px";
     if(navMode)els[id].classList.toggle("pdim",!!navPath&&!navPath.nodes.has(id));}
   drawEdges(vis);drawGroupLabels();applyView();updateStat(vis);drawMinimap(vis);emptyHint(vis);
@@ -869,8 +973,10 @@ function drawNavEdges(vis){
   const defs='<defs><marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8b93ff"/></marker><marker id="arwp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7fd1b9"/></marker></defs>';
   // merge parallel edges (multiple buttons to the same target) into one arrow with joined labels
   const pairs=new Map();
-  NAV.forEach(e=>{ if(!vis.has(e.from)||!vis.has(e.to)||e.from===e.to)return; const k=e.from+">"+e.to;
-    const p=pairs.get(k)||{from:e.from,to:e.to,labels:[]}; if(p.labels.indexOf(e.label)<0)p.labels.push(e.label); pairs.set(k,p); });
+  effNav().forEach(e=>{ if(!vis.has(e.from)||!vis.has(e.to)||e.from===e.to)return; const k=e.from+">"+e.to;
+    const pp=pairs.get(k)||{from:e.from,to:e.to,labels:[],changed:false,added:false};
+    if(e.changed)pp.changed=true; if(e.added)pp.added=true; pairs.set(k,pp);
+    const p=pairs.get(k); if(p.labels.indexOf(e.label)<0)p.labels.push(e.label); });
   let svg="",lbl="",pi=0;
   pairs.forEach((p,k)=>{ const a=nodes.get(p.from),b=nodes.get(p.to); if(!a||!b)return;
     const aw=els[a.id]?els[a.id].offsetWidth:262;
@@ -883,10 +989,71 @@ function drawNavEdges(vis){
     const c1x=back?x1-120:x1+Math.max(40,dx*.3), c2x=back?x2+120:x2-Math.max(40,dx*.3);
     const onPath=navPath&&navPath.edges.has(k), dimm=navPath&&!onPath;
     const hot=!navPath&&((selected&&(p.from===selected||p.to===selected))||(hoverId&&(p.from===hoverId||p.to===hoverId)));
-    svg+=`<path class="navedge${onPath?" path":""}${dimm?" dimm":""}${hot?" hot":""}" d="M${x1},${y1} C${c1x},${y1+bow} ${c2x},${y2+bow} ${x2},${y2}" marker-end="url(#${onPath?"arwp":"arw"})"/>`;
+    const dpath=`M${x1},${y1} C${c1x},${y1+bow} ${c2x},${y2+bow} ${x2},${y2}`;
+    const drop=reorderMode&&dropEdge===k;
+    const chg=p.changed||p.added;
+    svg+=`<path class="navedge${onPath?" path":""}${dimm?" dimm":""}${hot?" hot":""}${chg?" chg":""}${drop?" drop":""}" d="${dpath}" marker-end="url(#${onPath?"arwp":"arw"})"/>`;
+    if(reorderMode)edgeHit.push({k,from:p.from,to:p.to,mx:(x1+x2)/2,my:(y1+y2)/2+bow/2});
     if(hot||onPath){const t=p.labels.join(" · ");lbl+=`<text class="navlbl${onPath?" pl":""}" x="${(x1+x2)/2}" y="${(y1+y2)/2+bow-6}" text-anchor="middle">${esc(t)}</text>`;} });
   edgesEl.innerHTML=defs+svg+lbl; edgesEl.style.width="14000px"; edgesEl.style.height="14000px"; edgesEl.style.pointerEvents="none";
 }
+/* ---------- 순서 편집 (드래그로 화면 흐름 바꾸기) ----------
+   A screen-to-screen arrow is not an abstract edge — it is a BUTTON on a screen. So "make the
+   order A-C-B instead of A-B-C" is really "the 『담기』 button on A must now go to C, and C needs
+   a way to reach B". That is what a developer has to implement, so that is what we record and
+   that is what the exported prompt says. An edit that reads as an abstract graph change is not
+   actionable; one that names the button and its file:line is.
+
+   state.navEdits[] entries:
+     {op:"retarget", from, aid, action, oldTo, newTo}   an existing button now points elsewhere
+     {op:"add",      from, to}                           a navigation that does not exist yet
+     {op:"remove",   from, aid, action, to}              a button's navigation should go away    */
+function navEdgesOf(fromId,toId){ return NAV.filter(e=>e.from===fromId&&e.to===toId); }
+function effNav(){
+  /* NAV with the pending reorder applied — so the canvas shows what you asked for, not what is */
+  let list=NAV.map(e=>({...e}));
+  (state.navEdits||[]).forEach(ed=>{
+    if(ed.op==="retarget"){ (ed.aids||[ed.aid]).forEach(aid=>{ const e=list.find(x=>x.aid===aid&&x.to===ed.oldTo); if(e){e.to=ed.newTo;e.changed=true;} }); }
+    else if(ed.op==="remove"){ const ids=ed.aids||[ed.aid]; list=list.filter(x=>!(ids.includes(x.aid)&&x.to===ed.to)); }
+    else if(ed.op==="add"){ if(!list.some(x=>x.from===ed.from&&x.to===ed.to))
+      list.push({from:ed.from,to:ed.to,label:"(새 이동)",aid:null,added:true}); }
+  });
+  return list;
+}
+/* Drop screen C onto the arrow A->B  =>  A->C->B.
+   A's button is retargeted to C (a real, small code change), and C->B is recorded as a
+   navigation that does not exist yet — the prompt asks the agent to propose WHERE that button
+   should live rather than inventing one. */
+function spliceInto(nodeId,fromId,toId){
+  if(nodeId===fromId||nodeId===toId)return false;
+  const es=navEdgesOf(fromId,toId); if(!es.length)return false;
+  const fromRoute=nodes.get(fromId).data.route, midRoute=nodes.get(nodeId).data.route, toRoute=nodes.get(toId).data.route;
+  state.navEdits=state.navEdits||[];
+  /* ONE edit per (from -> to), carrying EVERY button that causes it. Emitting three separate
+     retargets because three buttons happen to lead to the same screen is noise — and it quietly
+     decides something the user never said: that all three should move. List them, and ask. */
+  state.navEdits.push({op:"retarget",from:fromId,aids:es.map(e=>e.aid),actions:es.map(e=>e.label),
+    oldTo:toId,newTo:nodeId,fromRoute,oldRoute:toRoute,newRoute:midRoute});
+  if(!navEdgesOf(nodeId,toId).length&&!(state.navEdits||[]).some(x=>x.op==="add"&&x.from===nodeId&&x.to===toId))
+    state.navEdits.push({op:"add",from:nodeId,to:toId,fromRoute:midRoute,toRoute});
+  save();updateEditCount();return true;
+}
+/* Drag screen B out of A->B->C  =>  A->C (B is removed from the chain, not from the app) */
+function unsplice(nodeId){
+  const ins=NAV.filter(e=>e.to===nodeId), outs=NAV.filter(e=>e.from===nodeId);
+  if(!ins.length||!outs.length)return false;
+  const target=outs[0].to;
+  state.navEdits=state.navEdits||[];
+  const byFrom=new Map();
+  ins.forEach(e=>{const g=byFrom.get(e.from)||{aids:[],actions:[]};g.aids.push(e.aid);g.actions.push(e.label);byFrom.set(e.from,g);});
+  byFrom.forEach((g,fid)=>state.navEdits.push({op:"retarget",from:fid,aids:g.aids,actions:g.actions,oldTo:nodeId,newTo:target,
+    fromRoute:nodes.get(fid).data.route,oldRoute:nodes.get(nodeId).data.route,newRoute:nodes.get(target).data.route}));
+  state.navEdits.push({op:"remove",from:nodeId,aids:outs.map(e=>e.aid),actions:outs.map(e=>e.label),to:target,
+    fromRoute:nodes.get(nodeId).data.route,toRoute:nodes.get(target).data.route});
+  save();updateEditCount();return true;
+}
+function clearNavEdits(){ state.navEdits=[]; save(); updateEditCount(); render(); renderSide(); }
+
 /* shortest button-path between two screens over the visible nav graph */
 function findNavPath(from,to){
   const vis=visibleNodes(); const adj={};
@@ -901,7 +1068,17 @@ function findNavPath(from,to){
   const ns=new Set([from]),es=new Set(); steps.forEach(st=>{ns.add(st.to);es.add(st.from+">"+st.to);});
   return {nodes:ns,edges:es,steps};
 }
-function drawEdges(vis){if(navMode){drawNavEdges(vis);return;}let svg="";effEdges().forEach(e=>{if(!vis.has(e.from)||!vis.has(e.to))return;const a=nodes.get(e.from),b=nodes.get(e.to);
+function drawEdges(vis){
+  if(inStack()){ // 서버·데이터: straight left-to-right layers, no cutting, no link mode
+    let sv="";
+    stackEdges().forEach(e=>{ if(!vis.has(e.from)||!vis.has(e.to))return;
+      const a=nodes.get(e.from),b=nodes.get(e.to);
+      const x1=a.x+(els[a.id]?els[a.id].offsetWidth:260),y1=a.y+(a.h||60)/2,x2=b.x,y2=b.y+(b.h||40)/2,mx=(x1+x2)/2;
+      const hot=(selected&&(e.from===selected||e.to===selected))||(hoverId&&(e.from===hoverId||e.to===hoverId));
+      sv+=`<path class="edge${hot?" hot":""}" d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}"/>`;});
+    edgesEl.innerHTML=sv;edgesEl.style.width="9000px";edgesEl.style.height="9000px";edgesEl.style.pointerEvents="none";return;
+  }
+  if(navMode){drawNavEdges(vis);return;}let svg="";effEdges().forEach(e=>{if(!vis.has(e.from)||!vis.has(e.to))return;const a=nodes.get(e.from),b=nodes.get(e.to);
   const x1=a.x+(els[a.id]?els[a.id].offsetWidth:260),y1=a.y+(a.h||60)/2,x2=b.x,y2=b.y+(b.h||40)/2,mx=(x1+x2)/2;
   const hot=(selected&&(e.from===selected||e.to===selected))||(hoverId&&(e.from===hoverId||e.to===hoverId));
   const sel=selEdge&&selEdge.from===e.from&&selEdge.to===e.to;
@@ -980,8 +1157,28 @@ stage.addEventListener("wheel",e=>{e.preventDefault();const r=stage.getBoundingC
 let drag=null,edgeRaf=false;
 function scheduleEdges(){if(edgeRaf)return;edgeRaf=true;requestAnimationFrame(()=>{edgeRaf=false;drawEdges(visibleNodes());});}
 nodesEl.addEventListener("pointerdown",e=>{const el=e.target.closest(".node");if(!el)return;const id=el.dataset.id,n=nodes.get(id);const jb=e.target.closest("[data-jump]");drag={id,el,moved:false,sx:e.clientX,sy:e.clientY,ox:n.x,oy:n.y,exHit:!!e.target.closest(".ex"),jumpHit:jb?jb.dataset.jump:null};el.setPointerCapture(e.pointerId);e.stopPropagation();});
-nodesEl.addEventListener("pointermove",e=>{if(!drag)return;const dx=(e.clientX-drag.sx)/view.k,dy=(e.clientY-drag.sy)/view.k;if(Math.abs(dx)+Math.abs(dy)>3)drag.moved=true;const n=nodes.get(drag.id);n.x=drag.ox+dx;n.y=drag.oy+dy;if(drag.el){drag.el.style.left=n.x+"px";drag.el.style.top=n.y+"px";}scheduleEdges();});
+nodesEl.addEventListener("pointermove",e=>{if(!drag)return;const dx=(e.clientX-drag.sx)/view.k,dy=(e.clientY-drag.sy)/view.k;if(Math.abs(dx)+Math.abs(dy)>3)drag.moved=true;const n=nodes.get(drag.id);n.x=drag.ox+dx;n.y=drag.oy+dy;if(drag.el){drag.el.style.left=n.x+"px";drag.el.style.top=n.y+"px";}
+  /* 순서 편집: which arrow is the card hovering over? (card centre vs edge midpoint) */
+  if(reorderMode&&n.type==="screen"){
+    const cx=n.x+((els[n.id]?els[n.id].offsetWidth:262)/2), cy=n.y+((n.h||60)/2);
+    let best=null,bd=1e9;
+    edgeHit.forEach(h=>{ if(h.from===n.id||h.to===n.id)return;
+      const d=Math.hypot(h.mx-cx,h.my-cy); if(d<bd){bd=d;best=h;} });
+    const nd=(bd<150)?best.k:null;
+    if(nd!==dropEdge){dropEdge=nd;scheduleEdges();return;}
+  }
+  scheduleEdges();});
 nodesEl.addEventListener("pointerup",()=>{if(!drag)return;const n=nodes.get(drag.id);
+  /* 순서 편집: dropped onto an arrow -> splice this screen into that chain */
+  if(reorderMode&&drag.moved&&dropEdge&&n.type==="screen"){
+    const h=edgeHit.find(x=>x.k===dropEdge);
+    dropEdge=null;
+    if(h&&spliceInto(n.id,h.from,h.to)){
+      const P=(state.navPos=state.navPos||{}); delete P[n.id];   // let the layout re-place it in its new slot
+      drag=null; render(); renderSide(); setTab("prompt"); return;
+    }
+  }
+  dropEdge=null;
   if(drag.moved){const P=navMode?(state.navPos=state.navPos||{}):state.pos;P[drag.id]={x:n.x,y:n.y};save();drawMinimap(visibleNodes());}
   else if(drag.jumpHit&&nodes.has(drag.jumpHit)){
     /* '이 화면으로 이동 →' — in 화면별 플로우 this REFOCUSES the tree on the target screen, so a
@@ -1072,6 +1269,17 @@ function specHtml(){
   const caps=Object.keys(SHOTS||{}).length, RISKS=["network","auth","ai","cost","external","gate","weakpoint","bug"];
   const stat=(n,l)=>`<div class="spec-stat"><b>${n}</b><span>${l}</span></div>`;
   let h="";
+  /* what this map rests on — stated first, because everything below is only true relative to it */
+  if(STAMP){
+    const g=STAMP.git||{}, sha=g.head?String(g.head).slice(0,8):null;
+    h+=`<div class="dh">이 지도가 선 자리</div>
+      <div class="kv">${sha?`커밋 <code>${esc(sha)}</code>${g.branch?" ("+esc(g.branch)+")":""}${g.dirty?' <span style="color:#e0a35c">+ 커밋 안 된 변경</span>':""}`:"git 정보 없음"}
+      ${STAMP.at?`<div class="sm">만든 시각 ${esc(String(STAMP.at).slice(0,16).replace("T"," "))}</div>`:""}
+      <div class="sm">이 지도는 소스 파일 <b>${STAMP.files||0}개</b>를 가리킵니다. 그 파일들이 바뀌면 좌표가 어긋납니다.</div>
+      <div class="sm">확인: <code>node scripts/check-stale.js &lt;graph.json&gt; &lt;appRoot&gt;</code></div></div>`;
+  } else {
+    h+=`<div class="hint" style="color:#e0a35c">⚠ 이 지도가 <b>언제·무엇을 근거로</b> 만들어졌는지 기록이 없어요. 낡았는지 확인할 방법이 없습니다.</div>`;
+  }
   h+=STACK?`<div class="spec-stack">${esc(STACK)}</div>`:`<div class="hint">스택 정보 없음 — 그래프 옆 screenmap.debug.stack.txt 로 추가할 수 있어요.</div>`;
   h+=`<div class="dh">규모</div><div class="spec-stats">${stat(S.length,UNIT)}${stat(acts,"동작")}${stat(Object.keys(groups).length,"그룹")}${stat(apiTags.size,"서버·데이터")}${stat(aiMap.size,"AI 기능")}${stat(caps,"캡처")}${userN?stat(userN,"추가 노드"):""}</div>`;
   h+=`<div class="dh">데이터·서버 작업 (${apiTags.size})</div>`;
@@ -1114,7 +1322,8 @@ function updateEditCount(){ // count only entries whose nodes still exist (stale
   const n=Object.keys(state.edits).filter(id=>nodes.has(id)).length+(state.globalNote?1:0)
     +((state.addedNodes||[]).length)
     +((state.addedEdges||[]).filter(e=>nodes.has(e.from)&&nodes.has(e.to)&&nodes.get(e.to).type!=="user").length)
-    +((state.removedEdges||[]).filter(k=>{const p=k.split(">>");return nodes.has(p[0])&&nodes.has(p[1]);}).length),
+    +((state.removedEdges||[]).filter(k=>{const p=k.split(">>");return nodes.has(p[0])&&nodes.has(p[1]);}).length)
+    +((state.navEdits||[]).length),
     b=document.getElementById("editCount");b.style.display=n?"inline-block":"none";b.textContent=n;
   const bn=Object.keys(state.bugs||{}).filter(id=>nodes.has(id)).length,bb=document.getElementById("bugCount");if(bb){bb.style.display=bn?"inline-block":"none";bb.textContent=bn;}
   const an=(state.addedNodes||[]).length,ab=document.getElementById("addCount");if(ab){ab.style.display=an?"inline-block":"none";ab.textContent=an;}
@@ -1168,6 +1377,39 @@ function renderDetail(){
       ${n.detail?`<details class="dev" open><summary></summary><div class="kv">${esc(n.detail)}</div></details>`:""}
       ${HARNESS_DERIVED?`<div class="hint">이 그림은 <b>스캔한 이 앱의 AI 호출에서 그대로 뽑은 것</b>이에요 — 없는 단계를 지어내지 않아요. 안전검사·비용상한·감사기록 같은 단계가 실제로 더 있다면, 그래프 옆 <code>${esc(UNIT==="화면"?"screenmap.debug":"graph")}.harness.json</code>에 적으면 여기에 그려져요.</div>`:""}`;
     return;
+  }
+  if(n.type==="svh"){const d=n.data;
+    const users=[...new Set(SV.edges.filter(([a,b])=>b===n.id).map(([a])=>a))].map(a=>{const t=nodes.get(a);return t&&t.data&&t.data.tag?apiKo(t.data.tag):a;});
+    let hh=`<span class="typetag" style="background:#e0a35c22;color:#e0a35c">서버 함수</span>`;
+    hh+=`<div class="ed-label" style="cursor:default">${esc(d.name)}</div>`;
+    hh+=`<div class="plainbox">화면이 직접 하지 못하는 일을 대신 해주는 서버 코드예요. 열쇠(API 키)를 숨기고, 권한을 한 번 더 확인하는 자리입니다.</div>`;
+    hh+=`<div class="dh">코드 위치</div><div class="kv"><code>${esc(d.file||"")}</code> · ${d.lines||0}줄</div>`;
+    hh+=`<div class="dh">로그인 확인</div><div class="kv" style="color:${d.guarded?"#7fd1b9":"#e8896f"}">${d.guarded?"✔ 있음":"⚠ 이 함수는 로그인 여부를 확인하지 않아요 — 의도한 것인지 확인하세요"}</div>`;
+    if(Object.keys(d.tables||{}).length){hh+=`<div class="dh">건드리는 테이블</div>`;
+      Object.entries(d.tables).forEach(([t,ops])=>{hh+=`<div class="kv">🗄 ${esc(t)} <span class="sm">${esc(ops.join(", "))}</span></div>`;});}
+    if((d.outbound||[]).length){hh+=`<div class="dh">외부로 나가는 호출</div>`;d.outbound.forEach(x=>{hh+=`<div class="kv">↗ ${esc(x)}</div>`;});}
+    if(users.length){hh+=`<div class="dh">이 함수를 부르는 작업</div>`;users.forEach(u=>{hh+=`<div class="kv">← ${esc(u)}</div>`;});}
+    detailBody.innerHTML=hh;return;
+  }
+  if(n.type==="svt"){const d=n.data;
+    const writers=[...new Set(SV.edges.filter(([a,b])=>b===n.id).map(([a])=>{const t=nodes.get(a);return t?(t.type==="svh"?"⚙ "+t.data.name:apiKo(t.data.tag)):a;}))];
+    let hh=`<span class="typetag" style="background:#7fd1b922;color:#7fd1b9">테이블</span>`;
+    hh+=`<div class="ed-label" style="cursor:default">${esc(d.name)}</div>`;
+    hh+=`<div class="plainbox">내 데이터가 실제로 저장되는 곳이에요.</div>`;
+    hh+=`<div class="dh">보안(RLS)</div><div class="kv" style="color:${d.rls?"#7fd1b9":"#e8896f"}">${d.rls?"✔ 행 수준 보안이 켜져 있어요 — 남의 데이터는 못 봐요":"⚠ 행 수준 보안이 없어요 — 규칙이 없으면 누구나 읽을 수 있습니다"}</div>`;
+    if((d.policies||[]).length){hh+=`<div class="dh">정책 ${d.policies.length}개</div>`;d.policies.forEach(x=>{hh+=`<div class="kv sm">· ${esc(x)}</div>`;});}
+    if(d.definedIn)hh+=`<div class="dh">정의 위치</div><div class="kv"><code>${esc(d.definedIn)}</code></div>`;
+    if(writers.length){hh+=`<div class="dh">이 테이블을 쓰는 곳</div>`;writers.forEach(w=>{hh+=`<div class="kv">← ${esc(w)}</div>`;});}
+    detailBody.innerHTML=hh;return;
+  }
+  if(n.type==="svapi"){const d=n.data,L=d.link||{};
+    let hh=`<span class="typetag" style="background:${kindColor(d.kind)}22;color:${kindColor(d.kind)}">${esc(kindKo(d.kind,d.tag))}</span>`;
+    hh+=`<div class="ed-label" style="cursor:default">${esc(apiKo(d.tag))}</div>`;
+    hh+=`<div class="plainbox">화면이 서버에 요청하는 일이에요.</div>`;
+    hh+=`<div class="dh">뒤에서 무슨 일이</div>`;
+    hh+=`<div class="kv">${L.handler?`⚙ 서버 함수 <b>${esc(L.handler)}</b> 가 처리해요`:L.table?`🗄 테이블 <b>${esc(L.table)}</b> 를 ${esc(L.op||"")} 해요${L.known?"":" <span style='color:#e0a35c'>(스키마에서 못 찾음)</span>"}`:"이 요청이 서버 어디로 가는지 코드에서 못 찾았어요"}</div>`;
+    hh+=`<details class="dev"><summary></summary><div class="kv">${esc(d.tag)}</div></details>`;
+    detailBody.innerHTML=hh;return;
   }
   if(n.type==="nav"){const t=nodes.get(n.data.to);
     detailBody.innerHTML=`<span class="typetag" style="background:#8b93ff22;color:#8b93ff">${UNIT} 이동</span>
@@ -1330,6 +1572,10 @@ function buildBugReport(ids){
   if(!ready.length)return "(신고 내용이 아직 비어 있어요 — 위에서 '무슨 일이 있었나요?'를 한 줄이라도 적어야 신고서가 만들어져요.)";
   const out=["[버그 신고서] 이 앱을 쓰는 사람이 직접 작성했어요 (flow-debugger).",""];
   if(STACK)out.push("[앱 스택] "+STACK,"");
+  if(STAMP&&STAMP.git&&STAMP.git.head)out.push(
+    "[이 지도의 기준] 커밋 "+String(STAMP.git.head).slice(0,8)+(STAMP.git.dirty?" (+커밋 안 된 변경)":"")+
+    (STAMP.at?" · "+String(STAMP.at).slice(0,10):"")+" 기준으로 만들어졌어. 그 뒤로 코드가 바뀌었으면 아래 좌표가 어긋났을 수 있으니, "+
+    "줄이 안 맞으면 그 파일에서 이름으로 찾아줘.","");
   out.push("[코드 위치의 신뢰도 — 먼저 읽어줘]");
   if(ANCHORS.checked)out.push(
     "· ✔ = 파일·줄·**함수 이름까지** 실제 소스와 대조해 확인한 좌표. 출발점으로 신뢰해도 돼.",
@@ -1528,6 +1774,48 @@ function stackEntries(){
       text:(u.kind==="note"?"이 메모를 반영해줘":`이런 ${uk}이 새로 필요해 — 만들어줘`)+(u.desc?": "+u.desc:""),
       accept:u.kind==="note"?"":`"${u.label||"이 "+uk}"에서 요청한 내용이 실제로 동작하고, 앱의 다른 ${UNIT}과 이질감 없이 네비게이션으로 연결됨.`,
       guard:u.kind==="note"?"":`먼저 같은 기능이 이미 있는지 코드에서 확인해줘 — 있으면 새로 만들지 말고 알려줘. 없으면 기존 ${UNIT}들과 같은 디자인·구조·네비게이션 규칙을 따라 만들고${lf?` ${origLabel(lf)}에서 들어가게 연결`:""}. 서버·푸시·결제 등 새 비용/외부 연동이 필요하면 만들기 전에 알려줘.`});});
+  /* 순서 편집 — an arrow between screens is a BUTTON, so say which button and where it lives.
+     "A→C→B instead of A→B→C" is not actionable; "the 『담기』 button on 홈 (src/app/home.tsx:120)
+     must now open 미리보기" is. */
+  (state.navEdits||[]).forEach((ed,i)=>{
+    const f=nodes.get(ed.from), t=ed.newTo?nodes.get(ed.newTo):(ed.to?nodes.get(ed.to):null);
+    if(!f)return;
+    const sName=n=>n?scrTitle(n.data):"?";
+    if(ed.op==="retarget"){
+      const oldN=nodes.get(ed.oldTo);
+      const names=ed.actions||[ed.action];
+      const locOf=nm=>{const a=(f.data.actions||[]).find(x=>actLabel(x)===nm)||{};const l=a.impl||a.file;
+        return l?`『${nm}』 ${l}${aMark(l)}`:`『${nm}』 (위치 미상)`;};
+      const many=names.length>1;
+      E.push({kind:"흐름",color:"#7fd1b9",navEdit:i,nodeId:ed.from,
+        title:`${UNIT} 이동 바꾸기: ${sName(f)} → ${sName(t)}` + (many?`  (버튼 ${names.length}개)`:`  『${names[0]}』`),
+        code:names.map(locOf).join("  |  "),
+        text:`${sName(f)}(${ed.fromRoute}) 에서 ${sName(oldN)}(${ed.oldRoute}) 로 가던 것을 ${sName(t)}(${ed.newRoute}) 로 바꿔줘.`
+          + (many?`  ※ 거기로 가는 버튼이 ${names.length}개야: ${names.map(x=>"『"+x+"』").join(", ")}.`:""),
+        accept:`${sName(f)} 에서 ${sName(t)} 로 갈 수 있다. 손대지 않기로 한 다른 이동 경로는 그대로.`,
+        /* Multiple buttons lead there. Retargeting all of them is a decision the user never made
+           — dropping a card on an arrow does not say WHICH button they meant. Ask. */
+        guard:(many
+          ? `**${names.length}개 버튼을 전부 바꿀지 일부만 바꿀지 나는 말한 적이 없어. 먼저 물어봐줘** — 각 버튼이 어떤 맥락에서 눌리는지 코드로 확인해서 한 줄씩 정리해 보여주고, 어느 것을 바꿀지 정한 다음 고쳐.`
+          : `이 버튼 하나만 바꿔 — 같은 목적지로 가는 다른 경로는 건드리지 마.`)
+          + ` 뒤로가기·딥링크·관련 테스트가 깨지지 않는지 확인해줘.`});
+    } else if(ed.op==="add"){
+      E.push({kind:"흐름",color:"#7fd1b9",navEdit:i,nodeId:ed.from,
+        title:`새 ${UNIT} 이동 필요: ${sName(f)} → ${sName(t)}`,code:"",
+        text:`${sName(f)}(${ed.fromRoute}) 에서 ${sName(t)}(${ed.toRoute}) 로 가는 길이 지금은 없어. 새로 만들어야 해.`,
+        accept:`${sName(f)} 에서 ${sName(t)} 로 갈 수 있다.`,
+        guard:`**어디에 무엇을 놓을지는 네가 정하지 말고 먼저 제안해줘.** 이 앱의 기존 네비게이션 규칙(버튼 위치·라벨·아이콘)을 먼저 읽고, 가능한 방법을 2가지 이상 제시한 뒤 나와 의논하고 진행해.`});
+    } else if(ed.op==="remove"){
+      const names=ed.actions||[ed.action];
+      const locOf=nm=>{const a=(f.data.actions||[]).find(x=>actLabel(x)===nm)||{};const l=a.impl||a.file;
+        return l?`『${nm}』 ${l}${aMark(l)}`:`『${nm}』`;};
+      E.push({kind:"흐름",color:"#e8896f",navEdit:i,nodeId:ed.from,
+        title:`${UNIT} 이동 없애기: ${sName(f)} → ${ed.toRoute}`,code:names.map(locOf).join("  |  "),
+        text:`${sName(f)} 에서 ${ed.toRoute} 로 가는 이동(${names.map(x=>"『"+x+"』").join(", ")})은 없어져야 해.`,
+        accept:`${sName(f)} 에서 그 경로로는 더 이상 갈 수 없다.`,
+        guard:`그 ${UNIT}이 정말 도달 불가능해지지 않는지 먼저 확인해줘 — 다른 입구가 없으면 없애지 말고 알려줘.`});
+    }
+  });
   (state.addedEdges||[]).forEach((e,i)=>{const f=nodes.get(e.from),t=nodes.get(e.to);if(!f||!t)return; if(t.type==="user")return; // user-node link is covered by its 추가 entry
     E.push({kind:"연결",color:"#7fd1b9",edge:{type:"add",i},nodeId:e.from,title:`연결 추가: ${origLabel(f)} → ${origLabel(t)}`,code:[codeRef(f),codeRef(t)].filter(Boolean).join(" → "),
       text:`흐름도에 표시한 이동: ${origLabel(f)} → ${origLabel(t)}. 실제 코드에 이 이동 경로가 있는지 확인해줘.`,
@@ -1551,7 +1839,13 @@ function buildStackPrompt(){
     `2) 같은 ${UNIT}에 여러 버전의 파일이 있으면 실제로 프로덕션에서 렌더되는 파일을 찾아 고쳐줘 — 안 그러면 빌드는 통과해도 실제 화면은 안 바뀔 수 있어.`,
     "3) 각 항목의 '완료 기준'을 충족하면 끝. 기준에 없는 범위는 건드리지 말고, 애매하면 추측하지 말고 한 줄로 물어봐.",
     "4) 새 비용/외부 연동(서버·푸시·결제 등)이 필요해지면 만들기 전에 알려줘.",
-    "5) 흐름도 설명 자체가 틀렸으면 그 점도 정정해줘.","");
+    "5) 흐름도 설명 자체가 틀렸으면 그 점도 정정해줘.",
+    "",
+    "[먼저 할 일 — 코드를 고치기 전에]",
+    "· 이 요청들을 어떻게 처리하는 게 최선인지 **먼저 생각해줘**. 서로 충돌하거나, 한 곳을 고치면 다른 요청이 필요 없어지거나, 더 나은 방법이 있을 수 있어.",
+    "· 방법이 두 가지 이상이면 **바로 고르지 말고 나에게 물어봐.** 각 방법의 장단점과 영향 범위(어떤 화면이 같이 바뀌는지)를 한 줄씩 정리해서 보여줘.",
+    "· 순서도 네가 정해서 제안해줘 — 무엇부터 하는 게 안전한지.",
+    "· 내가 동의한 다음에 고치기 시작해.","");
   E.forEach((e,i)=>{L.push(`${i+1}. [${e.kind}] ${e.title}${e.code?`  (코드 힌트: ${e.code})`:""}`);
     L.push(`   · 요청: ${e.text}`);
     if(e.accept)L.push(`   · 완료 기준: ${e.accept}`);
@@ -1566,6 +1860,7 @@ function removeEntry(e){
   else if(e.edge&&e.edge.type==="del")state.removedEdges.splice(e.edge.i,1);
   else if(e.global)state.globalNote="";
   else if(e.addNode!=null&&e.nodeId){deleteUserNode(e.nodeId);return;}
+  else if(e.navEdit!=null)state.navEdits.splice(e.navEdit,1);
   else if(e.extra!=null)state.promptExtra.splice(e.extra,1);
   save();updateEditCount();renderSide();renderDetail();
 }
@@ -1663,6 +1958,10 @@ function renderAddNode(){
 function renderScrPick(){
   const sel=document.getElementById("scrPick"); if(!sel)return;
   sel.style.display=(viewMode==="screen"&&!harnessMode)?"":"none";
+  const ss=document.getElementById("sysSeg");
+  if(ss)ss.style.display=(viewMode==="system"&&!harnessMode&&HAS_STACK)?"":"none";
+  const rb=document.getElementById("reorderBtn");
+  if(rb)rb.style.display=(viewMode==="system"&&!harnessMode&&sysView==="nav")?"":"none";
   if(sel.style.display==="none")return;
   const f=focusScreen();
   sel.innerHTML=GROUPS.map(g=>{
@@ -1677,7 +1976,7 @@ function renderScrPick(){
 function setView(v){
   viewMode=v; state.viewMode=v;
   if(harnessMode){harnessMode=false;const hb=document.getElementById("harnessBtn");if(hb)hb.classList.remove("on");}
-  navMode=(v==="system");                       // the system view IS the screen-to-screen graph
+  navMode=(v==="system"&&sysView==="nav");      // 시스템 플로우 = 이동 그래프 | 서버·데이터
   if(!navMode)clearNavPath();
   if(v==="screen"&&!focusId&&selected){const n=nodes.get(selected);const sid=n&&n.type==="action"&&n.screen?n.screen.id:selected;
     if(nodes.get(sid)&&nodes.get(sid).type==="screen"){focusId=sid;state.focusId=sid;expanded.add(sid);state.expanded[sid]=true;}}
@@ -1687,6 +1986,23 @@ function setView(v){
   save(); render(); fit(); renderDetail(); renderSide();
 }
 document.querySelectorAll("#viewSeg button").forEach(b=>b.onclick=()=>setView(b.dataset.v));
+document.querySelectorAll("#sysSeg button").forEach(b=>b.onclick=()=>{
+  sysView=b.dataset.s; state.sysView=sysView;
+  navMode=(viewMode==="system"&&sysView==="nav");
+  if(sysView!=="nav"){reorderMode=false;document.body.classList.remove("reorder");
+    const rb=document.getElementById("reorderBtn");if(rb)rb.classList.remove("on");clearNavPath();}
+  document.querySelectorAll("#sysSeg button").forEach(x=>x.classList.toggle("on",x.dataset.s===sysView));
+  selected=null;hoverId=null;connected={has:()=>false};
+  save();syncModeButtons();renderScrPick();render();fit();renderDetail();renderSide();
+});
+document.getElementById("reorderBtn").onclick=e=>{
+  if(viewMode!=="system"||harnessMode){ setView("system"); }
+  reorderMode=!reorderMode;
+  if(reorderMode&&linkMode)setLinkMode(false);
+  document.body.classList.toggle("reorder",reorderMode);
+  e.target.classList.toggle("on",reorderMode);
+  dropEdge=null; render(); renderSide();
+};
 
 document.getElementById("addNode").onclick=()=>setTab("addnode");
 document.getElementById("specBtn").onclick=openSpec;
@@ -1727,7 +2043,9 @@ injectAddedNodes();applyVocab();buildLegend();
 /* boot the view: 화면별 플로우 opens on one screen, fully expanded, growing rightward */
 viewMode = (state.viewMode === "system") ? "system" : "screen";
 focusId  = (state.focusId && nodes.get(state.focusId)) ? state.focusId : ((screens[0] && screens[0].id) || null);
-navMode  = (viewMode === "system");
+sysView  = (state.sysView === "stack" && HAS_STACK) ? "stack" : "nav";
+navMode  = (viewMode === "system" && sysView === "nav");
+document.querySelectorAll("#sysSeg button").forEach(b => b.classList.toggle("on", b.dataset.s === sysView));
 if (focusId) { expanded.add(focusId); state.expanded[focusId] = true; }
 document.querySelectorAll("#viewSeg button").forEach(b => b.classList.toggle("on", b.dataset.v === viewMode));
 syncModeButtons(); renderScrPick();

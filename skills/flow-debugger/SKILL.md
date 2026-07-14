@@ -13,7 +13,7 @@ description: >-
   per-action diagnostic checklists, connection editing, and a bug-report
   generator that turns a vague "안 돼요" into a precise, VERIFIED file:line report.
   Produces the HTML plus a copy-paste fix and bug prompt for the assistant.
-version: 0.13.1
+version: 0.14.0
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 compatibility: [claude-code]
 author: Simon Kim
@@ -75,7 +75,7 @@ echo "NO_SCREEN_CODE"
 (그 경로를 SCAN 프롬프트의 `<FILE LIST>` 로 그대로 넣으면 된다 — 별도 설정 파일은 없다).
 화면이 없는 대상(API 서버·CLI)이면 중단하지 말고 `<graph>.mode.txt` = `backend`/`cli` 로 진행한다.
 
-## 파이프라인 (8단계)
+## 파이프라인 (8단계 + 상시 stale 점검)
 
 프롬프트 전문은 [references/scan-prompts.md](references/scan-prompts.md) 에 있다.
 화면이 많으면 Workflow(또는 `agent-delegate`)로 그룹별 병렬 fan-out 한다.
@@ -160,6 +160,14 @@ node scripts/verify-html.js Output/flow-debugger.html --template assets/flow-deb
   (`{nodes:[{id,hx,hy,color,label,role,detail}], edges:[[from,to]]}`). 없으면 스캔한 AI 호출에서
   **자동 파생**한다(없는 단계를 지어내지 않는다).
 
+### 6.5) **stale 점검 — 지도가 낡았는지 스스로 말하게 한다**
+```bash
+node scripts/check-stale.js <graph.json> <appRoot> --strict   # CI 에 넣을 것
+```
+`build.js` 가 지도를 만들 때 **지문**(커밋 + 앵커한 모든 소스 파일의 해시)을 남긴다.
+앱이 바뀌면 이 스크립트가 **무엇이 바뀌었는지 숫자로** 답한다. 이게 없으면 지도는
+틀려도 틀린 줄 모르고, 낡은 좌표를 계속 내보낸다 — 이 도구의 존재 이유와 정반대다.
+
 ### 7) 핸드오프 — **새 세션이 앱 구조를 이어받게 한다**
 ```bash
 node scripts/make-handoff.js <graph.json> <appRoot>   --glossary Output/glossary.ko.json --prescan Output/prescan.json   --out <appRepo>/docs/FLOW-HANDOFF.md --html docs/flow-debugger.html --name "<앱 이름>"
@@ -189,6 +197,14 @@ git 에 남는 마크다운 하나로 앱의 실제 구조를 넘긴다:
 - **코드 위치 패널**: 카드마다 검증 결과와 그 이유를 한국어로 표시
 - **시스템 스펙**(상단 📋): 스택·규모·서버작업·AI·위험 프로필 + **코드 위치 신뢰도**
 - **AI 하네스**: 이 앱의 AI 호출에서 파생한 배선(목적 → 경유 → 모델). AI 가 없으면 버튼도 없다.
+- **🌐 시스템 플로우 = 두 층**:
+  - `↔ 이동 그래프` — 화면이 버튼으로 어떻게 이어지는지 + **🔀 순서 편집**(화면을 화살표 위에
+    떨구면 그 사이에 끼워짐: A→B 에 C를 떨구면 **A→C→B**). 바뀐 순서는 *"A의 『담기』 버튼이
+    이제 C로 가야 해"* 라는 **실제 코드 변경 요청**으로 프롬프트에 나간다.
+  - `🗄 서버·데이터` — **화면 → 서버 작업 → 서버 함수 → 테이블(RLS)**. 앱의 서버 코드와 스키마에서
+    파생(Supabase 엣지·Next 라우트·Express·Lambda / SQL·Prisma·Drizzle). 서버가 없는 앱이면 안 뜬다.
+- **내보내는 프롬프트가 먼저 "의논하라"고 요구한다**: 방법이 둘 이상이면 바로 고르지 말고
+  장단점·영향 범위를 정리해 사용자와 정한 뒤 진행하라고 지시한다.
 - **연결 편집 / 노드 추가 / 프롬프트 스택**: 수정 요청과 "만들어줘"를 프롬프트로 모아 복사
 - 한국어 라벨, 화면 썸네일/유형 아이콘, 미니맵/줌, 그룹 필터, 위치/편집 localStorage 저장
 - 외부 의존성 0 (CDN 폰트도 없음) — 오프라인에서 열어도 그대로 돈다

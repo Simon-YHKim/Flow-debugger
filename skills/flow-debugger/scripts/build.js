@@ -19,6 +19,8 @@ const fs = require('fs');
 const path = require('path');
 const A = require('./lib/anchors');
 const R = require('./lib/reach');
+const F = require('./lib/fingerprint');
+const BE = require('./lib/backend');
 
 // The delegation index is keyed by route + action. build.js and the template MUST agree
 // on this string byte-for-byte; they did not (a stray NUL vs a space), and the warning
@@ -116,6 +118,8 @@ const harnessText = rd(graph.replace(/\.json$/, '.harness.json'), 'null');
 // report can label each coordinate CONFIRMED / drifted / unverified — and the agent
 // knows which ones to trust.
 let audit = { checked: false, index: {}, stat: null };
+let stamp = null;   // what this map rests on (commit + anchored-file count)
+let backend = null; // what is BEHIND the screens: server handlers, tables, RLS
 if (appRoot) {
   try { if (!fs.statSync(appRoot).isDirectory()) throw new Error('not a directory'); }
   catch (e) { die('--app-root is not a directory: ' + appRoot); }
@@ -132,6 +136,22 @@ if (appRoot) {
   // conclusion was false, because "what does this do" and "can a user get here" are different
   // questions. 4 of that run's 21 bug claims were this. Ask the second question, in a script.
   const gates = R.scanGates(appRoot, graphObj);
+  // A map that cannot tell you it is stale will eventually lie to you. Record the exact evidence
+  // it was built from — the commit, and the content hash of every file it anchors into — so
+  // check-stale.js can answer "what changed under this map?" with a number, not an opinion.
+  // What is behind the screen. Without this the "system flow" stops at the tag: a screen calls
+  // edge:gemini-proxy and then nothing — what it does, which tables it writes, whether RLS will
+  // refuse it, all invisible.
+  backend = BE.scanBackend(appRoot, graphObj);
+  if (backend.counts.handlers || backend.counts.tables)
+    console.log('backend: ' + backend.counts.handlers + ' handler(s) · ' + backend.counts.tables +
+                ' table(s) · ' + backend.counts.linked + ' tag(s) linked');
+  const fp = F.fingerprint(graphObj, appRoot, new Date().toISOString());
+  const fpPath = graph.replace(/.json$/, '') + '.fingerprint.json';
+  try { fs.writeFileSync(fpPath, JSON.stringify(fp, null, 2), 'utf8'); } catch (e) { /* read-only dir */ }
+  stamp = { git: fp.git, at: fp.at, files: fp.counts.anchoredFiles };
+  console.log('fingerprint: ' + (fp.git ? String(fp.git.head).slice(0, 8) + (fp.git.dirty ? '+dirty' : '') : 'no git') +
+              ' · ' + fp.counts.anchoredFiles + ' anchored files  -> ' + fpPath);
   audit = { checked: true, index: r.index, stat: s, delegation: delegIndex, gates, appRoot: path.resolve(appRoot) };
   const nGates = Object.keys(gates).length;
   if (nGates) {
@@ -167,11 +187,14 @@ html = html.replace('__SHOTS_JSON__', JSON.stringify(shotsObj));
 html = html.replace('__STACK_JSON__', JSON.stringify(stackText.trim()));
 html = html.replace('__HARNESS_JSON__', harnessText.trim() || 'null');
 html = html.replace('__ANCHORS_JSON__', JSON.stringify(audit));
+html = html.replace('__STAMP_JSON__', JSON.stringify(stamp));
+html = html.replace('__BACKEND_JSON__', JSON.stringify(backend));
 html = html.split('__APP_NAME__').join(appName);
 html = html.split('__MODE__').join(mode);
 
 for (const t of ['__GRAPH_JSON__', '__GLOSSARY_JSON__', '__SHOTS_JSON__', '__STACK_JSON__',
-                 '__HARNESS_JSON__', '__ANCHORS_JSON__', '__APP_NAME__', '__MODE__']) {
+                 '__HARNESS_JSON__', '__ANCHORS_JSON__', '__STAMP_JSON__', '__BACKEND_JSON__',
+                 '__APP_NAME__', '__MODE__']) {
   if (html.includes(t)) die('token not replaced: ' + t);
 }
 fs.writeFileSync(out, html, 'utf8');

@@ -249,5 +249,67 @@ trap[0].renders = 'src/components/Unique.tsx:1';
 eq('renders clears the trap', A.lintDelegation(trap, root).length, 0);
 
 fs.rmSync(root, { recursive: true, force: true });
+
+// ============================================================ stale / backend / generality
+// These three are the reason the plugin can be trusted on someone else's codebase, so they are
+// tested on a synthetic app that looks nothing like the one it was built for.
+const F = require('./lib/fingerprint');
+const BE = require('./lib/backend');
+const RE = require('./lib/reach');
+
+const app2 = fs.mkdtempSync(path.join(os.tmpdir(), 'fdbg2-'));
+const w2 = (rel, body) => { const q = path.join(app2, rel); fs.mkdirSync(path.dirname(q), { recursive: true }); fs.writeFileSync(q, body, 'utf8'); };
+// a Next.js + Prisma + OpenAI app — a different ecosystem in every dimension
+w2('src/app/checkout/page.tsx', ['export default function Checkout() {', '  const pay = () => post();', '  return <Body onPress={pay} />;', '}'].join('\n') + '\n');
+w2('src/lib/orders.ts', [
+  "import { prisma } from './db';",
+  "import { summarise } from './ai';",
+  'export async function placeOrder(input) {',
+  '  const o = await prisma.order.create({ data: input });',
+  '  await summarise(o.note);',
+  '  return o;',
+  '}',
+].join('\n') + '\n');
+w2('src/lib/ai.ts', [
+  "import OpenAI from 'openai';",
+  'const client = new OpenAI();',
+  'export async function summarise(text) {',
+  '  return client.chat.completions.create({ model: "gpt-4o", messages: [] });',
+  '}',
+].join('\n') + '\n');
+w2('src/app/api/orders/route.ts', [
+  "import { prisma } from '@/lib/db';",
+  'export async function POST(req) {',
+  '  const session = await getServerSession();',
+  '  return prisma.order.create({ data: {} });',
+  '}',
+].join('\n') + '\n');
+w2('prisma/schema.prisma', 'model Order {\n  id Int @id\n}\nmodel User {\n  id Int @id\n}\n');
+
+console.log('\ngenerality (a Next + Prisma + OpenAI app — nothing like the one this was built for):');
+const helpers2 = RE.indexHelpers(app2);
+// the AI gateway is DISCOVERED from the import, not named in advance
+eq('AI gateway found without knowing its name', !!(helpers2.summarise && helpers2.summarise.ai), true);
+eq('and it propagates to the caller', !!(helpers2.placeOrder && helpers2.placeOrder.ai), true);
+eq('Prisma writes are seen as DB calls',
+   (helpers2.placeOrder && helpers2.placeOrder.apis || []).some(x => /^db:order:create$/.test(x)), true);
+
+const g2 = [{ route: '/checkout', group: 'g', actions: [
+  { action: 'Pay', symbol: 'pay', file: 'src/app/checkout/page.tsx:2', apis: ['db:order:create', 'rest:POST:/api/orders'] }] }];
+const be = BE.scanBackend(app2, g2);
+eq('Next route handler found', !!be.handlers['/api/orders'], true);
+eq('  ...and its auth guard noticed', be.handlers['/api/orders'].guarded, true);
+eq('Prisma schema tables found', Object.keys(be.tables).sort(), ['Order', 'User']);
+eq('a db: tag links to its table', (be.links['db:order:create'] || {}).table, 'order');
+
+console.log('\nstale detection (a map that cannot say it is stale will lie to you):');
+const fp2 = F.fingerprint(g2, app2, '2026-01-01T00:00:00Z');
+eq('fingerprint records the anchored file', Object.keys(fp2.files), ['src/app/checkout/page.tsx']);
+eq('fresh right after building', F.checkStale(fp2, app2).stale, false);
+fs.appendFileSync(path.join(app2, 'src/app/checkout/page.tsx'), '// touched\n');
+const st2 = F.checkStale(fp2, app2);
+eq('an edit to an anchored file makes it STALE', [st2.stale, st2.changed], [true, ['src/app/checkout/page.tsx']]);
+fs.rmSync(app2, { recursive: true, force: true });
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
