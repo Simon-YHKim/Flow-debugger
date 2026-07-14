@@ -394,6 +394,37 @@ eq('base commit is read from the fingerprint sidecar (no --from)', /built at [0-
 eq('and with that base it still followed the rename',
   JSON.parse(fs.readFileSync(g3path, 'utf8'))[0].actions[0].file, 'src/screens/Home.tsx:4');
 
+// ---- make-handoff preserves downstream curation -----------------------------------------------
+// The handoff map is regenerated from a scan, but downstream a human triage writes things a scan
+// cannot: bugAnchor (where a defect actually is), fixedIn/notABug verdicts, a top-level contract.
+// A regenerate that clobbers those is destruction — it nearly erased a real 41-entry re-triage.
+console.log('\nhandoff curation (a regenerate must not vandalise a downstream triage):');
+const appH = fs.mkdtempSync(path.join(os.tmpdir(), 'fdbgH-'));
+const wH = (rel, b) => { const q = path.join(appH, rel); fs.mkdirSync(path.dirname(q), { recursive: true }); fs.writeFileSync(q, b); };
+wH('src/app/x.tsx', ['export function X() {', '  const onSave = () => save();', '  return <B onPress={onSave} />;', '}'].join('\n') + '\n');
+const gHpath = path.join(appH, 'g.json');
+const jHpath = path.join(appH, 'flow-map.json');
+fs.writeFileSync(gHpath, JSON.stringify([{ route: '/x', group: 'g', actions: [
+  { action: 'Save', symbol: 'onSave', file: 'src/app/x.tsx:2', risks: ['bug'] },
+] }]));
+const runHandoff = () => execFileSync(process.execPath, [path.join(__dirname, 'make-handoff.js'), gHpath, appH,
+  '--out', path.join(appH, 'H.md'), '--json', jHpath, '--name', 'T'], { encoding: 'utf8', stdio: 'pipe' });
+runHandoff();
+// a downstream triage now curates the generated map
+const curated = JSON.parse(fs.readFileSync(jHpath, 'utf8'));
+curated._anchorContract = { rule: 'Cite bugAnchor.' };
+curated.screens[0].actions[0].bugAnchor = 'src/app/x.tsx:2';
+curated.screens[0].actions[0].fixedIn = '#123';
+curated.screens[0].actions[0].knownBug = false;   // triage cleared it
+fs.writeFileSync(jHpath, JSON.stringify(curated, null, 2));
+runHandoff();   // regenerate over the curated file
+const afterH = JSON.parse(fs.readFileSync(jHpath, 'utf8'));
+eq('the top-level contract survives a regenerate', afterH._anchorContract && afterH._anchorContract.rule, 'Cite bugAnchor.');
+eq('bugAnchor survives a regenerate', afterH.screens[0].actions[0].bugAnchor, 'src/app/x.tsx:2');
+eq('fixedIn survives a regenerate', afterH.screens[0].actions[0].fixedIn, '#123');
+eq('the triage verdict wins over the scan (cleared bug stays cleared)', afterH.screens[0].actions[0].knownBug, false);
+fs.rmSync(appH, { recursive: true, force: true });
+
 fs.rmSync(app2, { recursive: true, force: true });
 fs.rmSync(app3, { recursive: true, force: true });
 

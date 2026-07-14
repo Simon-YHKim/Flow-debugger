@@ -120,6 +120,35 @@ const map = {
     })),
   })),
 };
+// A handoff map is regenerated from a scan, but downstream it grows knowledge a scan cannot
+// produce: which entries are real bugs vs fixed vs not-a-bug, WHERE a bug actually lives
+// (bugAnchor), and any note a human triage attached. Clobbering that on every regenerate turns
+// this tool into a vandal — a real defect re-triage lived in one of these files, and a naive
+// rewrite would have erased 41 bug locations and the lesson written above them. So: anything the
+// scan does not own is carried forward from the existing target, keyed by (route, raw action).
+const CURATED_ACTION_FIELDS = ['bugAnchor', 'notABug', 'notABugVerifiedOn', 'fixedIn', 'fixedOn', 'wasBug'];
+if (fs.existsSync(jsonPath)) {
+  let prev = null;
+  try { prev = JSON.parse(fs.readFileSync(jsonPath, 'utf8')); } catch (e) { prev = null; }
+  if (prev && Array.isArray(prev.screens)) {
+    // carry over any top-level key the scan does not produce (e.g. _anchorContract)
+    for (const k of Object.keys(prev)) if (!(k in map)) map[k] = prev[k];
+    const oldAction = new Map();   // "route raw" -> old action
+    for (const s of prev.screens) for (const a of (s.actions || [])) oldAction.set((s.route || '') + ' ' + (a.raw || a.action || ''), a);
+    let carried = 0, retriaged = 0;
+    for (const s of map.screens) for (const a of (s.actions || [])) {
+      const old = oldAction.get((s.route || '') + ' ' + (a.raw || ''));
+      if (!old) continue;
+      for (const f of CURATED_ACTION_FIELDS) if (old[f] !== undefined) { a[f] = old[f]; carried++; }
+      // the triage state (bug / fixed / not-a-bug) is a human verdict, not a scan output. If the
+      // old map settled it, that verdict wins over this scan's mechanical risks.includes('bug').
+      if (old.fixedIn || old.notABug) { if (a.knownBug) { a.knownBug = false; retriaged++; } }
+      else if (typeof old.knownBug === 'boolean') a.knownBug = old.knownBug;
+    }
+    if (carried) console.error(`  큐레이션 보존: ${carried}개 필드 이월(${retriaged}개는 fixed/not-a-bug 로 재분류 유지)`);
+  }
+}
+
 fs.mkdirSync(path.dirname(path.resolve(jsonPath)), { recursive: true });
 fs.writeFileSync(jsonPath, JSON.stringify(map, null, 2), 'utf8');
 
@@ -213,14 +242,22 @@ p('');
 p(`전체 화면 목록: \`jq -r '.screens[] | "\\(.groupKo)  \\(.title)  \\(.route)"' ${rel(jsonPath)}\``, '');
 
 // ---------------------------------------------------------------- known bugs
-if (bugs.length) {
-  p('---', '', `## 3. 알려진 문제 ${bugs.length}건 (검증됨)`, '');
-  p('스캔이 코드에서 확인한 결함이다. **손대기 전에 여기 있는지 먼저 본다.**', '');
-  p('| 화면 | 안 되는 것 | 증상 | 코드 |', '|---|---|---|---|');
-  bugs.forEach(({ s, a }) => {
-    const sym = (a.failureModes || [])[0] || a.detail || '';
-    const loc = a.impl || a.file;
-    p(`| \`${s.route}\` | ${actKo(a)} | ${String(sym).replace(/\|/g, '/').slice(0, 60)}${sym.length > 60 ? '…' : ''} | ${loc ? '`' + loc + '` ' + trust(loc) : '—'} |`);
+// Read from the MERGED map, not the raw scan, for two reasons of honesty:
+//   · triage state wins — an entry marked fixedIn/notABug is NOT listed as a live bug (else the
+//     read artifact claims 41 open bugs when triage settled it to 22).
+//   · the location cited is bugAnchor (WHERE THE DEFECT IS — the screen), then file (the screen
+//     handler), NEVER impl. Citing impl sends a fixer to the lib that correctly throws; that is
+//     the precise mistake _anchorContract exists to stop, and this table used to make it.
+const mdBugs = [];
+for (const s of map.screens) for (const a of (s.actions || [])) if (a.knownBug) mdBugs.push({ route: s.route, a });
+if (mdBugs.length) {
+  p('---', '', `## 3. 알려진 문제 ${mdBugs.length}건`, '');
+  p('손대기 전에 여기 있는지 먼저 본다. **코드 위치 = 결함이 있는 곳(화면)** — 액션이 부르는 lib(`impl`)이 아니다.', '');
+  p('| 화면 | 안 되는 것 | 증상 | 결함 위치 |', '|---|---|---|---|');
+  mdBugs.forEach(({ route, a }) => {
+    const sym = (a.failureModes || [])[0] || a.does || '';
+    const loc = a.bugAnchor || a.file;   // never impl — that is the contract
+    p(`| \`${route}\` | ${a.action} | ${String(sym).replace(/\|/g, '/').slice(0, 60)}${sym.length > 60 ? '…' : ''} | ${loc ? '`' + loc + '`' : '—'} |`);
   });
   p('');
 }
@@ -288,5 +325,5 @@ const kb = f => (fs.statSync(f).size / 1024).toFixed(0) + ' KB';
 console.log('READ  -> ' + outPath + '   ' + kb(outPath) + '  (' + L.length + ' lines)');
 console.log('LOOKUP-> ' + jsonPath + '   ' + kb(jsonPath));
 console.log('  ' + graph.length + ' screens · ' + acts.length + ' actions · AI ' + aiPurposes.length +
-            ' · known bugs ' + bugs.length + ' · anchors ✔' + verified + ' ·' + located + ' ~' + st.weak + ' ⚠' + broken);
+            ' · known bugs ' + mdBugs.length + (bugs.length !== mdBugs.length ? ' (scan ' + bugs.length + ', triage cleared ' + (bugs.length - mdBugs.length) + ')' : '') + ' · anchors ✔' + verified + ' ·' + located + ' ~' + st.weak + ' ⚠' + broken);
 console.log('\nNEXT: commit BOTH to the app repo and MERGE. A handoff that lives on one machine is not a handoff.');

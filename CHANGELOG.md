@@ -3,6 +3,28 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.14.4] - 2026-07-15
+
+### Fixed — a regenerate no longer vandalises downstream curation (near-miss)
+A handoff map is generated from a scan, but downstream a human triage writes onto it what a scan
+cannot: `bugAnchor` (WHERE a defect actually lives — the screen, not the lib the action calls),
+`fixedIn`/`notABug` verdicts, and a top-level `_anchorContract` carrying a hard-won lesson. On a live
+run, regenerating the map from a fresh scan **silently erased 41 bug locations, 17 fixed-verdicts and
+the contract**, and broke the repo's own test that guards them. make-handoff now MERGES: any field the
+scan does not own is carried forward, keyed by (route, raw action); a triage verdict (fixed / not-a-bug)
+wins over the scan's mechanical `risks.includes('bug')`. A self-test regenerates over a curated file and
+asserts the contract, bugAnchor, fixedIn and the cleared-bug verdict all survive.
+
+### Fixed — the handoff's bug table obeyed the very rule it documents
+The "known bugs" table cited `impl || file` — i.e. it preferred `impl`, the lib function the action
+calls, which is exactly the anchor `_anchorContract` warns never to cite (the lib throws; the screen
+swallows). It now cites `bugAnchor` then `file`, never `impl`, and lists only what triage still
+considers open (22, not the scan's raw 41), so the read artifact matches the looked-up one.
+
+### Fixed — three NUL bytes in make-handoff.js
+The heredoc footgun again: `grep` saw the file as binary. Scanned and repaired; the control-char scan
+is part of the pre-commit routine. 71 → **75 tests**.
+
 ## [0.14.3] - 2026-07-15
 
 ### Fixed — two latent bugs from reading `git.commit` where the fingerprint writes `git.head`

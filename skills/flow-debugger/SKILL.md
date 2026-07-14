@@ -13,7 +13,7 @@ description: >-
   per-action diagnostic checklists, connection editing, and a bug-report
   generator that turns a vague "안 돼요" into a precise, VERIFIED file:line report.
   Produces the HTML plus a copy-paste fix and bug prompt for the assistant.
-version: 0.14.3
+version: 0.14.4
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 compatibility: [claude-code]
 author: Simon Kim
