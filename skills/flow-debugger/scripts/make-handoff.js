@@ -1,24 +1,22 @@
-// flow-debugger: turn the verified map into a HANDOFF a fresh session can read.
+// flow-debugger: turn the verified map into a HANDOFF a fresh session can actually READ.
 //
-// The interactive HTML is for a human. This is for the next agent (or the next you): one
-// git-persistent markdown file that hands over the app's real structure — what the screens
-// are, what each one actually calls, WHICH FILE PRODUCTION RENDERS, which routes a user can
-// never reach, which innocent-looking helper calls an AI three frames down, and where every
-// verified code coordinate is.
+// The first version of this script dumped 1,350 lines — 950 of them a coordinate table for
+// every action — and called it a handoff. It was a DUMP. A fresh session that reads it burns
+// its context on tables and still does not know what the app is, and the three things that
+// would have saved it are buried on line 900.
 //
-// It exists because a fresh session starts with nothing, and the two most expensive mistakes
-// it makes are the two this file prevents:
-//   · editing `src/app/x.tsx` when production renders `src/screens/deepspace/X.tsx`
-//     (build green, screen unchanged)
-//   · "fixing" a bug on a route that is wrapped in DevOnlyRoute and never opens
+// A handoff has to be read to be worth anything. So this splits the two jobs:
 //
-// Written to the TARGET repo (not this one), committed, and merged — a handoff that only
-// lives on one machine is not a handoff.
+//   FLOW-HANDOFF.md   what you READ, once, in two minutes. What the app is, the three traps
+//                     that will cost you an afternoon, the feature map, the known bugs.
+//   flow-map.json     what you LOOK UP, per screen, when you are about to touch it. Every
+//                     action, its verified coordinates, its dependencies. grep/jq-able.
+//   flow-debugger.html what you CLICK, when you want to see it.
 //
 // usage:
-//   node make-handoff.js <graph.json> <appRoot> [--out <repo>/docs/FLOW-HANDOFF.md]
-//                        [--prescan prescan.json] [--glossary glossary.ko.json]
-//                        [--html docs/flow-debugger.html] [--name "2nd-B"]
+//   node make-handoff.js <graph.json> <appRoot> --out <repo>/docs/FLOW-HANDOFF.md
+//        [--json <repo>/docs/flow-map.json] [--prescan p.json] [--glossary g.json]
+//        [--html docs/flow-debugger.html] [--name "2nd-B"]
 const fs = require('fs');
 const path = require('path');
 const A = require('./lib/anchors');
@@ -32,7 +30,7 @@ for (let i = 0; i < argv.length; i++) {
   else pos.push(v);
 }
 if (pos.length < 2) {
-  console.error('usage: node make-handoff.js <graph.json> <appRoot> [--out docs/FLOW-HANDOFF.md] [--prescan p.json] [--glossary g.json] [--html docs/flow-debugger.html] [--name App]');
+  console.error('usage: node make-handoff.js <graph.json> <appRoot> --out docs/FLOW-HANDOFF.md [--json docs/flow-map.json] [--prescan p.json] [--glossary g.json] [--html docs/flow-debugger.html] [--name App]');
   process.exit(2);
 }
 const [graphPath, appRoot] = pos;
@@ -43,32 +41,30 @@ const GAPI = glossary.apis || {}, GAI = glossary.ai || {};
 
 const sideStack = graphPath.replace(/\.json$/, '.stack.txt');
 const stack = fs.existsSync(sideStack) ? fs.readFileSync(sideStack, 'utf8').trim() : '';
-const appName = (flags.name && flags.name !== true) ? flags.name : (() => {
-  const p = graphPath.replace(/\.json$/, '.appname.txt');
-  return fs.existsSync(p) ? fs.readFileSync(p, 'utf8').trim() : '앱';
-})();
-
+const appName = (flags.name && flags.name !== true) ? flags.name : '앱';
 const prescan = rd(flags.prescan, null) || {
-  render: R.detectRenderMode(appRoot),
-  helpers: R.indexHelpers(appRoot),
-  gates: R.scanGates(appRoot, graph),
+  render: R.detectRenderMode(appRoot), helpers: R.indexHelpers(appRoot), gates: R.scanGates(appRoot, graph),
 };
 const audit = A.validateGraph(graph, appRoot, { snap: false });
 const deleg = A.lintDelegation(graph, appRoot);
 const st = audit.stat;
 const verified = st.exact + st.near + st.resolved;
 const located = st.unchecked + st.fileonly;
+const broken = st.absent + st.prose + st.missing + st.ambiguous + st.range + st.outside + st.unparsable;
 
 const outPath = (flags.out && flags.out !== true) ? flags.out : 'FLOW-HANDOFF.md';
+const jsonPath = (flags.json && flags.json !== true) ? flags.json : path.join(path.dirname(outPath), 'flow-map.json');
 const htmlRel = (flags.html && flags.html !== true) ? flags.html : null;
+const rel = p => {
+  const r = path.relative(path.resolve(appRoot), path.resolve(p)).replace(/\\/g, '/');
+  return r.startsWith('..') ? path.basename(p) : r;
+};
 
-// ---------------------------------------------------------------- helpers
 const ko = s => s.titleKo || s.title || s.route;
 const actKo = a => a.actionKo || a.action;
 const apiKo = t => (GAPI[t] && GAPI[t].ko) || t;
-const mark = raw => {
-  const v = audit.index[raw];
-  if (!v) return '';
+const trust = raw => {
+  const v = audit.index[raw]; if (!v) return '';
   if (['exact', 'near', 'resolved'].includes(v.status)) return '✔';
   if (['unchecked', 'fileonly'].includes(v.status)) return '·';
   if (v.status === 'weak') return '~';
@@ -76,172 +72,184 @@ const mark = raw => {
 };
 const groups = [...new Set(graph.map(s => s.group))];
 const groupKo = g => (graph.find(s => s.group === g && s.groupKo) || {}).groupKo || g;
-const totalActions = graph.reduce((n, s) => n + (s.actions || []).length, 0);
+const acts = graph.flatMap(s => (s.actions || []).map(a => ({ s, a })));
+const aiUses = acts.filter(x => x.a.ai && x.a.ai.purpose);
+const aiPurposes = [...new Set(aiUses.map(x => x.a.ai.purpose))];
+const apiTags = [...new Set(acts.flatMap(x => x.a.apis || []))];
+const bugs = acts.filter(x => (x.a.risks || []).includes('bug'));
 
-const apiTags = new Map(); const aiMap = new Map(); const risk = {};
-graph.forEach(s => (s.actions || []).forEach(a => {
-  (a.apis || []).forEach(t => apiTags.set(t, (apiTags.get(t) || 0) + 1));
-  if (a.ai && a.ai.purpose && !aiMap.has(a.ai.purpose)) aiMap.set(a.ai.purpose, a.ai);
-  (a.risks || []).forEach(r => risk[r] = (risk[r] || 0) + 1);
-}));
-const RISK_KO = { network: '인터넷 필요', auth: '로그인 필요', ai: 'AI(가끔 틀림)', cost: '비용 발생',
-  external: '외부 서비스 의존', gate: '기본 꺼짐/권한', weakpoint: '조용한 실패 위험', bug: '알려진 약점' };
+// ================================================================ the JSON (what you look up)
+const map = {
+  app: appName,
+  generatedFrom: path.basename(graphPath),
+  stack,
+  production: prescan.render ? { switch: prescan.render.fn, at: prescan.render.file, note: prescan.render.note } : null,
+  gates: prescan.gates,
+  aiHelpers: Object.fromEntries(Object.entries(prescan.helpers || {}).filter(([, v]) => v.ai)),
+  trust: { verified, located, caution: st.weak, broken, total: st.total, delegationTraps: deleg.length },
+  screens: graph.map(s => ({
+    route: s.route, title: ko(s), group: s.group, groupKo: s.groupKo || s.group,
+    summary: s.summaryKo || s.summary || '',
+    rendersInProduction: s.renders || null,
+    gate: (prescan.gates || {})[s.route] || null,
+    actions: (s.actions || []).map(a => ({
+      action: actKo(a), raw: a.action, symbol: a.symbol || null,
+      does: a.plain || a.detail || '',
+      file: a.file || null, fileTrust: a.file ? trust(a.file) : null,
+      impl: a.impl || null, implTrust: a.impl ? trust(a.impl) : null,
+      apis: a.apis || [], ai: a.ai || null, goesTo: a.to || null,
+      risks: a.risks || [], checklist: a.checklist || [], failureModes: a.failureModes || [],
+      knownBug: (a.risks || []).includes('bug'),
+    })),
+  })),
+};
+fs.mkdirSync(path.dirname(path.resolve(jsonPath)), { recursive: true });
+fs.writeFileSync(jsonPath, JSON.stringify(map, null, 2), 'utf8');
 
-// ---------------------------------------------------------------- build
-const L = [];
-const p = (...x) => L.push(...x);
+// ================================================================ the MD (what you read)
+const L = []; const p = (...x) => L.push(...x);
 
-p(`# ${appName} — 구조 핸드오프 (flow-debugger)`, '');
-p(`> **새 세션은 이 파일 하나로 앱 구조를 파악한다.**`);
-p(`> 여기 있는 모든 코드 좌표는 **실제 소스트리와 대조·검증**된 것이다(빌드 때 자동 생성).`);
-p(`> 자동 생성: \`node scripts/make-handoff.js\` — 손으로 고치지 말고 재생성할 것.`, '');
-p(`규모: **${graph.length}개 화면 · ${totalActions}개 동작 · 서버/데이터 ${apiTags.size}종 · AI ${aiMap.size}종**  `);
-p(`코드 좌표 신뢰도: **✔ 함수까지 대조 ${verified}** · **· 파일·줄만 확인 ${located}** · ⚠ ${st.total - verified - located}`, '');
+p(`# ${appName} — 구조 핸드오프`, '');
+p(`> 새 세션은 **이 파일만 읽으면** 앱 구조를 안다. 2분이면 된다.`);
+p(`> 개별 화면을 건드릴 땐 [\`${rel(jsonPath)}\`](${rel(jsonPath)}) 를 조회한다(아래 §5).`);
+p(`> 자동 생성 — 손으로 고치지 말고 \`make-handoff.js\` 로 재생성할 것.`, '');
+p(`**${graph.length}개 화면 · ${acts.length}개 동작 · 서버/데이터 ${apiTags.length}종 · AI ${aiPurposes.length}종**  `);
+p(`코드 좌표 ${st.total}개 전부 실제 소스와 대조: **✔ 함수까지 확인 ${verified}** · **· 파일·줄만 확인 ${located}** · ⚠ ${broken + st.weak}`, '');
+if (stack) p('**스택** — ' + stack, '');
 
-// paths in the wake-up block must be REPO-RELATIVE — the next session may not be on this machine
-const relOut = (() => {
-  const r = path.relative(path.resolve(appRoot), path.resolve(outPath)).replace(/\\/g, '/');
-  return r.startsWith('..') ? path.basename(outPath) : r;
-})();
-p('## 0. 새 세션 시작하는 법 (그대로 붙여넣기)', '');
-p('```bash');
-p(`git pull origin main`);
-p(`cat ${relOut}          # 이 파일 — 앱 구조 파악`);
-if (htmlRel) p(`# 클릭해서 보는 흐름도(선택): ${htmlRel}`);
-p('```', '');
-p(`그리고 에이전트에게: **"\`${relOut}\` 읽고 구조 파악한 다음 이어서 작업해"**`, '');
+// ---------------------------------------------------------------- the traps
+p('---', '', '## 1. 코드 만지기 전에 반드시 아는 3가지', '');
+p('이 셋을 모르고 시작하면 반나절을 버린다. 실제로 그렇게 됐다.', '');
 
-// ---- the two mistakes
-p('## 1. 이 앱에서 새 세션이 가장 많이 저지르는 실수 두 가지', '');
+let n = 0;
 if (prescan.render) {
-  p(`### ① 프로덕션이 렌더하지 않는 파일을 고친다`, '');
+  n++;
+  p(`### ${n}. \`src/app/*.tsx\` 를 고치면 **화면이 안 바뀐다**`, '');
   p(`**\`${prescan.render.fn}()\`** (\`${prescan.render.file}\`) 가 어느 UI를 그릴지 고른다`
-    + (prescan.render.routes ? ` — 라우트 파일 ${prescan.render.routes}개가 이걸로 갈라진다.` : '.'));
-  p('');
-  p(`**사용자가 보는 화면은 이 함수가 고르는 쪽이다.** 라우트 파일의 다른 본문은 프로덕션에서`);
-  p(`렌더되지 않는다 — 거기를 고치면 **빌드는 초록인데 화면은 그대로**다.`);
-  p(`아래 화면 표의 \`프로덕션 렌더 파일\` 열을 보고 그 파일을 고쳐라.`, '');
-} else {
-  p('### ① (렌더 위임 없음 — 라우트 파일이 화면을 직접 그린다)', '');
+    + (prescan.render.routes ? ` — 라우트 ${prescan.render.routes}개가 이걸로 갈라진다.` : '.'), '');
+  p(`사용자가 보는 건 **위임된 쪽**이다. 라우트 파일의 본문은 프로덕션에서 렌더되지 않는다.`);
+  p(`거기를 고치면 **빌드는 초록인데 화면은 그대로**다.`, '');
+  const withR = graph.filter(s => s.renders);
+  p(`**고칠 파일 찾는 법** — 화면 ${withR.length}개가 위임한다. 그 화면의 진짜 파일:`, '');
+  p('```bash');
+  p(`jq -r '.screens[] | select(.route=="/sign-in") | .rendersInProduction' ${rel(jsonPath)}`);
+  p('```', '');
 }
+
 const gateList = Object.entries(prescan.gates || {});
-p(`### ② 사용자가 열 수도 없는 화면의 "버그"를 고친다`, '');
-if (!gateList.length) p('감지된 게이트 없음 — 모든 화면이 프로덕션에서 열린다.', '');
-else {
-  p(`아래 **${gateList.length}개 화면은 게이트 뒤에 있어** 일반 사용자가 못 연다.`);
-  p(`여기서 발견한 문제는 **실제 사용자에게는 보이지 않는다.** 고치기 전에 그 사실부터 확인할 것.`, '');
-  p('| 화면 | 게이트 | 근거 |', '|---|---|---|');
-  gateList.forEach(([r, g]) => p(`| \`${r}\` | ${g.gate} | \`${g.evidence}\` |`));
-  p('');
-}
-const aiHelpers = Object.entries(prescan.helpers || {}).filter(([, v]) => v.ai);
-if (aiHelpers.length) {
-  p('### ③ 겉보기와 다른 헬퍼 (화면 코드만 읽으면 절대 안 보인다)', '');
-  p(`화면에 아래 함수 호출이 한 줄 있으면, 그 안에서 **AI를 부른다.** (총 ${aiHelpers.length}개)`, '');
-  p('| 함수 | 위치 | 안에서 하는 일 |', '|---|---|---|');
-  aiHelpers.slice(0, 24).forEach(([k, v]) =>
-    p(`| \`${k}()\` | \`${v.file}\` | AI${v.apis.length ? ' + ' + v.apis.slice(0, 3).join(', ') : ''} |`));
-  if (aiHelpers.length > 24) p(`| … | | 나머지 ${aiHelpers.length - 24}개 |`);
+if (gateList.length) {
+  n++;
+  p(`### ${n}. 이 ${gateList.length}개 화면은 **사용자가 못 연다**`, '');
+  p(`배포판에서 열리지 않는다. **여기서 찾은 "버그"는 실사용자에게 안 보인다** — 고치기 전에 그것부터 확인할 것.`);
+  p(`(전에 이걸 안 물어서 "저장 버튼이 가짜다, 데이터가 사라진다"는 확신에 찬 **허위 신고 4건**이 나갔다.)`, '');
+  p('| 화면 | 왜 | 근거 |', '|---|---|---|');
+  gateList.forEach(([r, g]) => p(`| \`${r}\` | ${g.why} | \`${g.evidence}\` |`));
   p('');
 }
 
-if (stack) { p('## 2. 스택', '', stack, ''); }
+const aiH = Object.entries(prescan.helpers || {}).filter(([, v]) => v.ai);
+if (aiH.length) {
+  n++;
+  p(`### ${n}. 겉보기와 다른 함수 — **호출 한 줄에 AI가 숨어 있다**`, '');
+  p(`화면 코드엔 \`createRecord(...)\` 한 줄뿐인데 그 안에서 **AI를 부른다.** 화면 파일만 읽으면 절대 안 보인다.`);
+  p(`(이걸 안 따라가서 서버 호출 66건·AI 7건이 통째로 지도에서 빠졌었다.)`, '');
+  p(`**AI를 부르는 함수 ${aiH.length}개** — 화면에 이 호출이 보이면 AI·비용·지연을 계산에 넣어라:`, '');
+  p('| 함수 | 위치 | 경유 |', '|---|---|---|');
+  aiH.slice(0, 12).forEach(([k, v]) => p(`| \`${k}()\` | \`${v.file}\` | ${v.via ? '`' + v.via + '`' : '직접'} |`));
+  if (aiH.length > 12) p(`\n전체 ${aiH.length}개: \`jq '.aiHelpers | keys' ${rel(jsonPath)}\``);
+  p('');
+}
 
-// ---- screens
-p('## 3. 화면 인벤토리', '');
+// ---------------------------------------------------------------- feature map
+p('---', '', '## 2. 앱 기능 지도', '');
+// The "하는 일" column used to borrow the first screen's summary, which produced things like
+// "인증·시작 = 빈 껍데기입니다" (it had grabbed the (auth) layout wrapper). A wrong one-liner is
+// worse than none — the screen names below say it themselves.
+p('| 영역 | 화면 | 동작 | 주요 화면 |', '|---|---|---|---|');
 groups.forEach(g => {
   const list = graph.filter(s => s.group === g);
-  p(`### ${groupKo(g)}  \`${g}\`  (${list.length})`, '');
-  p('| 화면 | route | 동작 | 프로덕션 렌더 파일 | 게이트 |', '|---|---|---|---|---|');
-  list.forEach(s => {
-    const gt = (prescan.gates || {})[s.route];
-    p(`| ${ko(s)} | \`${s.route}\` | ${(s.actions || []).length} | ${s.renders ? '`' + s.renders + '` ' + mark(s.renders) : '—'} | ${gt ? '🔒 ' + gt.gate : ''} |`);
+  const nAct = list.reduce((n, s) => n + (s.actions || []).length, 0);
+  const top = list.slice().sort((a, b) => (b.actions || []).length - (a.actions || []).length).slice(0, 4);
+  p(`| **${groupKo(g)}** | ${list.length} | ${nAct} | ${top.map(s => `${ko(s)} \`${s.route}\``).join(' · ')} |`);
+});
+p('');
+p(`전체 화면 목록: \`jq -r '.screens[] | "\\(.groupKo)  \\(.title)  \\(.route)"' ${rel(jsonPath)}\``, '');
+
+// ---------------------------------------------------------------- known bugs
+if (bugs.length) {
+  p('---', '', `## 3. 알려진 문제 ${bugs.length}건 (검증됨)`, '');
+  p('스캔이 코드에서 확인한 결함이다. **손대기 전에 여기 있는지 먼저 본다.**', '');
+  p('| 화면 | 안 되는 것 | 증상 | 코드 |', '|---|---|---|---|');
+  bugs.forEach(({ s, a }) => {
+    const sym = (a.failureModes || [])[0] || a.detail || '';
+    const loc = a.impl || a.file;
+    p(`| \`${s.route}\` | ${actKo(a)} | ${String(sym).replace(/\|/g, '/').slice(0, 60)}${sym.length > 60 ? '…' : ''} | ${loc ? '`' + loc + '` ' + trust(loc) : '—'} |`);
   });
   p('');
-});
+}
 
-// ---- nav graph
+// ---------------------------------------------------------------- nav
 const NAV = [];
-graph.forEach(s => (s.actions || []).forEach(a => { if (a.to && graph.some(x => x.route === a.to)) NAV.push([s, a, a.to]); }));
+acts.forEach(({ s, a }) => { if (a.to && graph.some(x => x.route === a.to)) NAV.push([s, a, a.to]); });
 if (NAV.length) {
-  p('## 4. 화면 이동 그래프', '', '```mermaid', 'flowchart LR');
+  p('---', '', `## 4. 화면 이동 (${NAV.length}개 연결)`, '');
+  p('<details><summary>mermaid 그래프 펼치기</summary>', '', '```mermaid', 'flowchart LR');
   const id = new Map(); let i = 0;
   const mid = r => { if (!id.has(r)) id.set(r, 'S' + (++i)); return id.get(r); };
   const seen = new Set();
   NAV.forEach(([s, a, to]) => {
     const k = s.route + '>' + to; if (seen.has(k)) return; seen.add(k);
     const q = t => String(t).replace(/["|]/g, "'");
-    const tScreen = graph.find(x => x.route === to);
-    p(`  ${mid(s.route)}["${q(ko(s))}"] -->|${q(actKo(a))}| ${mid(to)}["${q(tScreen ? ko(tScreen) : to)}"]`);
+    const t = graph.find(x => x.route === to);
+    p(`  ${mid(s.route)}["${q(ko(s))}"] -->|${q(actKo(a))}| ${mid(to)}["${q(t ? ko(t) : to)}"]`);
   });
-  p('```', '');
+  p('```', '', '</details>', '');
 }
 
-// ---- capabilities
-p('## 5. 서버·데이터 작업', '');
-const kinds = {};
-[...apiTags.keys()].forEach(t => { const k = t.split(':')[0]; (kinds[k] = kinds[k] || []).push(t); });
-Object.keys(kinds).sort().forEach(k => {
-  p(`**${k}** (${kinds[k].length})  ` + kinds[k].map(t => `\`${t}\``).join(' · '), '');
-});
-if (aiMap.size) {
-  p('## 6. AI 기능', '', '| 목적 | 모델 | 경유 | 쉬운 이름 |', '|---|---|---|---|');
-  for (const [k, ai] of aiMap) p(`| \`${k}\` | ${ai.model || '—'} | ${ai.via || '—'} | ${(GAI[k] && GAI[k].ko) || ''} |`);
-  p('');
-}
-
-// ---- verified anchors: the payload
-p('## 7. 검증된 코드 좌표 (화면 → 동작 → file:line)', '');
-p('마크: **✔** 파일·줄·**함수까지** 대조 완료 · **·** 파일·줄은 실재(대조할 함수명 없음) · **⚠** 못 믿음', '');
-graph.forEach(s => {
-  const acts = (s.actions || []).filter(a => a.file || a.impl);
-  if (!acts.length) return;
-  p(`<details><summary><b>${ko(s)}</b> <code>${s.route}</code> — 동작 ${acts.length}</summary>`, '');
-  p('| 동작 | 코드 위치 | 실제 로직 | 의존 |', '|---|---|---|---|');
-  acts.forEach(a => {
-    const dep = [(a.apis || []).map(t => apiKo(t)).join(', '), a.ai ? 'AI:' + a.ai.purpose : ''].filter(Boolean).join(' / ');
-    p(`| ${actKo(a)} | ${a.file ? '`' + a.file + '` ' + mark(a.file) : '—'} | ${a.impl ? '`' + a.impl + '` ' + mark(a.impl) : '—'} | ${dep || '—'} |`);
-  });
-  p('', '</details>', '');
-});
-
-// ---- risks
-p('## 8. 위험 프로필', '');
-Object.entries(risk).sort((a, b) => b[1] - a[1]).forEach(([r, n]) => p(`- **${RISK_KO[r] || r}** — ${n}개 동작`));
+// ---------------------------------------------------------------- lookup
+p('---', '', '## 5. 필요할 때 찾아보는 법', '');
+p(`읽는 건 여기까지다. 나머지는 **찾아 쓴다** — [\`${rel(jsonPath)}\`](${rel(jsonPath)}) 에 ${acts.length}개 동작 전부 있다.`, '');
+p('```bash');
+p(`# 한 화면이 무슨 일을 하는가`);
+p(`jq '.screens[] | select(.route=="/capture")' ${rel(jsonPath)}`);
 p('');
+p(`# 이 화면을 고치려면 어느 파일인가 (프로덕션 렌더 파일)`);
+p(`jq -r '.screens[] | select(.route=="/capture") | .rendersInProduction' ${rel(jsonPath)}`);
+p('');
+p(`# 어떤 동작이 이 테이블을 건드리나`);
+p(`jq -r '.screens[].actions[] | select(.apis[]? | contains("records")) | .action' ${rel(jsonPath)}`);
+p('');
+p(`# AI 쓰는 동작 전부`);
+p(`jq -r '.screens[] as $s | $s.actions[] | select(.ai) | "\\($s.route)  \\(.action)  \\(.ai.purpose)"' ${rel(jsonPath)}`);
+p('```', '');
+if (htmlRel) p(`**클릭해서 보기:** [\`${htmlRel}\`](${htmlRel}) — 화면별 플로우 / 시스템 플로우, 버그 신고서 생성.`, '');
 
-// ---- trust
-p('## 9. 이 맵의 신뢰도', '');
+// ---------------------------------------------------------------- trust
+p('---', '', '## 6. 이 지도를 얼마나 믿어도 되나', '');
 p('| | 수 | 뜻 |', '|---|---|---|');
-p(`| ✔ VERIFIED | ${verified} | 그 줄에 그 함수가 실제로 있음 |`);
-p(`| · LOCATED | ${located} | 파일·줄은 실재. **대조할 함수명이 없어 그 줄이 맞는지는 확인 못 함** |`);
-p(`| ~ CAUTION | ${st.weak} | 빈 줄 / import / 주석 / 맨 JSX 렌더 줄 |`);
-p(`| ⚠ 못 믿음 | ${st.absent + st.prose + st.missing + st.ambiguous + st.range + st.outside + st.unparsable} | 대조 실패 |`);
-p(`| 위임 트랩 | ${deleg.length} | 앵커가 가리키는 파일이 프로덕션에선 다른 걸 그림 |`);
-p('');
+p(`| **✔** | ${verified} | 그 줄에 **그 함수가 실제로 있음** — 출발점으로 신뢰해도 됨 |`);
+p(`| **·** | ${located} | 파일·줄은 실재. **대조할 함수명이 없어 그 줄이 맞는지는 확인 못 함** — 근처를 읽고 판단 |`);
+p(`| **~** | ${st.weak} | 빈 줄/import/주석 — 로직은 다른 줄 |`);
+p(`| **⚠** | ${broken} | 대조 실패 — 믿지 말 것 |`);
+p(`| 위임 트랩 | ${deleg.length} | 앵커가 가리키는 파일이 프로덕션에선 다른 걸 그림 |`, '');
 if (deleg.length) {
   p('**위임 트랩 — 이 좌표를 고쳐도 화면은 안 바뀐다:**', '');
-  deleg.slice(0, 10).forEach(d => p(`- \`${d.route}\` :: ${d.action} → \`${d.file}\` 는 프로덕션에서 \`<${d.delegatesTo}/>\` 를 렌더`));
+  deleg.slice(0, 8).forEach(d => p(`- \`${d.route}\` :: ${d.action} → \`${d.file}\` 는 프로덕션에서 \`<${d.delegatesTo}/>\` 를 렌더`));
   p('');
 }
-
-p('## 10. 이 맵 갱신하는 법', '');
-p('앱을 고쳤으면 맵도 다시 만든다(안 그러면 이 파일이 거짓말을 시작한다):', '');
+p('**앱을 고쳤으면 지도도 갱신한다** — 안 하면 이 파일이 거짓말을 시작한다:', '');
 p('```bash');
-p('# flow-debugger 스킬 폴더에서');
-p(`node scripts/prescan.js "${path.resolve(appRoot)}" --graph <graph.json>`);
+p('# flow-debugger 스킬 폴더에서 (scan-prompts.md "RESCAN / PATCH" 참조)');
 p(`node scripts/verify-anchors.js <graph.json> "${path.resolve(appRoot)}" --fix <graph.json> --strict`);
-p(`node scripts/build.js assets/flow-debugger.template.html <graph.json> <glossary.json> <out.html> --app-root "${path.resolve(appRoot)}"`);
-p(`node scripts/make-handoff.js <graph.json> "${path.resolve(appRoot)}" --out ${outPath.replace(/\\/g, '/')}`);
+p(`node scripts/make-handoff.js <graph.json> "${path.resolve(appRoot)}" --out ${rel(outPath)} --json ${rel(jsonPath)}`);
 p('```', '');
-p('앵커가 많이 틀어졌으면 그 화면만 **RESCAN** 한다 — `references/scan-prompts.md` "RESCAN / PATCH".', '');
 
 fs.mkdirSync(path.dirname(path.resolve(outPath)), { recursive: true });
 fs.writeFileSync(outPath, L.join('\n') + '\n', 'utf8');
 
-const kb = (fs.statSync(outPath).size / 1024).toFixed(0);
-console.log('handoff -> ' + outPath + '  (' + kb + ' KB)');
-console.log('  screens ' + graph.length + ' · actions ' + totalActions +
-            ' · anchors ✔' + verified + ' ·' + located + ' ~' + st.weak +
-            ' · gates ' + Object.keys(prescan.gates || {}).length + ' · delegation traps ' + deleg.length);
-console.log('\nNEXT: commit it to the app repo and MERGE — a handoff that lives on one machine is not a handoff.');
+const kb = f => (fs.statSync(f).size / 1024).toFixed(0) + ' KB';
+console.log('READ  -> ' + outPath + '   ' + kb(outPath) + '  (' + L.length + ' lines)');
+console.log('LOOKUP-> ' + jsonPath + '   ' + kb(jsonPath));
+console.log('  ' + graph.length + ' screens · ' + acts.length + ' actions · AI ' + aiPurposes.length +
+            ' · known bugs ' + bugs.length + ' · anchors ✔' + verified + ' ·' + located + ' ~' + st.weak + ' ⚠' + broken);
+console.log('\nNEXT: commit BOTH to the app repo and MERGE. A handoff that lives on one machine is not a handoff.');

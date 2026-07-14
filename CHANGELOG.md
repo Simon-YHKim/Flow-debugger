@@ -3,6 +3,29 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.13.1] - 2026-07-14
+
+### Fixed — the handoff was a dump, not a handoff
+v0.13.0's handoff was 1,350 lines, 950 of them a coordinate table for every action. A fresh
+session reading it burns its context on tables and still does not know what the app is, and the
+three things that would have saved it are buried on line 900. **A handoff has to be read to be
+worth anything.** Split into the two jobs it was conflating:
+
+| | what it is | size |
+|---|---|---|
+| `FLOW-HANDOFF.md` | what you **read**, once, in two minutes | ~30 KB |
+| `flow-map.json` | what you **look up**, per screen, when you are about to touch it (jq-able) | full data |
+| `flow-debugger.html` | what you **click** | — |
+
+The markdown now leads with **the three traps that actually cost an afternoon** in that
+codebase, then the feature map and the verified known bugs. Every exhaustive table moved to the
+JSON, with `jq` recipes in the doc for the questions people actually ask ("which file do I edit
+for this screen?", "what touches this table?", "which actions use AI?").
+
+- The feature map's one-liner column borrowed the first screen's summary, which produced
+  "인증·시작 = 빈 껍데기입니다" (it had grabbed the layout wrapper). A wrong one-liner is worse
+  than none; the screen names say it themselves.
+
 ## [0.13.0] - 2026-07-14
 
 ### Added
