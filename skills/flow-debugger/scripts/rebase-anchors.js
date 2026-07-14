@@ -49,7 +49,7 @@ let base = (flags.from && flags.from !== true) ? flags.from : null;
 if (!base) {
   const fpPath = graphPath.replace(/\.json$/, '.fingerprint.json');
   if (fs.existsSync(fpPath)) {
-    try { base = JSON.parse(fs.readFileSync(fpPath, 'utf8')).git.commit; } catch (e) { /* fall through */ }
+    try { base = JSON.parse(fs.readFileSync(fpPath, 'utf8')).git.head; } catch (e) { /* fall through */ }
   }
 }
 if (!base) {
@@ -150,6 +150,11 @@ function rebaseRef(raw) {
 }
 
 const graph = JSON.parse(fs.readFileSync(graphPath, 'utf8'));
+if (!Array.isArray(graph)) {
+  console.error(`이 파일은 스크린맵 그래프(화면 배열)가 아닙니다: ${graphPath}`);
+  console.error(`rebase 는 스캔 그래프(screenmap.*.json)에 씁니다 — flow-map.json(조회용 구조)이 아니라.`);
+  process.exit(2);
+}
 for (const s of graph) {
   for (const key of ['renders', 'file', 'impl']) {
     if (typeof s[key] === 'string') { const v = rebaseRef(s[key]); if (v) s[key] = v; }

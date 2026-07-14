@@ -244,6 +244,69 @@ function findSymbolLine(lines, syms, near) {
   return null;
 }
 
+// The identifier a line DEFINES, if the line is a single clean definition. This is not the same
+// as "a name that appears on the line" — a call site or a comment does not define anything. Used
+// to name `impl` anchors (which point at the implementing function) so a reader sees WHICH function
+// implements an action without opening the file. It is intentionally NOT used to upgrade the trust
+// tier: extracting a name from a line and then confirming that name is on the line is a tautology,
+// and reporting a confidence you got for free is the failure this whole module exists to prevent.
+function symbolDefinedAt(rawLine) {
+  const code = codeOf(rawLine);
+  if (isNonCodeLine(rawLine)) return null;                 // blank / import / comment / bare JSX
+  const shapes = [
+    /(?:^|\s)(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)/,
+    /(?:^|\s)(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*[:=]/,
+    /(?:^|\s)(?:export\s+)?(?:abstract\s+)?class\s+([A-Za-z_$][\w$]*)/,
+    /(?:^|\s)(?:export\s+)?def\s+([A-Za-z_$][\w$]*)/,
+    /(?:^|[{,]\s*)([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*[:{]/,   // object / class method shorthand
+  ];
+  for (const re of shapes) {
+    const m = code.match(re);
+    if (m && m[1] && isCodeIdent(m[1])) {
+      // sanity: the name we pulled out really is DEFINED here (defRe is the same rule used to
+      // confirm scan-supplied symbols), so we never label a line with a name it merely mentions
+      if (defRe(m[1]).test(code)) return m[1];
+    }
+  }
+  return null;
+}
+
+// Record, for each `impl` anchor that lands on a clean named definition, WHICH function it is —
+// in a SEPARATE `implName` field, NOT embedded in the coordinate.
+//
+// This distinction is the whole point. If the name were written into the anchor string
+// ("path:line (useSignInForm)") the verifier would read it back and confirm it — but the name came
+// from that very line, so the confirmation is a tautology, and it would silently promote the anchor
+// to the VERIFIED tier it never earned. The scan never named this symbol; we read it off the code.
+// So it lives beside the anchor as a display aid: a reader sees which function implements an action
+// without opening the file, and the trust tier stays exactly what it was (located, not verified).
+// Returns how many anchors gained a name.
+function nameImplAnchors(graph, appRoot) {
+  const cache = {};
+  const linesOf = rel => {
+    if (rel in cache) return cache[rel];
+    try { cache[rel] = fs.readFileSync(path.join(appRoot, rel), 'utf8').replace(/\r\n/g, '\n').split('\n'); }
+    catch (e) { cache[rel] = null; }
+    return cache[rel];
+  };
+  let named = 0;
+  const nameOne = obj => {
+    const raw = obj.impl;
+    if (typeof raw !== 'string') return;
+    const refs = findRefs(raw);
+    if (!refs.length || !refs[0].line) return;
+    if (refs[0].symbols && refs[0].symbols.length) return;   // the scan already named it — leave that alone
+    const lines = linesOf(refs[0].path);
+    if (!lines) return;
+    const sym = symbolDefinedAt(lines[refs[0].line - 1]);
+    if (!sym) return;
+    obj.implName = sym;   // beside the anchor, never inside it
+    named++;
+  };
+  for (const s of (graph || [])) for (const a of (s.actions || [])) nameOne(a);
+  return named;
+}
+
 // ---------------------------------------------------------------- validate one anchor
 // status:
 //   exact     line given, the named symbol is on it                     -> trust
@@ -495,6 +558,6 @@ function applyVerdicts(graph, appRoot, opts) {
 
 module.exports = {
   findRefs, parseAnchor, relTo, resolveFile, validateAnchor, validateGraph, applyVerdicts,
-  lintDelegation, delegatesTo,
+  lintDelegation, delegatesTo, symbolDefinedAt, nameImplAnchors,
   countLines, symbolsOf, isCodeIdent, TRUSTED, SUSPECT, WEAK, SNAP_WINDOW,
 };

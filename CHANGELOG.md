@@ -3,6 +3,25 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.14.3] - 2026-07-15
+
+### Fixed — two latent bugs from reading `git.commit` where the fingerprint writes `git.head`
+The handoff opened with "이 지도는 커밋 `?`" (the commit was never resolved), and rebase-anchors could
+not auto-detect its base from the fingerprint sidecar, so every run needed an explicit `--from`.
+Both now read `git.head`. A self-test drives the fingerprint→rebase auto-base path so the field name
+cannot silently rot again. rebase-anchors also refuses a non-graph input (e.g. flow-map.json) with a
+clear message instead of a stack trace.
+
+### Added — `impl` anchors are named with the function they implement (honestly)
+227 of 2nd-B's `impl` anchors pointed at a file:line with no symbol confirmed. Each of those lines is
+often a clean definition (`export function useSignInForm`, `const handleSubmit = useCallback`), and a
+reader wants that name without opening the file. `nameImplAnchors` reads it off the code and records
+it in a **separate `implName` field** — deliberately NOT embedded in the coordinate. Embedding it
+would let the verifier read the name back and "confirm" it, promoting the anchor to the VERIFIED tier
+it never earned — a tautology, since the name came from that very line. So the tier is untouched
+(verified stays 509, honest), and the name shows as "실제 로직 — useSignInForm()". A self-test asserts
+the trust count does not move when an impl is named. 59 → **71 tests**.
+
 ## [0.14.2] - 2026-07-15
 
 Two features shipped in 0.14 without a test that could catch them dying, and one that gave up too

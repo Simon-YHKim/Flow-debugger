@@ -540,7 +540,10 @@ function nodeAnchors(n){ if(!n)return [];
       if(loc&&!seen.has(loc)){seen.add(loc);out.push({label:"동작 '"+actLabel(a)+"'",raw:loc});}});
   }
   if(n.type==="action"){
-    if(d.impl)out.push({label:"실제 로직",raw:d.impl});
+    /* implName is the function the impl line DEFINES, read off the code (not scan-supplied), so a
+       reader sees WHICH function implements this action without opening the file. It is a display
+       label only — the trust badge on the coordinate is unchanged by it. */
+    if(d.impl)out.push({label:d.implName?("실제 로직 — "+d.implName+"()"):"실제 로직",raw:d.impl});
     if(d.file&&d.file!==d.impl)out.push({label:d.impl?"화면 쪽 호출부":"동작 위치",raw:d.file});
     if(d.renders)out.push({label:"프로덕션 렌더 파일",raw:d.renders});
     if(n.screen&&n.screen.renders&&n.screen.renders!==d.renders)out.push({label:"이 화면을 실제로 그리는 파일",raw:n.screen.renders});

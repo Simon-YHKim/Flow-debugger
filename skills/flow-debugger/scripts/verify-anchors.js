@@ -104,10 +104,14 @@ if (flags.json) {
 if (flags.fix) {
   const fixed = JSON.parse(JSON.stringify(graph));
   const r = A.applyVerdicts(fixed, appRoot, { snap });
+  // name the impl anchors that sit on a clean definition, so a reader sees WHICH function
+  // implements each action. Display only — this does not touch the trust tier (see anchors.js).
+  const named = A.nameImplAnchors(fixed, appRoot);
   fs.writeFileSync(flags.fix, JSON.stringify(fixed, null, 2), 'utf8');
   if (!quiet) {
     console.log('\nrepaired graph -> ' + flags.fix);
     console.log('  ' + r.fixed.length + ' anchor(s) corrected (line found / snapped / path resolved)');
+    console.log('  ' + named + ' impl anchor(s) named (the implementing function, shown not re-trusted)');
     console.log('  ' + r.moved.length + ' prose "anchor(s)" moved to a note field — they were never locations');
     console.log('  ' + r.dropped.length + ' broken anchor(s) dropped — an empty field beats a wrong one');
   }

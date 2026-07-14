@@ -113,7 +113,7 @@ const map = {
       action: actKo(a), raw: a.action, symbol: a.symbol || null,
       does: a.plain || a.detail || '',
       file: a.file || null, fileTrust: a.file ? trust(a.file) : null,
-      impl: a.impl || null, implTrust: a.impl ? trust(a.impl) : null,
+      impl: a.impl || null, implTrust: a.impl ? trust(a.impl) : null, implName: a.implName || null,
       apis: a.apis || [], ai: a.ai || null, goesTo: a.to || null,
       risks: a.risks || [], checklist: a.checklist || [], failureModes: a.failureModes || [],
       knownBug: (a.risks || []).includes('bug'),
@@ -146,7 +146,7 @@ if (stack) p('**스택** — ' + stack, '');
 // with the same confidence whether they are right or not. So the first thing the next session sees
 // is what this map rests on, and the one command that checks it.
 p(`### 0. 먼저 — 이 문서가 아직 맞는지 30초 안에 확인`, '');
-p(`이 지도는 커밋 \`${fp.git.commit || '?'}\`${fp.git.dirty ? ' (+ 커밋 안 된 변경)' : ''} 의 코드를 읽고 만들었다.`);
+p(`이 지도는 커밋 \`${(fp.git && fp.git.head) ? String(fp.git.head).slice(0, 8) : '?'}\`${fp.git && fp.git.dirty ? ' (+ 커밋 안 된 변경)' : ''} 의 코드를 읽고 만들었다.`);
 p(`그 뒤로 코드가 바뀌었다면 아래 좌표들은 **틀린 채로 자신 있어 보인다.** 바로 확인할 것:`, '');
 p('```bash');
 p(`node <flow-debugger>/scripts/check-stale.js ${rel(jsonPath)} . --strict`);

@@ -310,6 +310,27 @@ fs.appendFileSync(path.join(app2, 'src/app/checkout/page.tsx'), '// touched\n');
 const st2 = F.checkStale(fp2, app2);
 eq('an edit to an anchored file makes it STALE', [st2.stale, st2.changed], [true, ['src/app/checkout/page.tsx']]);
 
+// ---- impl naming: name the implementing function, without inflating the trust tier -----------
+console.log('\nimpl naming (show which function implements an action, do not re-trust it):');
+eq('names a function definition line', A.symbolDefinedAt('export function useSignInForm(): T {'), 'useSignInForm');
+eq('names an arrow const', A.symbolDefinedAt('  const handleSubmit = useCallback(async () => {'), 'handleSubmit');
+eq('a bare lowercase word is NOT taken as a symbol (prose-safe)', A.symbolDefinedAt('export function post() {'), null);
+eq('does NOT name a call site', A.symbolDefinedAt('  await handleSubmit();'), null);
+eq('does NOT name a comment', A.symbolDefinedAt('  // handleSubmit does the work'), null);
+eq('does NOT name a bare render line', A.symbolDefinedAt('  return <Screen />;'), null);
+const gN = [{ route: '/x', group: 'g', actions: [
+  { action: 'go', file: 'src/app/checkout/page.tsx:2', impl: 'src/lib/pay.ts:1' },     // impl is a clean def
+  { action: 'noop', file: 'src/app/checkout/page.tsx:2', impl: 'src/app/checkout/page.tsx:3' }, // impl is a JSX return
+]}];
+w2('src/lib/pay.ts', ['export function postPayment() {', '  return fetch("/pay");', '}'].join('\n') + '\n');
+const exactBefore = A.validateGraph(JSON.parse(JSON.stringify(gN)), app2, { snap: false }).stat.exact;
+const namedCount = A.nameImplAnchors(gN, app2);
+eq('one impl got named, the render-line impl did not', namedCount, 1);
+eq('the name is recorded BESIDE the anchor (implName), not embedded in the coordinate', gN[0].actions[0].implName, 'postPayment');
+eq('the coordinate string itself is untouched', gN[0].actions[0].impl, 'src/lib/pay.ts:1');
+eq('and the trust tier did NOT move — naming an impl does not verify it', // the anti-tautology guarantee
+  A.validateGraph(gN, app2, { snap: false }).stat.exact, exactBefore);
+
 // ---- drift repair: detecting staleness is only half of it -------------------------------------
 // Real drift is mostly innocent: someone adds an import and every line below moves down by one.
 // A map that must be fully re-scanned for that is a map nobody re-scans. So: the anchor's line of
@@ -361,6 +382,16 @@ fs.writeFileSync(g3path, JSON.stringify([{ route: '/', group: 'g',
   actions: [{ action: 'Save', symbol: 'handleSave', file: 'src/Home.tsx:4' }] }]), 'utf8');
 execFileSync(process.execPath, [path.join(__dirname, 'rebase-anchors.js'), g3path, app3, '--from', baseSha], { encoding: 'utf8', stdio: 'pipe' });
 eq('the anchor followed the file to its new path',
+  JSON.parse(fs.readFileSync(g3path, 'utf8'))[0].actions[0].file, 'src/screens/Home.tsx:4');
+
+// rebase must find its base commit from the fingerprint sidecar, with NO --from. This is the path
+// that was silently dead because the field was read as git.commit while fingerprint writes git.head.
+fs.writeFileSync(g3path, JSON.stringify([{ route: '/', group: 'g',
+  actions: [{ action: 'Save', symbol: 'handleSave', file: 'src/Home.tsx:4' }] }]), 'utf8');
+fs.writeFileSync(g3path.replace(/\.json$/, '.fingerprint.json'), JSON.stringify({ git: { head: baseSha } }));
+const noFrom = execFileSync(process.execPath, [path.join(__dirname, 'rebase-anchors.js'), g3path, app3], { encoding: 'utf8', stdio: 'pipe' });
+eq('base commit is read from the fingerprint sidecar (no --from)', /built at [0-9a-f]{7}/.test(noFrom), true);
+eq('and with that base it still followed the rename',
   JSON.parse(fs.readFileSync(g3path, 'utf8'))[0].actions[0].file, 'src/screens/Home.tsx:4');
 
 fs.rmSync(app2, { recursive: true, force: true });
