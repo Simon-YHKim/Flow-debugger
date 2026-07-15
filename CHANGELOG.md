@@ -3,7 +3,25 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
-## [0.18.0] - 2026-07-15
+## [0.19.0] - 2026-07-15
+
+### Fixed — a re-scan now refreshes the PICTURE, not just the skeleton
+A re-scan is a "something changed" signal, but `/flow-update` only re-verified code anchors and
+rebuilt — it never re-shot thumbnails. So the skeleton (anchors, labels) went current while the
+screen thumbnails stayed old: a login screen kept showing copy ("먼저 한 문장만 저장해요") that no
+longer exists in source, and the user reads that as "nothing changed." `capture-shots.js` already
+supports `--only <routes>`, so the fix is cheap — re-shoot ONLY the screens that changed, not all.
+
+- **`/flow-update` step 4 (new)** — after a structural rescan/rebase, re-capture the changed
+  screens' thumbnails (`capture-shots.js --only …` → `embed-shots.js` → rebuild), and report how
+  many pictures were refreshed. If no web build is up (or playwright is missing), it must NOT
+  silently rebuild with old pictures — it tells the user which screens still show an old picture.
+- **`/flow` step 5** — SHOTS promoted from "(optional)" to recommended; don't leave an old picture
+  on a fresh skeleton.
+- **`check-stale.js`** — when anchored files changed, it now also lists the SCREENS those files back
+  (their thumbnails are stale too) and prints the exact `--only` re-shoot command.
+
+
 
 ### Added — screen IDENTITY: every node is the real, user-reachable screen (never a legacy body)
 47 of 86 routes delegate (the URL lives in src/app but production renders a deep-space component

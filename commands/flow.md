@@ -16,7 +16,7 @@ pipeline exactly — do NOT shortcut the anchor verification (a wrong `file:line
 2. **ENRICH** Korean labels + glossary (do not fold the 3 passes into 1).
 3. **ANNOTATE** risks / checklist / failureModes.
 4. **VERIFY** `verify-anchors.js <graph> "$1" --fix <graph> --strict` — the point of the whole tool.
-5. **SHOTS** (optional) `capture-shots.js`.
+5. **SHOTS** (권장 — 비개발자는 썸네일로 화면을 알아본다) `capture-shots.js` → `embed-shots.js`. 웹빌드를 못 띄우면 건너뛰되, 그 사실(그림 없음 → 아이콘 폴백)을 사용자에게 알린다. 옛 그림을 새 골격에 남기지 않는다.
 6. **BUILD** `build.js --template … --graph … --out docs/flow-debugger.html --app-root "$1" --strict-anchors` (emits the fingerprint + backend layer).
 7. **HANDOFF** `make-handoff.js` → `docs/FLOW-HANDOFF.md` + `docs/flow-map.json` (one scan feeds both the HTML and the handoff).
 
