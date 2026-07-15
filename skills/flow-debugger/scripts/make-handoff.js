@@ -149,6 +149,20 @@ if (fs.existsSync(jsonPath)) {
   }
 }
 
+// Every knownBug needs a bugAnchor pointing at WHERE THE DEFECT IS — the screen, not the lib the
+// action calls. A re-scan can surface bug-risk actions the triage never saw; those arrive without a
+// curated bugAnchor. Default it to the action's `file` coordinate (the screen handler), which is
+// exactly what the contract wants — never `impl` (src/lib throws; the screen swallows).
+const coordOnly = raw => (typeof raw === 'string' ? raw.replace(/\s*\([^)]*\)\s*$/, '').trim() : '');
+let defaulted = 0;
+for (const s of map.screens) for (const a of (s.actions || [])) {
+  if (a.knownBug && !a.bugAnchor) {
+    const loc = coordOnly(a.file);
+    if (loc && !loc.startsWith('src/lib/')) { a.bugAnchor = loc; defaulted++; }
+  }
+}
+if (defaulted) console.error(`  bugAnchor 기본값: ${defaulted}개 (triage 안 본 새 knownBug → 화면 file 앵커)`);
+
 fs.mkdirSync(path.dirname(path.resolve(jsonPath)), { recursive: true });
 fs.writeFileSync(jsonPath, JSON.stringify(map, null, 2), 'utf8');
 

@@ -406,6 +406,7 @@ const gHpath = path.join(appH, 'g.json');
 const jHpath = path.join(appH, 'flow-map.json');
 fs.writeFileSync(gHpath, JSON.stringify([{ route: '/x', group: 'g', actions: [
   { action: 'Save', symbol: 'onSave', file: 'src/app/x.tsx:2', risks: ['bug'] },
+  { action: 'Break', symbol: 'onSave', file: 'src/app/x.tsx:2', risks: ['bug'] },   // a bug the triage never sees
 ] }]));
 const runHandoff = () => execFileSync(process.execPath, [path.join(__dirname, 'make-handoff.js'), gHpath, appH,
   '--out', path.join(appH, 'H.md'), '--json', jHpath, '--name', 'T'], { encoding: 'utf8', stdio: 'pipe' });
@@ -423,6 +424,11 @@ eq('the top-level contract survives a regenerate', afterH._anchorContract && aft
 eq('bugAnchor survives a regenerate', afterH.screens[0].actions[0].bugAnchor, 'src/app/x.tsx:2');
 eq('fixedIn survives a regenerate', afterH.screens[0].actions[0].fixedIn, '#123');
 eq('the triage verdict wins over the scan (cleared bug stays cleared)', afterH.screens[0].actions[0].knownBug, false);
+// the second action stayed a knownBug and was never given a bugAnchor by triage — it must get one
+// defaulted from its screen `file` (the contract: every knownBug carries a bugAnchor, never a lib).
+const brk = afterH.screens[0].actions.find(a => a.raw === 'Break');
+eq('an untriaged knownBug gets a bugAnchor defaulted from its screen file', brk && brk.bugAnchor, 'src/app/x.tsx:2');
+eq('and it is still marked a known bug', brk && brk.knownBug, true);
 fs.rmSync(appH, { recursive: true, force: true });
 
 fs.rmSync(app2, { recursive: true, force: true });

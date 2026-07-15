@@ -3,6 +3,14 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.14.6] - 2026-07-15
+
+### Fixed — a re-scan's new bugs now carry a bugAnchor
+When a fuller re-scan surfaces bug-risk actions the human triage never saw, those arrive as knownBug
+with no bugAnchor — which breaks the contract "every knownBug carries a bugAnchor". make-handoff now
+defaults a missing bugAnchor to the action's screen `file` coordinate (never `impl`/src/lib, per the
+contract). 75 -> 77 tests.
+
 ## [0.14.5] - 2026-07-15
 
 ### Added — exported prompts name the file and line to edit, and say "read only there"
