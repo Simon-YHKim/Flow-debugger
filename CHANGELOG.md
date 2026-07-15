@@ -3,6 +3,27 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.18.0] - 2026-07-15
+
+### Added — screen IDENTITY: every node is the real, user-reachable screen (never a legacy body)
+47 of 86 routes delegate (the URL lives in src/app but production renders a deep-space component
+elsewhere) and 36 share a file with other screens (17 in one file) — so "which screen is this,
+really?" was a constant trap: editing `src/app/(auth)/sign-in.tsx` changes nothing because
+production renders `DeepSpaceSignInDesignScreen` in another file. `scripts/lib/screens-identity.js`
+computes, for each screen, its real render file (what the user sees), whether the URL delegates
+there, which screens share that file, its line-range inside a shared file, and whether a user can
+reach it at all (dev-only gates). This lands as three things:
+
+- **`/flow-screens`** — audit ALL screens at once: real file · 🔀 delegates · 📎N shares · ⛔ unreachable.
+- **Flowchart badges + "화면 신원" panel** — every screen card shows 🔀/📎/⛔, and clicking it spells
+  out the real render file, the delegation, and the screens it shares a file with (embedded via a
+  new `__IDENTITY_JSON__` build token).
+- **`/flow-watch` per-screen attribution** — editing one screen of a shared file (auth: 3 screens,
+  lines 141/374/566) is attributed by line-range to THAT screen, not all three.
+
+The invariant it enforces: a screen node represents the screen a USER can reach, never the legacy
+body a delegating route file still contains, never a dev-only screen. 99 → **108 tests**.
+
 ## [0.17.0] - 2026-07-15
 
 ### Added — /flow-watch: serve on localhost so the page detects code changes live

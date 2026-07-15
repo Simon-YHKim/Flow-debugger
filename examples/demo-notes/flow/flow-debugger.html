@@ -226,6 +226,7 @@
   #watchbar .wb-detail{width:100%;margin-top:4px;font-size:12px;opacity:.85;display:none}
   #watchbar .wb-more{cursor:pointer;text-decoration:underline;opacity:.85}
   @media (prefers-color-scheme:light){#watchbar.fresh{background:#e6f6ec;color:#1c6b3a}#watchbar.stale{background:#fbf0dc;color:#8a5a12}}
+  .stype.idb{cursor:help}
 </style>
 </head>
 <body>
@@ -590,13 +591,37 @@ const ANCHORS = ({"checked":true,"index":{"src/auth.js:3 (signIn)":{"status":"ex
    anchors into. A map that cannot say what it rests on cannot be checked, and an unchecked map
    drifts silently — it keeps handing out coordinates that used to be right. The page states its
    basis; `check-stale.js` answers what changed under it. */
-const STAMP = ({"git":{"head":"9ef9bea9c52b14b381f2f319c31d59d6225d3081","branch":"main","dirty":true,"describedAt":"2026-07-15T17:25:22+09:00"},"at":"2026-07-15T08:44:37.214Z","files":4})||null;
+const STAMP = ({"git":{"head":"dad5f39202fc27516fde6f3a6b9f3a9d9ae25463","branch":"main","dirty":true,"describedAt":"2026-07-15T17:45:24+09:00"},"at":"2026-07-15T10:07:51.944Z","files":4})||null;
 /* BACKEND = what is BEHIND the screens: the server handlers each api tag actually reaches, the
    tables they touch, and whether RLS guards them. Without it the "system flow" stopped at the
    tag — a screen called `edge:send-mail` and then nothing: what that function does, which tables
    it writes, whether a policy will refuse it, all invisible. Derived from the app's own server
    code; null when the app has none (a pure client). */
 const BACKEND = ({"handlers":{},"tables":{},"links":{},"counts":{"handlers":0,"tables":0,"linked":0}})||null;
+/* IDENTITY[route] = the REAL, reachable screen each node represents: its production render file,
+   whether the URL delegates there(🔀), which other screens share that file(📎), and whether a
+   user can reach it at all(⛔ dev/admin-only). The invariant: a screen node stands for what a
+   USER sees — never the legacy body a delegating route file still contains. */
+const IDENTITY = ({"/sign-in":{"real":"src/auth.js:3 (signIn)","delegates":true,"sharesWith":[],"reach":"ok","warnings":[]},"/notes":{"real":"src/notes.js:12 (loadNotes)","delegates":true,"sharesWith":[],"reach":"ok","warnings":[]},"/settings":{"real":"src/settings.js:3 (loadSettings)","delegates":true,"sharesWith":[],"reach":"ok","warnings":[]}})||{};
+function idOf(n){const r=n&&(n.type==="screen"?(n.data&&n.data.route):(n.screen&&n.screen.route));return (r&&IDENTITY[r])||null;}
+/* the little marks on a screen card that answer "which screen is this, really?" at a glance:
+   🔀 = the URL delegates to a different render file · 📎N = N screens live in this same file ·
+   ⛔ = a user can't reach it (dev/admin-only) · ⚠ = real render file unknown. */
+function idBadges(n){const d=idOf(n);if(!d)return"";let b="";
+  if(d.delegates)b+=`<span class="stype idb" title="주소는 라우트 파일에 있지만, 프로덕션은 다른 파일을 그려요:\n${esc(d.real||"")}">🔀</span>`;
+  if(d.sharesWith&&d.sharesWith.length)b+=`<span class="stype idb" title="이 화면과 같은 파일에 있는 화면 ${d.sharesWith.length}개:\n${esc(d.sharesWith.join(", "))}\n(이 파일을 고치면 함께 영향)">📎${d.sharesWith.length+1}</span>`;
+  if(d.reach&&d.reach!=="ok")b+=`<span class="stype idb" style="--gc:#e8896f" title="사용자가 접할 수 없는 화면(${esc(d.reach)})">⛔</span>`;
+  if(d.warnings&&d.warnings.some(w=>/못 찾|불명/.test(w)))b+=`<span class="stype idb" style="--gc:#e0a35c" title="실제 렌더 파일을 못 찾았어요 — 재스캔 권장">⚠</span>`;
+  return b;}
+/* the "화면 신원" block in the detail panel — spells out, in plain Korean, WHAT the user actually
+   sees for this screen, so nobody edits a legacy body the app never renders. */
+function idPanel(n){const d=idOf(n);if(!d)return"";let h=`<div class="dh">화면 신원 — 사용자가 실제로 보는 것</div>`;
+  if(d.reach&&d.reach!=="ok")h+=`<div class="kv" style="color:#e8896f">⛔ 이 화면은 <b>사용자가 접할 수 없어요</b> (${esc(d.reach)}) — 배포판에서는 열리지 않아요.</div>`;
+  if(d.real)h+=`<div class="kv">실제로 그려지는 파일(=이걸 고쳐야 화면이 바뀜): <code>${esc(d.real)}</code></div>`;
+  else h+=`<div class="kv" style="color:#e0a35c">⚠ 실제 렌더 파일을 못 찾았어요 — 재스캔을 권장해요.</div>`;
+  if(d.delegates)h+=`<div class="kv" style="color:#e0a35c">🔀 주소(URL)는 라우트 파일에 있지만, 프로덕션은 <b>위 파일을 대신 그려요</b>. 라우트 파일의 본문을 고치면 빌드는 초록인데 화면은 안 바뀝니다.</div>`;
+  if(d.sharesWith&&d.sharesWith.length)h+=`<div class="kv">📎 이 파일에 <b>화면 ${d.sharesWith.length+1}개</b>가 함께 있어요 — 고칠 때 같이 영향받는 화면: ${d.sharesWith.map(r=>`<code>${esc(r)}</code>`).join(" ")}</div>`;
+  return h;}
 /* HARNESS_DATA = optional hand-authored AI wiring for THIS app (<graph>.harness.json).
    When absent the AI 하네스 view is derived from the AI calls in the graph — it never
    invents a pipeline the scanned app does not have. */
@@ -1110,7 +1135,7 @@ function nodeHtml(n){
     const gc=GROUP_COLOR[s.group]||"var(--accent)";
     const shot=SHOTS[s.route]?`<img class="thumb" src="${SHOTS[s.route]}" alt="">`:"";
     return `<div class="node screen${sel}${lit}" data-id="${n.id}" style="--gc:${gc}">${flag}
-      <div class="shead"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><div class="stitle">${lab}</div><span class="stype" style="--gc:${gc}">${TYPE_KO[ty]||""}</span>${gateOf(n)?`<span class="stype" style="--gc:#d8a657" title="${esc((gateOf(n)||{}).why||"")}">🔒</span>`:""}<span class="ex">${expanded.has(n.id)?"▾":"▸"}</span></div>
+      <div class="shead"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><div class="stitle">${lab}</div><span class="stype" style="--gc:${gc}">${TYPE_KO[ty]||""}</span>${idBadges(n)}${gateOf(n)?`<span class="stype" style="--gc:#d8a657" title="${esc((gateOf(n)||{}).why||"")}">🔒</span>`:""}<span class="ex">${expanded.has(n.id)?"▾":"▸"}</span></div>
       ${shot}<div class="pad"><div class="sub">${esc(s.summaryKo||"")}</div><div class="badges"><span class="pill">${nAct}개 동작</span>${nAi?`<span class="pill ai">AI ${nAi}</span>`:""}</div></div></div>`;
   }
   if(n.type==="action"){const a=n.data;
@@ -1733,6 +1758,7 @@ function renderDetail(){
       <input class="ed-label" id="edLabel" value="${esc(curLabel(n))}">`;
     if(SHOTS[s.route])h+=`<img class="shotbig" src="${SHOTS[s.route]}" alt=""><div class="kv" style="color:var(--faint);font-size:11px">실제 화면 캡처 (참고용 · 다를 수 있어요)</div>`;
     h+=`<div class="plainbox">${esc(s.summaryKo||s.summary||"")}</div>`;
+    h+=idPanel(n);
     if(s.example)h+=`<div class="dh">이럴 때 써요</div><div class="exbox">${esc(s.example)}</div>`;
     if(navMode){ // 경로 추적 (Overflow/유저플로우 툴 패턴): 출발 지정 → 도착 화면에서 경로 찾기 → 걷기
       h+=`<div class="dh">이동 경로 추적</div><div style="display:flex;gap:6px;flex-wrap:wrap">`

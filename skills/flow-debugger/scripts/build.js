@@ -189,12 +189,18 @@ html = html.replace('__HARNESS_JSON__', harnessText.trim() || 'null');
 html = html.replace('__ANCHORS_JSON__', JSON.stringify(audit));
 html = html.replace('__STAMP_JSON__', JSON.stringify(stamp));
 html = html.replace('__BACKEND_JSON__', JSON.stringify(backend));
+// Screen IDENTITY: the real, reachable screen each node represents — delegation, file-sharing,
+// reachability — so the page can badge and explain "which screen is this, really".
+const ID = require('./lib/screens-identity');
+const identityMap = {};
+for (const r of ID.identities(graphObj)) identityMap[r.route] = { real: r.real, delegates: r.delegates, sharesWith: r.sharesWith, reach: r.reach, warnings: r.warnings };
+html = html.replace('__IDENTITY_JSON__', JSON.stringify(identityMap));
 html = html.split('__APP_NAME__').join(appName);
 html = html.split('__MODE__').join(mode);
 
 for (const t of ['__GRAPH_JSON__', '__GLOSSARY_JSON__', '__SHOTS_JSON__', '__STACK_JSON__',
                  '__HARNESS_JSON__', '__ANCHORS_JSON__', '__STAMP_JSON__', '__BACKEND_JSON__',
-                 '__APP_NAME__', '__MODE__']) {
+                 '__IDENTITY_JSON__', '__APP_NAME__', '__MODE__']) {
   if (html.includes(t)) die('token not replaced: ' + t);
 }
 fs.writeFileSync(out, html, 'utf8');

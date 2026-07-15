@@ -496,6 +496,46 @@ wW('src/Home.tsx', ['export function Home(){', '  const onSave=()=>save();', '  
 eq('an added button is RE-SCAN', (c => [c.counts.drift, c.counts.rescan])(CC.classifyChanges(gWgraph, appW, { fingerprint: fpW })), [0, 1]);
 fs.rmSync(appW, { recursive: true, force: true });
 
+// ---- screen identity + per-screen attribution in a shared file (the login-confusion fix) --------
+console.log('\nscreen identity (the real, reachable screen — and which screen a shared-file edit hit):');
+const ID = require('./lib/screens-identity');
+const idGraph = [
+  { route: '/sign-in', title: '로그인', renders: 'src/Auth.tsx:2', gate: null, actions: [{ action: 'a', file: 'src/Auth.tsx:3' }] },
+  { route: '/sign-up', title: '가입', renders: 'src/Auth.tsx:20', gate: null, actions: [{ action: 'b', file: 'src/Auth.tsx:21' }] },
+  { route: '/dev-thing', title: '개발용', renders: 'src/app/dev.tsx:6', gate: { gate: 'dev-only' }, actions: [] },
+];
+const ids = ID.identities(idGraph);
+const bR = r => ids.find(x => x.route === r);
+eq('a delegating screen names its real render file', bR('/sign-in').real, 'src/Auth.tsx:2');
+eq('screens in one file are marked as sharing', bR('/sign-in').sharesWith, ['/sign-up']);
+eq('each screen gets its line range in the shared file', [bR('/sign-in').rangeStart, bR('/sign-in').rangeEnd], [2, 19]);
+eq('the second screen range runs to EOF', [bR('/sign-up').rangeStart, bR('/sign-up').rangeEnd], [20, Infinity]);
+eq('a dev-only screen is flagged unreachable', bR('/dev-thing').reach, 'dev-only');
+// the attribution: an edit at line 5 belongs to /sign-in only, line 25 to /sign-up only
+const inFile = ids.filter(x => x.realFile === 'src/Auth.tsx');
+eq('an edit inside a screen range is attributed to that ONE screen', ID.screensForLines(inFile, [5, 6]), ['/sign-in']);
+eq('an edit in the other screen range hits only the other', ID.screensForLines(inFile, [25]), ['/sign-up']);
+eq('an edit spanning both is attributed to both', ID.screensForLines(inFile, [5, 25]).sort(), ['/sign-in', '/sign-up']);
+
+// integration: two screens in ONE file, edit only the first screen's lines -> classifyChanges
+// attributes the change to /sign-in only (not both), via the git line-range attribution.
+const appV = fs.mkdtempSync(path.join(os.tmpdir(), 'fdbgV-'));
+const gV = (...a) => execFileSync('git', a, { cwd: appV, encoding: 'utf8', stdio: 'pipe' });
+const wV = (rel, b) => { const q = path.join(appV, rel); fs.mkdirSync(path.dirname(q), { recursive: true }); fs.writeFileSync(q, b); };
+const auth = n => ['import x;', 'export function SignIn(){', '  const a=1;', '  const b=2;', '  return null;', '}', '', 'export function SignUp(){', '  const c=3;', '  return null;', '}', ''].join('\n').replace('const a=1', 'const a=' + n);
+wV('src/Auth.tsx', auth(1));
+gV('init', '-q'); gV('config', 'user.email', 't@t'); gV('config', 'user.name', 't'); gV('add', '-A'); gV('commit', '-qm', 'base');
+const vGraph = [
+  { route: '/sign-in', renders: 'src/Auth.tsx:2', group: 'g', actions: [{ action: 'x', file: 'src/Auth.tsx:3' }] },
+  { route: '/sign-up', renders: 'src/Auth.tsx:8', group: 'g', actions: [{ action: 'y', file: 'src/Auth.tsx:9' }] },
+];
+const fpV = F.fingerprint(vGraph, appV, null);
+wV('src/Auth.tsx', auth(99));   // edits line 3 only — inside /sign-in's range [2..7]
+const cV = CC.classifyChanges(vGraph, appV, { fingerprint: fpV });
+const hitRoutes = [].concat(...(cV.drift.concat(cV.rescan)).map(x => x.routes));
+eq('a shared-file edit is attributed to the ONE screen whose lines changed', hitRoutes, ['/sign-in']);
+fs.rmSync(appV, { recursive: true, force: true });
+
 fs.rmSync(app2, { recursive: true, force: true });
 fs.rmSync(app3, { recursive: true, force: true });
 

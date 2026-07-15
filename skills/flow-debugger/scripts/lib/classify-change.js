@@ -141,10 +141,35 @@ function classifyChanges(graph, appRoot, opts) {
   const prefix = (git(['rev-parse', '--show-prefix']) || '').trim();
   const readOld = rel => (base ? git(['show', `${base}:${prefix}${rel}`]) : null);
 
+  // Per-screen line ranges inside each render file — so a change to one screen of a shared file
+  // (17 screens live in one file here) is attributed to THAT screen, not all 17. When a file is a
+  // shared RENDER file, use the ranges; otherwise (a lib helper many screens call) fall back to
+  // every screen that anchors into it.
+  const { identities, screensForLines } = require('./screens-identity');
+  const idsByFile = {};
+  for (const r of identities(graph)) if (r.realFile && r.rangeStart != null) (idsByFile[r.realFile] = idsByFile[r.realFile] || []).push(r);
+  const changedLines = rel => {
+    const d = git(['diff', '--unified=0', base, '--', prefix + rel]); if (!d) return null;
+    const out = []; const re = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm; let m;
+    while ((m = re.exec(d))) { const start = +m[1], cnt = m[2] == null ? 1 : +m[2]; for (let i = 0; i < Math.max(cnt, 1); i++) out.push(start + i); }
+    return out;
+  };
+  const routesFor = rel => {
+    const ids = idsByFile[rel];
+    if (ids && ids.length > 1) {                       // a shared render file → localise by line
+      const lines = changedLines(rel);
+      if (lines && lines.length) {
+        const hit = screensForLines(ids, lines).filter(r => r !== '*');
+        if (hit.length) return hit;                    // the specific screen(s) the edit fell in
+      }
+    }
+    return [...(routesOf[rel] || ['(?)'])];
+  };
+
   const drift = [], rescan = [], deleted = [];
   for (const rel of stale.changed) {
     const oldSrc = readOld(rel), newSrc = readNow(rel);
-    const routes = [...(routesOf[rel] || ['(?)'])];
+    const routes = routesFor(rel);
     if (oldSrc == null || newSrc == null) { rescan.push({ file: rel, routes, why: ['옛 버전을 못 읽어 대조 불가 — 안전하게 재스캔'] }); continue; }
     const c = classifyFile(oldSrc, newSrc);
     (c.structural ? rescan : drift).push({ file: rel, routes, why: c.why, markers: c.markers });

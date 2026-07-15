@@ -13,7 +13,7 @@ description: >-
   per-action diagnostic checklists, connection editing, and a bug-report
   generator that turns a vague "안 돼요" into a precise, VERIFIED file:line report.
   Produces the HTML plus a copy-paste fix and bug prompt for the assistant.
-version: 0.17.0
+version: 0.18.0
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 compatibility: [claude-code]
 author: Simon Kim
@@ -42,7 +42,7 @@ author: Simon Kim
 **그 줄에 그 함수가 실제로 있는지**까지 확인하고, 어긋난 줄은 심볼 위치로 보정하고,
 좌표가 아닌 산문은 좌표 자리에서 빼낸다. 그 결과가 신고서에 ✔ / ~ / ⚠ 로 그대로 실린다.
 
-## 사람이 쓰는 법 — 명령어 5개 (`/flow*`)
+## 사람이 쓰는 법 — 명령어 6개 (`/flow*`)
 
 비싼 건 **스캔 한 번**이고, HTML(사람용)과 핸드오프(AI/개발자용)는 그 스캔의 두 렌더다.
 그래서 하나의 플러그인, 네 개의 시점으로 나눈다:
@@ -53,6 +53,7 @@ author: Simon Kim
 | **`/flow-handoff`** | 다른 세션·사람에게 넘길 때 | 현재 지도로 핸드오프 문서만 재생성(**재스캔 X**) | 쌈 |
 | **`/flow-check`** | 앱이 바뀐 것 같을 때 | 지도가 아직 맞는지 지문 대조 | 30초 |
 | **`/flow-watch`** | 코딩하며 계속 보고 싶을 때 | localhost 로 서빙 → 코드 저장/새로고침 때 **배너로 변화 감지**(감지만, 갱신은 아님) | 상주 |
+| **`/flow-screens`** | "이 화면 진짜 어느 파일?" | 모든 화면의 **실제 렌더 파일·위임·파일공유·도달가능** 점검표 | 즉시 |
 | **`/flow-update`** | 낡았을 때 | **화면별로 좌표만 밀림 vs 구조 바뀜 분류 → 사용자에게 물어보고** 좌표 이사 / 재스캔 → 재빌드 | 쌈~중간 |
 
 - **쓰기(매일)**는 명령어가 아니다: `/flow`로 만든 `flow-debugger.html`을 **열어서** 클릭·순서편집·"안 돼요"로 버그/수정 프롬프트를 복사한다.
