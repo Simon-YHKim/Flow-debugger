@@ -3,6 +3,33 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.16.0] - 2026-07-15
+
+### Added — /flow-update now CLASSIFIES the change and ASKS before acting
+A code change is one of two things and they are handled oppositely: coordinates just drifted (rebase,
+cheap) OR the structure changed — a button/screen/nav/server call was added, removed, or repointed —
+which rebase CANNOT reflect (it follows what exists; a new button has no anchor to follow, so it would
+silently never enter the map). `scripts/lib/classify-change.js` + `scripts/classify-changes.js` read
+each changed screen's OLD vs NOW source and count structural markers (buttons, navigation, server/AI
+calls) plus the set of route targets and tables/edge-functions touched. Any delta → that screen is
+flagged for re-scan; identical → drift, rebase is enough. On the reference app this correctly split 16
+changed screens into 8 drift / 8 re-scan (e.g. a screen whose button count went 6→7 — a real added
+button — is re-scan, not a moved line).
+
+`/flow-update` is now **interactive**: it classifies, shows the human the split, and **must call
+AskUserQuestion before any rebase, re-scan, or deletion** — classification is automatic, the decision
+is the user's. New nodes only ever appear via a re-scan, never invented.
+
+### Verified adversarially
+A 4-lens workflow pressure-tested the classifier and command. It confirmed zero misclassifications on
+real data and surfaced gaps that are now fixed and regression-tested: comments and string bodies are
+stripped before counting (a comment mentioning `router.push` no longer flips a screen to structural);
+`.from(` only counts with a string arg (Array.from no longer reads as a DB call); and the marker set
+now catches shared `<Action>` wrappers, data hooks (useQuery/useMutation/useSWR), gesture handlers,
+aliased navigation (useRouter/useNavigation), the Vercel AI SDK, Supabase auth/realtime, and the
+`onPressIn` regex-boundary bug. The command was tightened so drift is also gated behind the question and
+"rewritten" screens found mid-rebase loop back to ask. 85 → 96 tests.
+
 ## [0.15.0] - 2026-07-15
 
 ### Added — four `/flow*` slash commands, one per moment of use

@@ -13,7 +13,7 @@ description: >-
   per-action diagnostic checklists, connection editing, and a bug-report
   generator that turns a vague "안 돼요" into a precise, VERIFIED file:line report.
   Produces the HTML plus a copy-paste fix and bug prompt for the assistant.
-version: 0.15.0
+version: 0.16.0
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 compatibility: [claude-code]
 author: Simon Kim
@@ -52,7 +52,7 @@ author: Simon Kim
 | **`/flow`** | 처음 / 앱이 크게 바뀐 뒤 | 전수 스캔 → 검증 → **HTML + 핸드오프 둘 다** | 비쌈(1회) |
 | **`/flow-handoff`** | 다른 세션·사람에게 넘길 때 | 현재 지도로 핸드오프 문서만 재생성(**재스캔 X**) | 쌈 |
 | **`/flow-check`** | 앱이 바뀐 것 같을 때 | 지도가 아직 맞는지 지문 대조 | 30초 |
-| **`/flow-update`** | 낡았을 때 | 좌표를 현재 코드로 이사(재스캔 X) → 재빌드 | 쌈 |
+| **`/flow-update`** | 낡았을 때 | **화면별로 좌표만 밀림 vs 구조 바뀜 분류 → 사용자에게 물어보고** 좌표 이사 / 재스캔 → 재빌드 | 쌈~중간 |
 
 - **쓰기(매일)**는 명령어가 아니다: `/flow`로 만든 `flow-debugger.html`을 **열어서** 클릭·순서편집·"안 돼요"로 버그/수정 프롬프트를 복사한다.
 - **넘기기**: 받는 쪽은 `docs/FLOW-HANDOFF.md`만 읽으면 된다.
@@ -176,21 +176,27 @@ node scripts/verify-html.js Output/flow-debugger.html --template assets/flow-deb
   (`{nodes:[{id,hx,hy,color,label,role,detail}], edges:[[from,to]]}`). 없으면 스캔한 AI 호출에서
   **자동 파생**한다(없는 단계를 지어내지 않는다).
 
-### 6.5) **낡음 점검 → 좌표 이사** (드리프트 대응)
+### 6.5) **낡음 점검 → 분류 → 좌표 이사 / 재스캔** (드리프트 대응 = `/flow-check`·`/flow-update`)
 ```bash
-node scripts/check-stale.js   <graph.json> <appRoot> --strict        # 낡았나? (CI 에 넣을 것)
-node scripts/rebase-anchors.js <graph.json> <appRoot> --from <커밋>   # 낡았으면 좌표를 옮긴다
-node scripts/verify-anchors.js <graph.json> <appRoot> --strict       # 그리고 다시 증명한다
+node scripts/check-stale.js      <graph.json> <appRoot> --strict     # 낡았나? (CI 에 넣을 것) = /flow-check
+node scripts/classify-changes.js <graph.json> <appRoot>             # 화면별: 좌표만 밀림 vs 구조 바뀜
+node scripts/rebase-anchors.js   <graph.json> <appRoot> --from <커밋> # 좌표만 밀린 것 → 옮긴다
+node scripts/verify-anchors.js   <graph.json> <appRoot> --strict     # 그리고 다시 증명한다
 ```
 `build.js` 는 지도를 만들 때 **지문**(커밋 + 앵커한 모든 파일의 해시)을 남긴다. 앱이 바뀌면
 `check-stale` 이 **무엇이 바뀌었는지 숫자로** 답한다.
 
-드리프트는 대개 무해하다 — import 한 줄 추가되면 아래가 전부 한 줄씩 밀린다. 그때 전면
-재스캔을 요구하는 지도는 아무도 다시 안 만든다. 그래서 `rebase-anchors` 는 **지도를 만든 커밋에서
-그 줄의 코드 내용을 읽어, 지금 파일에서 같은 줄을 다시 찾는다.** 옮겨간 줄은 여전히 같은 줄이고,
-파일이 통째로 **이동/개명**돼도 (git rename 추적) 따라간다.
+드리프트는 대개 무해하다 — import 한 줄 추가되면 아래가 전부 한 줄씩 밀린다. 그래서 `rebase-anchors` 는
+**지도를 만든 커밋에서 그 줄의 코드 내용을 읽어, 지금 파일에서 같은 줄을 다시 찾는다.** 옮겨간 줄은
+여전히 같은 줄이고, 파일이 통째로 **이동/개명**돼도 (git rename 추적) 따라간다.
 
-- 그 줄이 **재작성/삭제**됐다면 **추측하지 않고 목록으로 뱉는다** — 그 화면만 재스캔하면 된다.
+**하지만 rebase 는 "있던 것의 이동"만 따라간다 — 없던 버튼·화면·이동·서버호출은 못 만든다.** 그래서
+`classify-changes` 가 바뀐 화면마다 old↔now 구조 마커(버튼·이동·서버·AI 호출 수, 이동 대상·테이블 집합)를
+대조해 **좌표만 밀림(rebase 로 충분) vs 구조 바뀜(재스캔 필요)** 로 가른다. 이게 `/flow-update` 가 코드를
+고치기 전에 읽는 것이다 — **분류는 자동, 결정은 사용자**: 재스캔·삭제는 사람에게 물어본 뒤에만 한다
+(새 버튼을 지어내면 그게 이 도구가 금지하는 "지어낸 노드"다).
+
+- 그 줄이 **재작성/삭제**됐다면 rebase 가 **추측하지 않고 목록으로 뱉는다** — 그 화면만 재스캔.
 - `make-handoff` 는 깨진 좌표가 남아 있으면 **핸드오프 생성을 거부한다**(`--allow-stale` 로만 강행).
   낡은 지도에 오늘 날짜 도장을 찍어주는 게 이 도구가 막으려는 바로 그 실패이기 때문이다.
 

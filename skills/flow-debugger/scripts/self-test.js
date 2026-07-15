@@ -431,6 +431,53 @@ eq('an untriaged knownBug gets a bugAnchor defaulted from its screen file', brk 
 eq('and it is still marked a known bug', brk && brk.knownBug, true);
 fs.rmSync(appH, { recursive: true, force: true });
 
+// ---- classify a change: drift vs structural (what /flow-update reads before asking) ------------
+// The whole point: rebase follows what EXISTS, so an ADDED button is invisible to it. The classifier
+// must catch add/remove/repoint from the code itself, and must NOT cry structural on cosmetic edits.
+console.log('\nchange classification (a new button is not a moved line):');
+const CC = require('./lib/classify-change');
+const screen = onPress => [
+  'export function S() {',
+  '  const onSave = () => save();',
+  '  return (<View>',
+  onPress,
+  '    <Pressable onPress={() => router.push("/next")}><T>Go</T></Pressable>',
+  '  </View>);',
+  '}',
+].join('\n');
+const base = screen('    <Pressable onPress={onSave}><T>Save</T></Pressable>');
+// cosmetic: a comment + whitespace, same markers
+eq('a cosmetic edit is NOT structural', CC.classifyFile(base, base.replace('const onSave', '// note\n  const onSave')).structural, false);
+// a line drifted but nothing added/removed
+eq('a pure line shift is NOT structural', CC.classifyFile(base, '\n\n' + base).structural, false);
+// a new button added
+const plusBtn = screen('    <Pressable onPress={onSave}><T>Save</T></Pressable>\n    <Pressable onPress={() => del()}><T>Delete</T></Pressable>');
+eq('an added button IS structural', CC.classifyFile(base, plusBtn).structural, true);
+// a button repointed to a new screen (counts identical, destination changed)
+const repoint = base.replace('/next', '/somewhere-else');
+eq('a repointed navigation IS structural', CC.classifyFile(base, repoint).structural, true);
+eq('  and it names the changed destination', CC.classifyFile(base, repoint).routesChanged.sort(), ['/next', '/somewhere-else']);
+// a new server call added
+const plusServer = base.replace('const onSave = () => save();', 'const onSave = () => supabase.from("orders").insert(x);');
+eq('a new server/table touch IS structural', CC.classifyFile(base, plusServer).structural, true);
+// renaming a handler (onSave -> handleSave) keeps every marker — it is DRIFT, rebase follows it
+eq('a handler rename is NOT structural', CC.classifyFile(base, base.replace(/onSave/g, 'handleSave')).structural, false);
+// removing a button IS structural
+eq('a removed button IS structural', CC.classifyFile(plusBtn, base).structural, true);
+// --- false positives the verifier caught: comments and strings must not count ---
+eq('a code-mentioning COMMENT is NOT structural', CC.classifyFile(base, base.replace('return (', '// TODO: add router.push("/x") and a Pressable here\n  return (')).structural, false);
+eq('a marker token inside a STRING is NOT structural', CC.classifyFile(base, base.replace('<T>Go</T>', '<T>{"press onPress to fetch(x)"}</T>')).structural, false);
+eq('Array.from is NOT a server call', CC.classifyFile(base, base.replace('const onSave = () => save();', 'const rows = Array.from(items); const onSave = () => save();')).structural, false);
+// --- false negatives the verifier caught: these patterns must now be seen ---
+eq('a shared <Action to=> wrapper IS a button', CC.classifyFile(base, base.replace('<T>Go</T></Pressable>', '<T>Go</T></Pressable>\n    <Action label="저장" to="/save" />')).structural, true);
+eq('a useMutation data hook IS a server call', CC.classifyFile(base, base.replace('const onSave', 'const m = useMutation(createTodo);\n  const onSave')).structural, true);
+eq('a gesture handler IS a button', CC.classifyFile(base, base.replace('const onSave', 'const g = Gesture.Tap().onEnd(save);\n  const onSave')).structural, true);
+eq('aliased navigation IS nav', CC.classifyFile(base, base.replace('const onSave', 'const nav = useNavigation();\n  const onSave')).structural, true);
+eq('onPressIn (regex-boundary bug) IS a button', CC.classifyFile(base, base.replace('<T>Go</T></Pressable>', '<T>Go</T></Pressable>\n    <View onPressIn={ping} />')).structural, true);
+eq('generateText (Vercel AI SDK) IS an AI call', CC.classifyFile(base, base.replace('const onSave', 'const r = await generateText({ model });\n  const onSave')).structural, true);
+eq('supabase auth call IS a server call', CC.classifyFile(base, base.replace('const onSave = () => save();', 'const onSave = () => supabase.auth.signInWithPassword(c);')).structural, true);
+eq('an edge-function repoint IS structural', CC.classifyFile(base.replace('save()', 'supabase.functions.invoke("send-mail")'), base.replace('save()', 'supabase.functions.invoke("charge-card")')).structural, true);
+
 fs.rmSync(app2, { recursive: true, force: true });
 fs.rmSync(app3, { recursive: true, force: true });
 

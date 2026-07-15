@@ -1,21 +1,43 @@
 ---
-description: The app changed — move the map's coordinates to the current code without a full re-scan
+description: The app changed — classify what moved, ask the user, then update the map (drift → rebase, structure → re-scan)
 argument-hint: "[app-root]  (default: current repo)"
 ---
 
 > **flow-debugger 스크립트 위치**: 설치형이면 `${CLAUDE_PLUGIN_ROOT}/skills/flow-debugger/scripts/`, 이 컴퓨터의 수동 복사본이면 `~/.claude/skills/flow-debugger/scripts/` — 있는 쪽을 쓴다.
 
+Update the flow map for the app at: **$1** (if empty, the current repository root).
 
-Update the flow map for the app at: **$1** (if empty, the current repository root) — the **cheap** refresh that
-follows the code instead of re-scanning it.
+**중요 — 혼자 판단해서 밀어붙이지 말 것. 분류해서 보여주고, 사용자에게 물어본 뒤에 진행한다.**
+코드 변경은 두 종류이고 처리가 정반대다: 좌표만 밀린 건 자동으로 옮기면 되지만(rebase), **구조가 바뀐 것(버튼·화면·이동·서버호출 추가/삭제)은 재스캔해야 한다** — rebase 는 없던 버튼을 못 만든다. 그 둘을 사용자 대신 섞어서 결정하면, 새 버튼이 지도에서 조용히 빠지거나(누락) 도구가 노드를 지어낸다(이 도구가 금지하는 실패).
 
-1. **See what moved** — `${CLAUDE_PLUGIN_ROOT}/skills/flow-debugger/scripts/check-stale.js <graph.json> "$1"`.
-   If it is FRESH, stop: nothing to do.
-2. **Follow the drift** — `${CLAUDE_PLUGIN_ROOT}/skills/flow-debugger/scripts/rebase-anchors.js <screenmap.json> "$1"`
-   (it reads the commit the map was built from and finds each anchored line where it lives now — a line that just
-   shifted, or a file that moved/renamed, is followed automatically).
-3. **Lines that were REWRITTEN** are listed, not guessed — those screens need a real re-scan (**/flow** on just them, or accept them as located).
-4. **Re-verify** — `verify-anchors.js <screenmap.json> "$1" --fix <screenmap.json> --strict`.
-5. **Rebuild** — `build.js … --app-root "$1" --strict-anchors` and `make-handoff.js …` so the HTML and handoff match.
+### 1) 무엇이 어떻게 바뀌었는지 분류한다 (자동)
+```
+node <scripts>/classify-changes.js <screenmap.json> "$1"
+```
+그러면 화면별로 나온다:
+- **좌표만 밀림 (drift)** — 재스캔 없이 rebase 로 옮기면 됨.
+- **구조 바뀜 (rescan 권장)** — 근거와 함께(예: `button 6→7`, `이동 대상 변경: /x`). 재스캔 필요.
+- **화면 삭제** — 앵커한 파일이 사라짐.
+`FRESH` 면 아무것도 안 바뀐 것 → 여기서 멈추고 그렇게 알린다.
 
-Report before/after: how many coordinates moved, how many were rewritten, and that the map is verified again.
+### 2) 사용자에게 보여주고 **물어본다** — `AskUserQuestion` 도구를 반드시 실제로 호출한다
+분류 결과(좌표만 밀림 / 구조 바뀜 / 삭제)를 사람이 읽을 수 있게 요약해 보여준 뒤, **`AskUserQuestion` 도구를 실제로 호출**해 방향을 확인한다. 산문으로 묻고 스스로 답하지 않는다 — 아래는 문구 예시일 뿐이다.
+- "구조가 바뀐 것 같은 화면 N개(…)를 **다시 스캔**할까요, 아니면 **좌표만 먼저 옮기고** 재스캔은 나중에 할까요?"
+- 삭제된 화면이 있으면: "이 화면들을 지도에서 **뺄까요**?"
+- **좌표만 밀린 화면도 묻지 않고 옮기지 않는다.** 같은 질문 안에 (권장 선택지로 미리 체크해) 포함해 확인받는다.
+- 애매하면 화면별로 고르게 한다.
+
+**⛔ 하드 게이트: 사용자가 고르기 전에는 재스캔·삭제·이동(rebase) 어느 것도 실행하지 않는다.** 3) 의 명령은
+2) 의 `AskUserQuestion` 응답을 받은 뒤에만 돈다.
+
+### 3) 사용자가 정한 대로만 실행한다  (2)의 응답 없이는 아래 명령을 하나도 실행하지 않는다)
+- **drift → 옮기기** *(사용자가 이 선택지를 확인한 뒤에만)*: `rebase-anchors.js <screenmap> "$1"` → `verify-anchors.js <screenmap> "$1" --fix <screenmap> --strict`.
+- **rescan → 그 화면만 다시 스캔** *(확인 뒤에만)*: 그 화면들만 SCAN 프롬프트로 재스캔하고 `apply-anchors.js` 로 병합(한국어·위험주석 보존). 화면이 너무 많으면 `/flow` 전체를 제안한다.
+- **rewritten 줄**(rebase 가 실행 중 "재작성"으로 표시 — 원래 질문 범위 밖이다): 추측하지 말고, **2) 로 돌아가 그 화면을 재스캔할지 사용자에게 다시 물어본 뒤** 처리한다.
+- **삭제** *(사용자가 승인한 뒤에만)*: 그 화면을 지도에서 제거.
+
+### 4) 다시 짓고 증명한다
+`build.js … --app-root "$1" --strict-anchors` + `make-handoff.js …` 로 HTML·핸드오프를 새로 만들고, 좌표가 다시 검증됐음을(broken 0 · suspect 0) 사용자에게 보고한다. **순서도(이동 그래프)와 화면(동작 카드) 둘 다** 이 재빌드에서 갱신된다.
+
+핵심 규칙: **분류는 자동, 결정은 사용자** — 이동(rebase)·재스캔·삭제 **셋 다** 사용자 확인 뒤에만 한다.
+새 버튼·화면·화살표는 절대 지어내지 말고, 재스캔으로만 등장시킨다.
