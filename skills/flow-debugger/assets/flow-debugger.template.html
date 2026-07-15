@@ -217,9 +217,22 @@
   .legend span{display:flex;align-items:center;gap:5px}.legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
   .hint{font-size:11.5px;color:var(--faint);margin-top:8px;line-height:1.6}
   .countbadge{font-size:10px;color:var(--bg);background:var(--ai);border-radius:99px;padding:0 6px;margin-left:6px;font-weight:700}
+  /* flow-watch 배너 (localhost 서빙 시에만 표시) */
+  #watchbar{position:sticky;top:0;z-index:60;padding:9px 14px;font-size:13px;line-height:1.5;
+    border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  #watchbar.fresh{background:#12351f;color:#a8e6c0}
+  #watchbar.stale{background:#3a2a12;color:#f0c894}
+  #watchbar b{font-weight:700}
+  #watchbar .wb-detail{width:100%;margin-top:4px;font-size:12px;opacity:.85;display:none}
+  #watchbar .wb-more{cursor:pointer;text-decoration:underline;opacity:.85}
+  @media (prefers-color-scheme:light){#watchbar.fresh{background:#e6f6ec;color:#1c6b3a}#watchbar.stale{background:#fbf0dc;color:#8a5a12}}
 </style>
 </head>
 <body>
+
+<!-- flow-watch 배너: localhost 로 서빙될 때만 켜진다(file:// 로 열면 숨김 = 정적 스냅샷 그대로).
+     서버(/status)가 분류기로 "코드가 바뀌었나"를 답해준다 — file:// 페이지는 소스를 못 읽으므로. -->
+<div id="watchbar" style="display:none"></div>
 
 <div class="topbar">
   <div class="brand">__APP_NAME__ <span>기능 흐름도</span></div>
@@ -2073,6 +2086,40 @@ if (focusId) { expanded.add(focusId); state.expanded[focusId] = true; }
 document.querySelectorAll("#viewSeg button").forEach(b => b.classList.toggle("on", b.dataset.v === viewMode));
 syncModeButtons(); renderScrPick();
 renderChips();render();renderDetail();renderSide();updateEditCount();fit();
+</script>
+
+<!-- flow-watch: only runs when this page is SERVED (http). A file:// page can't read your source,
+     so it stays a static snapshot. Served by serve.js, it asks /status (the classifier) on load /
+     focus / file-change and shows the banner. Detection only — updating is the /flow-update job. -->
+<script>
+(function(){
+  if(!location.protocol.startsWith("http"))return;               // file:// → static, no banner
+  var bar=document.getElementById("watchbar");if(!bar)return;
+  var showDetail=false, last=null;
+  function esc(s){return String(s).replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];});}
+  function routes(arr){return [].concat.apply([],(arr||[]).map(function(x){return x.routes||[];})).filter(function(v,i,a){return a.indexOf(v)===i;});}
+  function render(s){
+    if(!s||s.error){bar.style.display="none";return;}
+    bar.style.display="";
+    if(s.fresh){bar.className="fresh";bar.innerHTML="<b>● 최신</b> — 코드가 지도와 일치해요. 앵커 좌표를 믿어도 됩니다.";return;}
+    bar.className="stale";
+    var d=s.counts.drift,r=s.counts.rescan,del=s.counts.deleted;
+    var head="<b>⚠ 코드가 바뀌었어요</b> — 좌표만 밀림 <b>"+d+"</b>화면"+
+      (r?" · <b>구조 바뀜 "+r+"화면(재스캔 권장)</b>":"")+(del?" · 삭제 "+del:"")+
+      ". 갱신은 터미널에서 <b>/flow-update</b> — 분류해서 물어본 뒤 진행해요. "+
+      "<span class='wb-more' id='wbMore'>"+(showDetail?"접기":"무엇이 바뀌었나")+"</span>";
+    var det="";
+    if(r&&s.rescan.length){det+="<div><b>구조 바뀜(재스캔):</b> "+esc(routes(s.rescan).join(", "))+"</div>";}
+    if(d&&s.drift.length){det+="<div><b>좌표만 밀림(자동 이사 가능):</b> "+esc(routes(s.drift).join(", "))+"</div>";}
+    if(del&&s.deleted.length){det+="<div><b>화면 삭제:</b> "+esc(routes(s.deleted).join(", "))+"</div>";}
+    bar.innerHTML=head+"<div class='wb-detail' style='display:"+(showDetail?"block":"none")+"'>"+det+"</div>";
+    var m=document.getElementById("wbMore");if(m)m.onclick=function(){showDetail=!showDetail;render(last);};
+  }
+  function check(){fetch("/status",{cache:"no-store"}).then(function(r){return r.json();}).then(function(s){last=s;render(s);}).catch(function(){});}
+  check();
+  window.addEventListener("focus",check);                        // 코드 고치고 탭으로 돌아오면 재확인
+  try{var es=new EventSource("/events");es.addEventListener("changed",check);}catch(e){}  // 저장하는 순간 라이브
+})();
 </script>
 </body>
 </html>

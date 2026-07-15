@@ -3,6 +3,22 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.17.0] - 2026-07-15
+
+### Added — /flow-watch: serve on localhost so the page detects code changes live
+A `file://` page is a baked static snapshot the browser sandbox can't refresh into truth — it can't
+read your source. `scripts/serve.js` (Node http + fs, no deps) serves the HTML on localhost and answers
+`/status` with the change classifier, plus an SSE `/events` stream that watches the anchored files. A
+banner in the page — active only when served over http, hidden under `file://` so the emailed static
+copy is unchanged — shows **● 최신** or **⚠ 코드 바뀜: 좌표만 밀림 N · 구조 바뀜 M(재스캔 권장)** on load,
+tab-focus, and file-save. Detection only: the actual update stays the human-gated /flow-update, and the
+banner never edits the map. `/flow-watch` starts it.
+
+### Fixed — classifier reads old versions in a subdirectory app (monorepo)
+`git show <commit>:<path>` wants a repo-root-relative path; when the app is a subdir of the repo the
+old-version lookup failed and every changed screen fell back to "re-scan". classify-change now prepends
+`git rev-parse --show-prefix`. Regression-tested end-to-end (git compare → drift vs re-scan). 96 → 99 tests.
+
 ## [0.16.0] - 2026-07-15
 
 ### Added — /flow-update now CLASSIFIES the change and ASKS before acting

@@ -478,6 +478,24 @@ eq('generateText (Vercel AI SDK) IS an AI call', CC.classifyFile(base, base.repl
 eq('supabase auth call IS a server call', CC.classifyFile(base, base.replace('const onSave = () => save();', 'const onSave = () => supabase.auth.signInWithPassword(c);')).structural, true);
 eq('an edge-function repoint IS structural', CC.classifyFile(base.replace('save()', 'supabase.functions.invoke("send-mail")'), base.replace('save()', 'supabase.functions.invoke("charge-card")')).structural, true);
 
+// ---- classifyChanges end-to-end: git old-version lookup + drift/rescan (what /flow-watch serves) --
+console.log('\nwatch integration (git compare + drift vs rescan over a real fingerprint):');
+const appW = fs.mkdtempSync(path.join(os.tmpdir(), 'fdbgW-'));
+const gW = (...a) => execFileSync('git', a, { cwd: appW, encoding: 'utf8', stdio: 'pipe' });
+const wW = (rel, b) => { const q = path.join(appW, rel); fs.mkdirSync(path.dirname(q), { recursive: true }); fs.writeFileSync(q, b); };
+wW('src/Home.tsx', ['export function Home(){', '  const onSave=()=>save();', '  return <Pressable onPress={onSave}><T>S</T></Pressable>;', '}'].join('\n') + '\n');
+gW('init', '-q'); gW('config', 'user.email', 't@t'); gW('config', 'user.name', 't'); gW('add', '-A'); gW('commit', '-qm', 'base');
+const gWgraph = [{ route: '/', group: 'g', actions: [{ action: 'Save', symbol: 'onSave', file: 'src/Home.tsx:2' }] }];
+const fpW = F.fingerprint(gWgraph, appW, null);
+eq('fresh right after building (classify)', CC.classifyChanges(gWgraph, appW, { fingerprint: fpW }).fresh, true);
+// a comment edit → the git old-version compares, markers identical → DRIFT (not the safe fallback)
+wW('src/Home.tsx', ['export function Home(){', '  // just a note', '  const onSave=()=>save();', '  return <Pressable onPress={onSave}><T>S</T></Pressable>;', '}'].join('\n') + '\n');
+eq('a comment edit is DRIFT via git compare', (c => [c.counts.drift, c.counts.rescan])(CC.classifyChanges(gWgraph, appW, { fingerprint: fpW })), [1, 0]);
+// an added button → RE-SCAN
+wW('src/Home.tsx', ['export function Home(){', '  const onSave=()=>save();', '  return <><Pressable onPress={onSave}><T>S</T></Pressable><Pressable onPress={del}><T>D</T></Pressable></>;', '}'].join('\n') + '\n');
+eq('an added button is RE-SCAN', (c => [c.counts.drift, c.counts.rescan])(CC.classifyChanges(gWgraph, appW, { fingerprint: fpW })), [0, 1]);
+fs.rmSync(appW, { recursive: true, force: true });
+
 fs.rmSync(app2, { recursive: true, force: true });
 fs.rmSync(app3, { recursive: true, force: true });
 

@@ -135,7 +135,11 @@ function classifyChanges(graph, appRoot, opts) {
 
   const git = args => { try { return execFileSync('git', args, { cwd: appRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch (e) { return null; } };
   const readNow = rel => { try { return fs.readFileSync(path.join(appRoot, rel), 'utf8'); } catch (e) { return null; } };
-  const readOld = rel => (base ? git(['show', `${base}:${rel}`]) : null);
+  // `git show <commit>:<path>` wants the path relative to the REPO ROOT, not to appRoot. When the app
+  // is a subdirectory of the repo (monorepo package, or an example inside this repo), prepend that
+  // prefix — otherwise old-version lookup fails and every changed screen falls back to a re-scan.
+  const prefix = (git(['rev-parse', '--show-prefix']) || '').trim();
+  const readOld = rel => (base ? git(['show', `${base}:${prefix}${rel}`]) : null);
 
   const drift = [], rescan = [], deleted = [];
   for (const rel of stale.changed) {

@@ -86,6 +86,7 @@ robocopy ".\skills\flow-debugger" "$env:USERPROFILE\.claude\skills\flow-debugger
 | `/flow` | 처음 / 큰 변경 후 | 전수 스캔 → 검증 → **HTML + 핸드오프** | 비쌈(1회) |
 | `/flow-handoff` | 넘길 때 | 현재 지도로 핸드오프만 재생성(재스캔 X) | 쌈 |
 | `/flow-check` | 바뀐 것 같을 때 | 지문 대조로 낡음 점검 | 30초 |
+| `/flow-watch` | 코딩하며 볼 때 | localhost 서빙 → 코드 저장/새로고침 때 배너로 변화 감지 | 상주 |
 | `/flow-update` | 낡았을 때 | 화면별 **좌표만 밀림 vs 구조 바뀜** 분류 → 사용자에게 물어보고 이사/재스캔 → 재빌드 | 쌈~중간 |
 
 `/flow-update` 는 코드를 고치기 전에 **분류**부터 한다: 좌표만 밀린 화면은 자동으로 옮기고(rebase),
