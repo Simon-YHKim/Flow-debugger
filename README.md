@@ -77,7 +77,21 @@ node scripts/build.js assets/flow-debugger.template.html \
 robocopy ".\skills\flow-debugger" "$env:USERPROFILE\.claude\skills\flow-debugger" /E
 ```
 
-## 쓰는 법
+## 명령어 (`/flow*`)
+
+스캔은 한 번(비쌈)이고, HTML(사람용)·핸드오프(AI용)는 그 스캔의 두 렌더다. 네 시점으로 나뉜다:
+
+| 명령어 | 언제 | 하는 일 | 비용 |
+|---|---|---|---|
+| `/flow` | 처음 / 큰 변경 후 | 전수 스캔 → 검증 → **HTML + 핸드오프** | 비쌈(1회) |
+| `/flow-handoff` | 넘길 때 | 현재 지도로 핸드오프만 재생성(재스캔 X) | 쌈 |
+| `/flow-check` | 바뀐 것 같을 때 | 지문 대조로 낡음 점검 | 30초 |
+| `/flow-update` | 낡았을 때 | 좌표를 현재 코드로 이사 → 재빌드 | 쌈 |
+
+**매일 쓰기**는 명령어가 아니다 — `flow-debugger.html`을 열어 클릭·순서편집·"안 돼요"로 프롬프트를 복사한다.
+받는 사람은 `docs/FLOW-HANDOFF.md`만 읽으면 된다.
+
+## 파이프라인 (`/flow` 내부)
 
 스킬 발동 후 파이프라인을 돈다(프롬프트 전문: `skills/flow-debugger/references/scan-prompts.md`):
 

@@ -13,7 +13,7 @@ description: >-
   per-action diagnostic checklists, connection editing, and a bug-report
   generator that turns a vague "안 돼요" into a precise, VERIFIED file:line report.
   Produces the HTML plus a copy-paste fix and bug prompt for the assistant.
-version: 0.14.6
+version: 0.15.0
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 compatibility: [claude-code]
 author: Simon Kim
@@ -42,11 +42,27 @@ author: Simon Kim
 **그 줄에 그 함수가 실제로 있는지**까지 확인하고, 어긋난 줄은 심볼 위치로 보정하고,
 좌표가 아닌 산문은 좌표 자리에서 빼낸다. 그 결과가 신고서에 ✔ / ~ / ⚠ 로 그대로 실린다.
 
+## 사람이 쓰는 법 — 명령어 4개 (`/flow*`)
+
+비싼 건 **스캔 한 번**이고, HTML(사람용)과 핸드오프(AI/개발자용)는 그 스캔의 두 렌더다.
+그래서 하나의 플러그인, 네 개의 시점으로 나눈다:
+
+| 명령어 | 언제 | 하는 일 | 비용 |
+|---|---|---|---|
+| **`/flow`** | 처음 / 앱이 크게 바뀐 뒤 | 전수 스캔 → 검증 → **HTML + 핸드오프 둘 다** | 비쌈(1회) |
+| **`/flow-handoff`** | 다른 세션·사람에게 넘길 때 | 현재 지도로 핸드오프 문서만 재생성(**재스캔 X**) | 쌈 |
+| **`/flow-check`** | 앱이 바뀐 것 같을 때 | 지도가 아직 맞는지 지문 대조 | 30초 |
+| **`/flow-update`** | 낡았을 때 | 좌표를 현재 코드로 이사(재스캔 X) → 재빌드 | 쌈 |
+
+- **쓰기(매일)**는 명령어가 아니다: `/flow`로 만든 `flow-debugger.html`을 **열어서** 클릭·순서편집·"안 돼요"로 버그/수정 프롬프트를 복사한다.
+- **넘기기**: 받는 쪽은 `docs/FLOW-HANDOFF.md`만 읽으면 된다.
+- 모드 라우팅: "핸드오프만" 요청에 전체 파이프라인을 돌리지 말고 `/flow-handoff`(=make-handoff)만, "아직 맞아?"엔 `/flow-check`만 실행한다.
+
 ## When to use / boundaries
 
 발동:
-- "플로우 디버거 만들어", "워크플로우 디버깅", "이 앱 어디서 막히는지 보여줘"
-- "비개발자도 알아보게 화면 흐름도", "이거 왜 안 되는지 신고서 만들어줘"
+- "플로우 디버거 만들어", "워크플로우 디버깅", "이 앱 어디서 막히는지 보여줘" → `/flow`
+- "비개발자도 알아보게 화면 흐름도", "이거 왜 안 되는지 신고서 만들어줘" → `/flow`
 - 앱 인수인계, 비개발 PM/창업자에게 구조 설명, 버그 1차 분류(triage)
 
 쓰지 말 것 (경계):

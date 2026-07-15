@@ -3,6 +3,22 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.15.0] - 2026-07-15
+
+### Added — four `/flow*` slash commands, one per moment of use
+The plugin did one big thing on trigger. But a person uses it at four different moments, and the
+expensive scan should not run when it is not needed. Split the invocation (not the plugin — one scan
+still feeds both renders):
+
+- **`/flow`** — the once-per-big-change build: scan → verify → HTML + handoff.
+- **`/flow-handoff`** — re-render just the handoff docs from the current map (no re-scan). For handing off to another session.
+- **`/flow-check`** — is the map still current? fingerprint vs code, ~30s. Changes nothing.
+- **`/flow-update`** — the app moved; follow the drift with rebase-anchors and rebuild. No re-scan.
+
+Named with a leading `flow` so typing `/flow` autocompletes all four. Daily *use* stays in the HTML
+itself (click, reorder, "안 돼요" → prompt); the commands are only for building and maintaining the map.
+SKILL.md and README now open with the four-moment usage table.
+
 ## [0.14.6] - 2026-07-15
 
 ### Fixed — a re-scan's new bugs now carry a bugAnchor
