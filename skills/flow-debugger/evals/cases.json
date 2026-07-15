@@ -1,6 +1,6 @@
 {
   "skill": "flow-debugger",
-  "version": "0.14.4",
+  "version": "0.14.5",
   "cases": [
     {
       "id": "nondev-flow-debug-ko",

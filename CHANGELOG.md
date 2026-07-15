@@ -3,6 +3,17 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.14.5] - 2026-07-15
+
+### Added — exported prompts name the file and line to edit, and say "read only there"
+The exported bug-report and fix-request prompts are consumed by a coding agent, and that agent burns
+tokens searching a codebase it does not know. So every request now opens with a plain
+**`고칠 파일: \`path\` 파일의 N번째 줄 근처`** pointer (derived from the verified anchor — the real-logic
+`@` location, falling back to the render file, then a bare file), and the work-rules tell the agent it
+may **read only the ±40 lines around that anchor instead of the whole file** when the mark is ✔ or ·.
+A wrong coordinate costs the downstream agent MORE than none (it reads the wrong file and re-searches),
+which is why this rides on the verified anchors rather than raw scan output.
+
 ## [0.14.4] - 2026-07-15
 
 ### Fixed — a regenerate no longer vandalises downstream curation (near-miss)
