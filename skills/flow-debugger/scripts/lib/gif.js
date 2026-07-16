@@ -37,4 +37,20 @@ function encodeGif(pngBuffers, opts = {}) {
   return Buffer.from(gif.bytes());             // opts.loop=0 (infinite) is gifenc's default
 }
 
-module.exports = { encodeGif, resizeRGBA };
+// Fraction of pixels that meaningfully changed between two PNG frames (0..1). Used to AUTO-detect a
+// moving screen: probe two frames a moment apart and, if enough pixels moved, capture a GIF instead
+// of a still — no hand-maintained list of "dynamic" routes. pixelThreshold = per-pixel RGB delta
+// that counts as "changed" (ignores tiny anti-alias jitter).
+function frameDiff(bufA, bufB, pixelThreshold = 24) {
+  const a = PNG.sync.read(bufA), b = PNG.sync.read(bufB);
+  if (a.width !== b.width || a.height !== b.height) return 1;
+  const da = a.data, db = b.data, n = a.width * a.height;
+  let changed = 0;
+  for (let i = 0; i < n; i++) {
+    const o = i * 4;
+    if (Math.abs(da[o] - db[o]) + Math.abs(da[o + 1] - db[o + 1]) + Math.abs(da[o + 2] - db[o + 2]) > pixelThreshold) changed++;
+  }
+  return changed / n;
+}
+
+module.exports = { encodeGif, resizeRGBA, frameDiff };

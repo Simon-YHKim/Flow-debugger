@@ -79,6 +79,10 @@ try {
   eq('produces a GIF89a', gif.slice(0, 6).toString('ascii'), 'GIF89a');
   eq('loops (NETSCAPE2.0 app extension)', gif.includes(Buffer.from('NETSCAPE2.0')), true);
   eq('downscales past target width', require('./lib/gif').resizeRGBA(Buffer.alloc(80 * 60 * 4), 80, 60, 40).w, 40);
+  // auto-motion: identical frames read as static (~0), a shifted frame reads as moving (>0)
+  const { frameDiff } = require('./lib/gif');
+  eq('frameDiff: identical frames ≈ 0 (static)', frameDiff(frame(0), frame(0)) < 0.01, true);
+  eq('frameDiff: shifted frames > 0 (dynamic)', frameDiff(frame(0), frame(120)) > 0.05, true);
 } catch (e) { eq('gif encoder loads (needs gifenc+pngjs)', String(e.message).split('\n')[0], '<installed>'); }
 
 // ---- teardown ----

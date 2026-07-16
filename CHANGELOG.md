@@ -3,6 +3,17 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.24.0] - 2026-07-16
+
+### Added — --auto-motion: dynamic screens become GIFs automatically (no list)
+Instead of hand-listing which routes are animated, capture-shots now DETECTS motion: it probes two
+frames per screen and, if enough pixels moved (default 1%), captures the rest as a GIF; otherwise a
+still. `lib/gif.js` gains `frameDiff` (fraction of pixels changed past a per-pixel noise floor).
+Calibrated on the live deep-space build — /onboarding 0%, /sign-in 0.5% ambient shimmer both stay
+stills (info fits a frame); real motion (spinners, carousels, charts >1%) becomes a GIF.
+`--motion <routes>` still force-GIFs. self-test 9 → 11 cases.
+
+
 ## [0.23.0] - 2026-07-16
 
 ### Added — animated GIF thumbnails for screens a single frame can't tell

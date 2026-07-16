@@ -204,22 +204,24 @@ flow-debugger를 쓴 세션이 화면 코드를 고치고 끝나면, 종료 시 
 - **커밋은 안 한다**(작업트리만 갱신). 구조 변경(새 화면·버튼)은 배지 + `/flow-update` 안내 —
   새 노드는 재스캔으로만 등장한다(지어내지 않는 원칙 그대로).
 
-### 4) 한 프레임으로 안 되는 화면 — 모션 GIF (`--motion`)
+### 4) 동적인 화면은 자동으로 GIF — `--auto-motion`
 
-로딩→완료, 별가루/글로우 애니메이션, 캐러셀처럼 **정지 한 장으론 못 담는 화면**은 여러 프레임을 찍어
-**애니메이션 GIF**로 만든다. GIF는 카드 `<img>`에서 그대로 재생·반복되므로 템플릿 변경이 없다. GIF는
-무거우니 **라우트별 opt-in** — 지정한 화면만 GIF, 나머지는 정지.
+로딩→완료, 별가루/글로우, 캐러셀처럼 **정지 한 장으론 못 담는 화면**은 **자동 감지**해서 애니메이션
+GIF로 만든다. 라우트를 나열할 필요 없다 — 캡처할 때 **프레임 2장을 찍어 픽셀 차이를 비교**하고,
+움직이면(기본 1% 이상) 나머지 프레임까지 찍어 GIF, 아니면 스틸로 둔다. GIF는 카드 `<img>`에서 그대로
+재생·반복되므로 템플릿 변경이 없다.
 
 ```bash
-node scripts/capture-shots.js graph.json <baseUrl> out \
-  --only /home,/graph --motion /home,/graph --frames 8 --frame-gap 350 --gif-width 240
+node scripts/capture-shots.js graph.json <baseUrl> out --auto-motion   # 움직이는 화면만 자동 GIF
 ```
 
-`lib/gif.js`(pngjs 디코드 + 다운스케일 + gifenc 인코드, ffmpeg 불필요)로 인코딩. 카드 썸네일은 작게
-보이니 저해상도 소팔레트로 충분하다(딥스페이스 온보딩 8프레임 ≈ 19KB). `stamp-shots`/`embed-shots`는
-`.gif`를 그대로 임베드한다.
+- 특정 화면을 무조건 GIF로 강제: `--motion /a,/b` · 프레임 튜닝: `--frames 8 --frame-gap 350 --gif-width 240`
+- 미세한 앰비언트 반짝임(<1%, 예: 로그인 화면 별 0.5%)은 **스틸로 둔다**(정보는 정지로 충분). 민감도는
+  `--auto-motion 0.02` 처럼 임계값으로 조정.
+- `lib/gif.js`(pngjs 디코드 + 다운스케일 + gifenc, **ffmpeg 불필요**)로 인코딩 — 카드 썸네일은 작게 보여
+  저해상도 소팔레트로 충분(딥스페이스 8프레임 ≈ 19KB). `stamp-shots`/`embed-shots`는 `.gif`를 그대로 임베드.
 
-> 역할 분담: **이미지=CI(2)** · **표시·좌표=Stop 훅(3)** · **모션=`--motion` GIF(4)** · **구조 재스캔=`/flow-update`(사람 확인)**.
+> 역할 분담: **이미지=CI(2)** · **표시·좌표=Stop 훅(3)** · **동적화면=`--auto-motion` GIF(4)** · **구조 재스캔=`/flow-update`(사람 확인)**.
 
 ## 산출물 HTML이 주는 것
 

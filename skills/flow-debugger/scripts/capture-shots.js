@@ -9,7 +9,8 @@
 //        [--base-path /app] [--wait 1200] [--width 390] [--height 844]
 //        [--auth-url <url> --email <id> --password <pw>]
 //        [--only /route,/route2] [--limit 20] [--jpeg [quality=72]]
-//        [--motion /route,/route2 [--frames 8] [--frame-gap 350] [--gif-width 240]]  # animated GIF thumbnails
+//        [--auto-motion [threshold=0.01]]   # AUTO: probe 2 frames/screen; moving screens become GIFs
+//        [--motion /route,/route2]          # force these routes to GIF (with --frames/--frame-gap/--gif-width)
 //
 // writes  <outDir>/<slug>.png ...  and  <outDir>/shots-map.json  ({route: pngPath})
 // then:   node embed-shots.js <outDir>/shots-map.json Output/shots.json
@@ -87,28 +88,42 @@ fs.mkdirSync(outDir, { recursive: true });
   const mFrames = parseInt(flags.frames, 10) || 8;
   const mGap = parseInt(flags['frame-gap'], 10) || 350;
   const gifWidth = parseInt(flags['gif-width'], 10) || 240;
-  let encodeGif = null;
-  if (motionSet.length) { try { ({ encodeGif } = require('./lib/gif')); } catch (e) { console.error('motion needs gifenc+pngjs (npm install in skills/flow-debugger) — those routes fall back to stills.'); } }
+  // --auto-motion [threshold]: probe two frames per screen and, if enough pixels moved, it's a
+  // DYNAMIC screen → capture a GIF automatically — no hand-maintained route list. --motion still
+  // force-GIFs specific routes. Default threshold 0.01 (1% of pixels moved).
+  const autoMotion = ('auto-motion' in flags) && flags['auto-motion'] !== false;
+  const motionThreshold = (typeof flags['auto-motion'] === 'string') ? (parseFloat(flags['auto-motion']) || 0.01) : 0.01;
+  let gif = null;
+  if (motionSet.length || autoMotion) { try { gif = require('./lib/gif'); } catch (e) { console.error('motion needs gifenc+pngjs (npm install in skills/flow-debugger) — falling back to stills.'); } }
 
   const map = {}; const fail = [];
   for (const r of routes) {
     const url = baseUrl.replace(/\/$/, '') + basePath + (r === '/' ? '/' : r);
-    const motion = !!encodeGif && motionSet.includes(r);
-    const file = path.join(outDir, slug(r) + (motion ? '.gif' : ext));
+    const forced = !!gif && motionSet.includes(r);
     try {
       const resp = await page.goto(url, { waitUntil: 'networkidle', timeout: 20000 });
       if (resp && resp.status() >= 400) throw new Error('HTTP ' + resp.status());
       await page.waitForTimeout(wait);
-      if (motion) {
-        const frames = [];
-        for (let i = 0; i < mFrames; i++) { frames.push(await page.screenshot({ type: 'png' })); if (i < mFrames - 1) await page.waitForTimeout(mGap); }
-        fs.writeFileSync(file, encodeGif(frames, { width: gifWidth, delay: mGap }));
-        process.stdout.write('g');
-      } else {
-        await page.screenshot(jpeg ? { path: file, type: 'jpeg', quality } : { path: file });
-        process.stdout.write('.');
+      // still vs GIF: forced routes → GIF; with --auto-motion, probe two frames and diff to decide.
+      let a = null, b = null, isMotion = forced;
+      if (gif && (forced || autoMotion)) {
+        a = await page.screenshot({ type: 'png' });
+        await page.waitForTimeout(mGap);
+        b = await page.screenshot({ type: 'png' });
+        if (!forced) isMotion = gif.frameDiff(a, b) >= motionThreshold;
       }
-      map[r] = file;
+      if (isMotion) {
+        const frames = [a, b];
+        for (let i = 2; i < mFrames; i++) { await page.waitForTimeout(mGap); frames.push(await page.screenshot({ type: 'png' })); }
+        const file = path.join(outDir, slug(r) + '.gif');
+        fs.writeFileSync(file, gif.encodeGif(frames, { width: gifWidth, delay: mGap }));
+        map[r] = file; process.stdout.write('g');
+      } else {
+        const file = path.join(outDir, slug(r) + ext);
+        if (a && !jpeg) fs.writeFileSync(file, a);      // reuse the motion-probe PNG as the still
+        else await page.screenshot(jpeg ? { path: file, type: 'jpeg', quality } : { path: file });
+        map[r] = file; process.stdout.write('.');
+      }
     } catch (e) { fail.push(r + ' (' + e.message.split('\n')[0] + ')'); process.stdout.write('x'); }
   }
   await browser.close();
