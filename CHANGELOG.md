@@ -3,7 +3,37 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
-## [0.24.0] - 2026-07-16
+## [0.25.0] - 2026-07-17
+
+### Fixed — capture QUALITY is now verified, not assumed (65 identical robot frames, reported as success)
+An app's intro gate ("탭해서 두번째 뇌를 열기") overlaid every post-login route, so ~65 different
+screens captured as the SAME robot frame — and every one reported "success". A wrong picture that
+claims success is worse than a missing one. capture-shots now judges every shot and says so:
+
+- **`--tap "<sel>||<sel>"`** — click through intro gates/overlays after login and after every route
+  open, then RE-open the route (tapping may itself navigate).
+- **Auth-bounce recovery** — landed back on the sign-in page? sign in again and retry the route,
+  instead of "successfully" capturing the login screen 45 times.
+- **Per-route verdicts** in `capture-report.json`: ok / blank / **duplicate** (perceptual hash — two
+  routes landing on the same rendered screen = a gate/redirect) / **redirected** (final path ≠
+  requested) / error, with luminance stats and retry counts. `--retry N` re-tries blank/errored routes.
+- goto `networkidle` → `load` (websocket-holding apps never settle networkidle).
+
+### Changed — the panels now match how a person actually debugs (v0.25 UX)
+① click a card → ② LEFT panel: the screen capture + plain-Korean explanation (read) → ③ RIGHT
+panel: **✏️ 고칠점 메모** (write) → ④ one **수정 요청 복사** button. The prompt scaffolding
+(verified anchors, delegation/gate warnings, dependency lists, work rules) rides along INVISIBLY
+in the copied request — a non-developer never sees or manages prompt text.
+
+- Right panel = 고칠점 메모 (default) + 노드 추가. The bug-report tab and the bottom prompt-stack
+  dock are gone; memo entries inherit the bug report's context machinery (anchor trust marks,
+  delegation trap warning, reachability gate, dependent APIs/AI) in the copied prompt.
+- Old localStorage bug reports migrate into memos on first load (nothing a user typed is lost).
+- Selecting a node updates BOTH panels (the memo pad follows the selection).
+- verify-html.js drives the new flow end-to-end: empty memo ⇒ copy gated · typed memo ⇒ 1건 active ·
+  copied request carries the memo text + verified coordinates + delegation warning (35/35 on 2nd-B).
+
+
 
 ### Added — --auto-motion: dynamic screens become GIFs automatically (no list)
 Instead of hand-listing which routes are animated, capture-shots now DETECTS motion: it probes two

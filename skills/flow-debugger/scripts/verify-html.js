@@ -2,7 +2,7 @@
 //
 // The build's `new Function` check only proves the script PARSES. This proves the page
 // actually runs: no runtime error, no overlapping cards, the panels render, and — the
-// thing that matters — the exported bug report really carries the verified code anchors.
+// thing that matters — the copied 수정 요청 really carries the memo with verified code anchors.
 // Every "verify PASS" claim in this repo's CHANGELOG used to rest on scripts that lived
 // in a temp directory and no longer exist; this one lives with the code.
 //
@@ -88,23 +88,37 @@ catch (e) {
     return out;
   });
 
-  // drive the actual value path: open a screen, file a bug, read the exported report
+  // drive the actual value path (v0.25 UX): click a screen -> left shows capture+설명 ->
+  // '안 돼요' routes to the RIGHT memo pad -> type a memo -> the copied 수정 요청 must carry it
+  // with verified anchors. The prompt text itself is intentionally invisible in the UI.
   let report = '', bugFlow = 'not-run';
   try {
     await page.click('#nodes .node.screen');
     await page.waitForTimeout(250);
     const hasBtn = await page.$('#reportBug');
     if (hasBtn) {
-      await page.click('#reportBug');
+      // with no memo, the copy button must be gated (disabled, 0건)
+      const gated = await page.evaluate(() => {
+        const b = document.getElementById('copyPrompt');
+        return !!b && b.disabled && /0건/.test(b.textContent);
+      });
+      await page.click('#reportBug');                     // routes to the memo pad + focuses it
       await page.waitForTimeout(250);
-      // empty report must NOT export
-      const empty = await page.inputValue('#bugOut').catch(() => '');
-      const gated = /비어 있어요/.test(empty);
-      await page.fill('textarea[data-f="symptom"]', '화면이 하얗게만 뜨고 아무것도 안 보여요');
-      await page.dispatchEvent('textarea[data-f="symptom"]', 'change');
+      const focused = await page.evaluate(() => document.activeElement && document.activeElement.id === 'memoNote');
+      await page.fill('#memoNote', '화면이 하얗게만 뜨고 아무것도 안 보여요');
+      await page.dispatchEvent('#memoNote', 'change');
       await page.waitForTimeout(250);
-      report = await page.inputValue('#bugOut').catch(() => '');
-      bugFlow = gated ? (report.includes('안 되는') ? 'ok' : 'no-report') : 'NOT-GATED';
+      const after = await page.evaluate(() => ({
+        cards: document.querySelectorAll('#sideBody .pcard').length,
+        enabled: (() => { const b = document.getElementById('copyPrompt'); return !!b && !b.disabled && /1건/.test(b.textContent); })(),
+        prompt: buildStackPrompt(),
+      }));
+      report = after.prompt;
+      bugFlow = (gated && focused && after.cards >= 1 && after.enabled
+        && report.includes('하얗게만') && /고칠 파일|코드 힌트/.test(report))
+        ? 'ok'
+        : 'FAIL gated=' + gated + ' focused=' + focused + ' cards=' + after.cards + ' enabled=' + after.enabled
+          + ' carries=' + (report.includes('하얗게만') && /고칠 파일|코드 힌트/.test(report));
     } else bugFlow = 'no-button-on-screen-card';
   } catch (e) { bugFlow = 'error: ' + e.message; }
 
@@ -125,15 +139,15 @@ catch (e) {
       for (const n of nodes.values())
         if (n.type === 'action' && n.screen && n.screen.route === route && delegWarn(n)) { fired++; break; }
     }
-    // and it must reach the EXPORT, which is the only thing a coding agent ever reads
+    // and it must reach the EXPORT (the copied 수정 요청), which is the only thing an agent reads
     const route = keys[0].split(' ')[0];
     const sn = nodes.get('s:' + route);
     let inReport = null;
     if (sn) {
-      state.bugs = state.bugs || {};
-      state.bugs[sn.id] = { symptom: '테스트' };
-      inReport = /위임 경고/.test(buildBugReport([sn.id]));
-      delete state.bugs[sn.id];
+      const prev = state.edits[sn.id];
+      state.edits[sn.id] = { note: '테스트' };
+      inReport = /위임 경고/.test(buildStackPrompt());
+      if (prev) state.edits[sn.id] = prev; else delete state.edits[sn.id];
     }
     return { trapped: keys.length, fired, inReport };
   });
@@ -266,7 +280,7 @@ catch (e) {
   console.log('page errors      ' + errors.length + (errors.length ? '\n  ! ' + errors.slice(0, 5).join('\n  ! ') : ''));
   console.log('anchors verified ' + R.anchorsChecked + '   (' + anchorLine + ')');
   console.log('harness          button=' + R.harnessBtn + ' derived=' + R.harnessDerived);
-  console.log('bug flow         ' + bugFlow + '   (empty report must be gated, filled report must carry anchors)');
+  console.log('memo flow        ' + bugFlow + '   (empty=copy gated · filled=1건 활성 · 복사본에 메모+좌표)');
   console.log('delegation warn  ' + (deleg.trapped ? deleg.fired + '/' + deleg.trapped + ' fired, in report: ' + deleg.inReport : 'no traps in this map'));
   if (harnessOverlaps !== null) console.log('harness overlaps ' + harnessOverlaps);
   console.log('서버·데이터 뷰    ' + (stack.has

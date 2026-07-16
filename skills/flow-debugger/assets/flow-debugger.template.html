@@ -198,14 +198,9 @@
   textarea.prompt{flex:1;min-height:200px;width:100%;background:#0b0b11;border:1px solid var(--line);border-radius:10px;padding:12px;color:#cfd2f0;font-family:var(--mono);font-size:11.5px;line-height:1.55;resize:none}
   .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--faint);padding:7px 16px;border-top:1px solid var(--line);background:var(--panel);align-items:center}
   /* 프롬프트 스택 독 (bottom dock): 메모·버그·연결변경이 AI-작업형 프롬프트로 쌓이는 곳 */
-  #pdock{flex:0 0 auto;border-top:1px solid var(--line2);background:var(--panel)}
-  #pdock .ph{display:flex;align-items:center;gap:10px;padding:7px 16px;cursor:pointer;user-select:none}
-  #pdock .ph b{font-size:12.5px}
-  #pdock .phint{font-size:11px;color:var(--faint)}
-  #pdock .plist{display:none;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;padding:2px 16px 8px}
-  #pdock.open .plist{display:flex}
-  #pdock .pin{display:none;gap:8px;padding:0 16px 10px;align-items:center}
-  #pdock.open .pin{display:flex}
+  /* 고칠점 메모 탭 — 선택한 노드 표시줄 */
+  .memo-target{border:1px solid var(--line2);border-left:3px solid var(--accent);border-radius:8px;padding:8px 11px;font-size:13px;background:var(--panel2);margin-bottom:8px}
+  .memo-target .sm{color:var(--faint);font-size:11px}
   .pcard{display:flex;gap:9px;align-items:flex-start;border:1px solid var(--line);border-radius:9px;padding:7px 11px;font-size:12px;cursor:pointer;background:var(--panel2)}
   .pcard:hover{border-color:var(--accent)}
   .pbadge{font-size:10px;padding:1px 7px;border-radius:99px;font-weight:700;flex:0 0 auto;color:#0c0c12;margin-top:1px}
@@ -215,8 +210,6 @@
   .pcard .pcode{font-family:var(--mono);font-size:10px;color:var(--faint);word-break:break-all}
   .pdel{flex:0 0 auto;background:none;border:none;color:var(--faint);cursor:pointer;font-size:13px;padding:0 2px}
   .pdel:hover{color:#e8896f}
-  #pdock input.pfree{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 11px;color:var(--text);font-family:inherit;font-size:12.5px}
-  #pdock input.pfree::placeholder{color:var(--faint)}
   .pempty{color:var(--faint);font-size:12px;padding:4px 2px;line-height:1.7}
   .legend span{display:flex;align-items:center;gap:5px}.legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
   .hint{font-size:11.5px;color:var(--faint);margin-top:8px;line-height:1.6}
@@ -271,7 +264,7 @@
   <b>보는 법</b> · 위에서 <b>🖥 화면별 플로우</b> / <b>🌐 시스템 플로우</b> 를 고릅니다.
   <b>화면별 플로우</b>는 고른 화면 하나를 왼쪽에 두고 <b>오른쪽으로</b> 펼칩니다 — <b>그 화면에서 할 수 있는 일</b> → <b>데이터·서버 작업</b>과 <b>AI 기능</b> → 그 동작이 데려가는 <b>다음 화면</b>. 다음 화면 카드의 <b>『이 화면으로 이동 →』</b>을 누르면 그 화면이 새 뿌리가 되어 계속 따라갈 수 있어요.
   <b>시스템 플로우</b>는 앱 전체가 버튼으로 어떻게 이어지는지 화살표로 보여주고, <b>🚩 여기서 출발 → 🎯 여기까지 경로</b> 로 이동 경로를 찾아 <b>▶ 경로 걷기</b> 로 한 단계씩 따라갈 수 있어요.
-  안 되는 게 있으면 <b>화면 카드든 동작 카드든</b> 열어서 <b>'안 돼요 → 신고서 만들기'</b>를 누르세요.
+  <b>디버깅 흐름</b> · ① 흐름도에서 카드 클릭 → ② <b>왼쪽</b>에서 캡처 화면·설명 읽기 → ③ 문제가 보이면 <b>오른쪽 '✏️ 고칠점 메모'</b>에 적기 → ④ <b>수정 요청 복사</b> 한 번으로 AI에게 전달 (코드 위치는 자동으로 붙어요).
   <span class="faint">빈 곳 드래그=이동 · 휠/+−=확대축소 · 0=전체 맞춤 · 검색 후 Enter=이동 · Esc=해제 · 미니맵 클릭·드래그=이동</span>
 </div>
 
@@ -280,7 +273,7 @@
 
 <div class="main">
   <div class="dpanel" id="dpanel">
-    <div class="dpanel-hd"><span class="dpanel-ttl">📄 설명</span><span class="dpanel-sub">노드를 누르면 여기에 쉬운 설명이 나와요</span></div>
+    <div class="dpanel-hd"><span class="dpanel-ttl">📄 캡처 · 설명</span><span class="dpanel-sub">노드를 누르면 실제 화면 캡처와 쉬운 설명이 나와요</span></div>
     <div class="body" id="detailBody"></div>
   </div>
   <div class="stage" id="stage">
@@ -299,29 +292,15 @@
     <svg id="overlay"></svg>
     <button id="cutbtn" title="이 연결 끊기">✕ 연결 끊기</button>
   </div>
+  <!-- 우측 패널 = 고칠점 메모 (쓰는 곳). 읽는 곳은 좌측(캡처+설명).
+       사용자 흐름: 흐름도에서 카드 클릭 → 좌측에서 캡처·설명 확인 → 문제를 인지하면 여기 메모.
+       프롬프트(코드 좌표·검증 마크·작업 규칙)는 화면에 안 보이고, '복사'할 때 자동으로 붙는다. -->
   <div class="side">
     <div class="tabs">
-      <div class="tab on" data-tab="bug">버그 신고<span class="countbadge" id="bugCount" style="display:none">0</span></div>
-      <div class="tab" data-tab="prompt">수정 요청<span class="countbadge" id="editCount" style="display:none">0</span></div>
+      <div class="tab on" data-tab="memo">✏️ 고칠점 메모<span class="countbadge" id="editCount" style="display:none">0</span></div>
       <div class="tab" data-tab="addnode">노드 추가<span class="countbadge" id="addCount" style="display:none">0</span></div>
     </div>
     <div class="body" id="sideBody"></div>
-  </div>
-</div>
-
-<div id="pdock" class="open">
-  <div class="ph" id="pdockHead">
-    <b>🧺 프롬프트 스택</b><span class="countbadge" id="pdockCount" style="display:none">0</span>
-    <span class="phint">화면·동작에 남긴 메모/버그/수정이 AI에게 줄 프롬프트로 쌓여요 — 복사해서 그대로 붙여넣으세요</span>
-    <span style="flex:1"></span>
-    <button class="btn" id="pdockCopy" title="스택 전체를 AI에 붙여넣을 프롬프트로 복사">전체 복사</button>
-    <button class="btn" id="pdockClear" title="스택의 모든 항목 삭제">비우기</button>
-    <span id="pdockChev" style="color:var(--faint);width:14px;text-align:center">▾</span>
-  </div>
-  <div class="plist" id="pdockList"></div>
-  <div class="pin">
-    <input class="pfree" id="pdockInput" placeholder="직접 요청 추가 — 노드를 선택한 상태면 그 화면/동작에 대한 요청으로 붙어요 (Enter)">
-    <button class="btn" id="pdockAdd">추가</button>
   </div>
 </div>
 
@@ -643,9 +622,9 @@ function anchorBox(n){
   let h="";
   if(gt)h+=`<div class="dh" style="color:#d8a657">🔒 이 ${UNIT}은 조건이 맞아야 열려요 — ${esc(GATE_KO[gt.gate]||gt.gate)}</div>
     <div class="kv" style="color:#d8a657">${esc(gt.why)}<div class="sm"><code>${esc(gt.evidence)}</code></div>
-    <div class="sm">여기서 발견한 문제는 <b>실제 사용자에게는 안 보일 수 있어요.</b> 신고서에 이 사실이 함께 나갑니다.</div></div>`;
+    <div class="sm">여기서 발견한 문제는 <b>실제 사용자에게는 안 보일 수 있어요.</b> 복사되는 수정 요청에 이 사실이 함께 나갑니다.</div></div>`;
   if(dw)h+=`<div class="dh" style="color:#e8896f">⚠ 이 코드 위치는 화면에 안 보일 수 있어요</div>
-    <div class="kv" style="color:#e8896f">이 파일은 조건에 따라 <code>&lt;${esc(dw)}/&gt;</code> 를 대신 그려요. 그래서 이 파일을 고쳐도 <b>빌드는 통과하는데 화면은 그대로</b>일 수 있어요. 신고서에 이 경고가 함께 나가니, 개발자가 진짜 렌더되는 파일을 찾아 고칠 거예요.</div>`;
+    <div class="kv" style="color:#e8896f">이 파일은 조건에 따라 <code>&lt;${esc(dw)}/&gt;</code> 를 대신 그려요. 그래서 이 파일을 고쳐도 <b>빌드는 통과하는데 화면은 그대로</b>일 수 있어요. 복사되는 수정 요청에 이 경고가 함께 나가니, 개발자가 진짜 렌더되는 파일을 찾아 고칠 거예요.</div>`;
   if(!anc.length)h+=`<div class="dh">코드 위치</div><div class="hint">이 카드에는 코드 위치가 기록되지 않았어요. 신고하면 증상과 의존 작업에서 출발해 찾게 됩니다.</div>`;
   else{
     h+=`<div class="dh">코드 위치 ${ANCHORS.checked?`<span style="color:#7fd1b9">· 실제 코드와 대조함</span>`:`<span style="color:#e0a35c">· 미검증</span>`}</div>`;
@@ -677,10 +656,20 @@ GROUPS.forEach((g,i)=>{
 const LSKEY="flowdbg-v5:"+(()=>{let h=0;const s=GRAPH.map(x=>(x&&x.route)||"").join("|");for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0;return(h>>>0).toString(36);})();
 /* pos = catalog-mode drag positions, navPos = 화면 흐름-mode drag positions —
    separate maps so dragging in one mode never corrupts the other's layout. */
-let state={pos:{},navPos:{},edits:{},expanded:{},groupsOff:{},globalNote:"",addedEdges:[],removedEdges:[],bugs:{},navOpen:{},promptExtra:[],dockOpen:true,addedNodes:[],navEdits:[]};
+let state={pos:{},navPos:{},edits:{},expanded:{},groupsOff:{},globalNote:"",addedEdges:[],removedEdges:[],navOpen:{},promptExtra:[],addedNodes:[],navEdits:[]};
 try{state={...state,...JSON.parse(localStorage.getItem(LSKEY)||"{}")};}catch(e){}
+/* 옛 '버그 신고'는 '고칠점 메모'로 통합됐다 — 이전 버전에서 작성한 신고를 메모로 승계(유실 금지). */
+if(state.bugs&&Object.keys(state.bugs).length){
+  for(const[id,b]of Object.entries(state.bugs)){
+    if(!b||!String(b.symptom||"").trim())continue;
+    const t=["안 돼요: "+b.symptom];if(b.errorText)t.push("화면 문구: "+b.errorText);if(b.expected)t.push("바란 것: "+b.expected);if(b.repro)t.push("재현: "+b.repro);if(b.freq)t.push("빈도: "+b.freq);
+    state.edits[id]=state.edits[id]||{};
+    state.edits[id].note=[state.edits[id].note,t.join(" · ")].filter(Boolean).join(" / ");
+  }
+  delete state.bugs;
+}else delete state.bugs;
 const save=()=>localStorage.setItem(LSKEY,JSON.stringify(state));
-let selected=null,hoverId=null,aiOnly=false,searchTerm="",tab="bug"; // tab = 우측 패널(버그신고/수정요청). 설명은 좌측 고정 패널.
+let selected=null,hoverId=null,aiOnly=false,searchTerm="",tab="memo"; // tab = 우측 패널(고칠점 메모/노드추가). 읽기는 좌측 고정 패널.
 let pathFrom=null,navPath=null;
 function clearNavPath(){pathFrom=null;navPath=null;}
 const expanded=new Set(Object.keys(state.expanded).filter(k=>state.expanded[k]));
@@ -1314,10 +1303,10 @@ edgesEl.addEventListener("pointerdown",e=>{ if(!linkMode)return; const p=e.targe
 cutbtn.onclick=()=>{ if(selEdge)removeEdge(selEdge); };
 
 /* ---------- side ---------- */
-function setTab(t){ if(t==="detail"){renderDetail();if(tab==="addnode")renderSide();return;} // 설명은 좌측 고정 패널 — 노드 선택 시 좌측만 갱신(노드추가 탭이면 '선택 카드에 연결'도 갱신)
+function setTab(t){ if(t==="detail"){renderDetail();renderSide();return;} // 노드 선택 = 좌측(캡처+설명) 갱신 + 우측(메모 작성기/노드추가)도 선택을 따라간다
   tab=t;document.querySelectorAll(".side .tab").forEach(x=>x.classList.toggle("on",x.dataset.tab===t));renderSide();}
 document.querySelectorAll(".tab").forEach(x=>x.onclick=()=>setTab(x.dataset.tab));
-function renderSide(){if(tab==="bug")renderBug();else if(tab==="addnode")renderAddNode();else renderPrompt();} // 우측 패널 = 버그신고/수정요청/노드추가 (스펙은 상단 버튼→팝업, 설명은 renderDetail로 좌측 고정)
+function renderSide(){if(tab==="addnode")renderAddNode();else renderMemo();} // 우측 패널 = 고칠점 메모/노드추가 (스펙은 상단 버튼→팝업, 설명은 renderDetail로 좌측 고정)
 // 시스템 스펙: 로드된 데이터에서 스택·규모·서버작업·AI·위험 프로필을 자동 집계(앱/웹/백엔드/CLI 무관). 상단 버튼→팝업.
 function specHtml(){
   const S=GRAPH||[]; let acts=0,aiActs=0; const userN=(state.addedNodes||[]).length;
@@ -1360,7 +1349,7 @@ function specHtml(){
      hands my developer?" — the number that decides whether the bug report is a tool
      or a liability. */
   h+=`<div class="dh">코드 위치 신뢰도</div>`;
-  if(!ANCHORS.checked)h+=`<div class="hint" style="color:#e0a35c">⚠ 이 흐름도의 코드 위치는 <b>실제 코드와 대조되지 않았어요</b>. 신고서의 좌표는 전부 추정치입니다.<br>다시 빌드할 때 <code>--app-root &lt;앱 폴더&gt;</code> 를 주면 자동으로 검증돼요.</div>`;
+  if(!ANCHORS.checked)h+=`<div class="hint" style="color:#e0a35c">⚠ 이 흐름도의 코드 위치는 <b>실제 코드와 대조되지 않았어요</b>. 복사되는 요청의 좌표는 전부 추정치입니다.<br>다시 빌드할 때 <code>--app-root &lt;앱 폴더&gt;</code> 를 주면 자동으로 검증돼요.</div>`;
   else{const t=ANCHORS.stat||{},bad=(t.total||0)-(t.ok||0);
     const row=(l,n,c)=>`<div class="spec-riskrow"><span class="rdot" style="background:${c}"></span>${l}<b>${n||0}</b></div>`;
     h+=`<div class="spec-stats">${stat(t.total||0,"코드 위치")}${stat(t.ok||0,"검증 통과")}${stat(bad,"버려짐")}</div>`;
@@ -1368,8 +1357,8 @@ function specHtml(){
       +row("줄이 어긋나 보정됨",t.near,"#d8a657")
       +row("파일만 확인(대조 불가)",t.unchecked,"#9a9ab2")
       +(t.absent?row("그 줄에 함수가 없음 — 의심",t.absent,"#e8896f"):"")
-      +(bad?row("파일 없음/범위 밖 — 신고서에서 ⚠",bad,"#e8896f"):"");
-    h+=`<div class="hint"><b>✔</b> = 함수 이름까지 대조한 좌표 (${(t.exact||0)+(t.near||0)+(t.resolved||0)}개). <b>·</b> = 파일과 줄은 실재하지만 대조할 함수 이름이 흐름도에 없어 <b>그 줄이 맞는지는 확인하지 못한</b> 좌표 (${(t.unchecked||0)+(t.fileonly||0)}개) — 신고서에도 그렇게 적혀 나가요.</div>`;}
+      +(bad?row("파일 없음/범위 밖 — 요청에서 ⚠",bad,"#e8896f"):"");
+    h+=`<div class="hint"><b>✔</b> = 함수 이름까지 대조한 좌표 (${(t.exact||0)+(t.near||0)+(t.resolved||0)}개). <b>·</b> = 파일과 줄은 실재하지만 대조할 함수 이름이 흐름도에 없어 <b>그 줄이 맞는지는 확인하지 못한</b> 좌표 (${(t.unchecked||0)+(t.fileonly||0)}개) — 복사되는 요청에도 그렇게 적혀 나가요.</div>`;}
   return h;
 }
 function closeSpec(){const p=document.getElementById("specPop");if(p)p.remove();}
@@ -1387,9 +1376,8 @@ function updateEditCount(){ // count only entries whose nodes still exist (stale
     +((state.removedEdges||[]).filter(k=>{const p=k.split(">>");return nodes.has(p[0])&&nodes.has(p[1]);}).length)
     +((state.navEdits||[]).length),
     b=document.getElementById("editCount");b.style.display=n?"inline-block":"none";b.textContent=n;
-  const bn=Object.keys(state.bugs||{}).filter(id=>nodes.has(id)).length,bb=document.getElementById("bugCount");if(bb){bb.style.display=bn?"inline-block":"none";bb.textContent=bn;}
   const an=(state.addedNodes||[]).length,ab=document.getElementById("addCount");if(ab){ab.style.display=an?"inline-block":"none";ab.textContent=an;}
-  updateDock();}
+  if(tab==="memo")renderMemo();}   // 메모 탭이 열려 있으면 목록 갱신
 const TYPETAG={screen:[UNIT,"#8b93ff"],action:["사용자 동작","#8b93ff"],api:["데이터·서버 작업","#6fb6ff"],ai:["AI 기능","#d8a657"],nav:[UNIT+" 이동","#8b93ff"],navscreen:[UNIT+" 미리보기","#8b93ff"],h:["AI 하네스 단계","#8b93ff"]};
 
 /* ---------- 경로 걷기 (Overflow Stories식 워크스루: 캡처 보며 한 단계씩) ---------- */
@@ -1508,7 +1496,7 @@ function renderDetail(){
       <div class="hint">이 항목은 아래 <b>프롬프트</b> 창에 <b>"만들어줘" 요청</b>으로 자동으로 담겨요.</div>
       <button class="btn" id="uDelete" style="border-color:#e8896f;color:#e8896f;margin-top:12px">🗑 이 노드 삭제</button>`;
     const lab=document.getElementById("uLabel");if(lab)lab.onchange=()=>{d.label=lab.value.trim();save();render();};
-    const des=document.getElementById("uDesc");if(des)des.onchange=()=>{d.desc=des.value.trim();save();updateDock();};
+    const des=document.getElementById("uDesc");if(des)des.onchange=()=>{d.desc=des.value.trim();save();updateEditCount();};
     const del=document.getElementById("uDelete");if(del)del.onclick=()=>deleteUserNode(n.id);
     return;
   }
@@ -1534,7 +1522,7 @@ function renderDetail(){
     /* A non-developer's "안 돼요" is usually about the WHOLE screen ("빈 화면이에요",
        "로딩만 돌아요", "앱이 죽어요") — there used to be no way to report that, because
        the button only existed on action cards. */
-    h+=`<button class="btn" id="reportBug" style="width:100%;margin-top:14px;background:rgba(232,137,111,.14);border-color:#e8896f;color:#e8896f;font-weight:600">이 ${U("i")} 안 돼요 → 신고서 만들기</button>`;
+    h+=`<button class="btn" id="reportBug" style="width:100%;margin-top:14px;background:rgba(232,137,111,.14);border-color:#e8896f;color:#e8896f;font-weight:600">이 ${U("i")} 안 돼요 → ✏️ 우측에 메모 쓰기</button>`;
     h+=anchorBox(n);
     h+=`<details class="dev"><summary></summary><div class="kv">route: ${esc(s.route)}</div><div class="kv">group: ${esc(s.group)}</div></details>`;
   }else if(n.type==="action"){const a=n.data;
@@ -1547,7 +1535,7 @@ function renderDetail(){
     if((a.risks||[]).length){h+=`<div class="dh">이 동작의 조건·약점</div><div>`+a.risks.map(r=>`<span class="rchip" style="background:${RISK_COLOR[r]||'#888'}">${RISK_KO[r]||r}</span>`).join("")+`</div>`;}
     if((a.checklist||[]).length){h+=`<div class="dh">안 될 때 확인하세요</div>`+a.checklist.map(c=>`<div class="kv">· ${esc(c)}</div>`).join("");}
     if((a.failureModes||[]).length){h+=`<div class="dh">이렇게 안 될 수 있어요</div>`+a.failureModes.map(c=>`<div class="kv" style="color:var(--muted)">· ${esc(c)}</div>`).join("");}
-    h+=`<button class="btn" id="reportBug" style="width:100%;margin-top:14px;background:rgba(232,137,111,.14);border-color:#e8896f;color:#e8896f;font-weight:600">이 동작이 안 돼요 → 신고서 만들기</button>`;
+    h+=`<button class="btn" id="reportBug" style="width:100%;margin-top:14px;background:rgba(232,137,111,.14);border-color:#e8896f;color:#e8896f;font-weight:600">이 동작이 안 돼요 → ✏️ 우측에 메모 쓰기</button>`;
     h+=anchorBox(n);
     h+=`<details class="dev"><summary></summary><div class="kv">기능: ${esc(a.feature||"")}</div><div class="kv">${esc(a.detail||"")}</div></details>`;
   }else if(n.type==="api"){const d=n.data,users=[...(capUsers.get(apiId(d.tag))||[])],k=d.kind;
@@ -1566,13 +1554,10 @@ function renderDetail(){
       <div class="dh">이 AI를 쓰는 동작 (${users.length})</div><div class="kv">${users.map(esc).join("<br>")||"-"}</div>
       <details class="dev"><summary></summary><div class="kv">purpose: ${esc(d.purpose)}</div></details>`;
   }
-  h+=`<div class="dh">고칠 점 메모</div><textarea class="note" id="edNote" placeholder="예: 이 이름이 어색해요 / 실제로는 ~도 해요 / 이 동작은 빼주세요">${esc(ed.note||"")}</textarea>
-    <div class="flags"><div class="fbtn ${ed.flag==='틀림'?'on':''}" data-flag="틀림">틀렸어요</div><div class="fbtn ${ed.flag==='삭제'?'on':''}" data-flag="삭제">빼주세요</div><div class="fbtn ${ed.flag==='추가'?'on':''}" data-flag="추가">더 봐주세요</div></div>
-    <div class="hint">이름 수정·메모·표시는 <b>수정 요청 만들기</b> 탭에 자동으로 모여요.</div>`;
+  /* 메모는 우측 패널에서 쓴다 — 좌측은 읽는 곳(캡처+설명). 여기엔 동선만 둔다. */
+  if(ed.note)h+=`<div class="kv" style="margin-top:12px;color:#d8a657">✏️ 이 카드에 메모 있음 → 우측 패널에서 확인</div>`;
   detailBody.innerHTML=h;
   document.getElementById("edLabel").onchange=ev=>{const v=ev.target.value;setEdit(selected,"label",v===origLabel(n)?"":v);render();};
-  document.getElementById("edNote").onchange=ev=>setEdit(selected,"note",ev.target.value.trim());
-  detailBody.querySelectorAll(".fbtn").forEach(b=>b.onclick=()=>{const f=b.dataset.flag,cur=(state.edits[selected]||{}).flag;setEdit(selected,"flag",cur===f?"":f);renderDetail();render();});
   detailBody.querySelectorAll("[data-go]").forEach(r=>r.onclick=()=>{const go=r.dataset.go;const gn=nodes.get(go);if(!gn)return;
     // reveal the target: expand its parent screen if collapsed, refresh BOTH canvas and panel, and centre on it
     let scr=null; if(gn.type==="action")scr=gn.screen; else if(gn.parent){const pa=nodes.get(gn.parent);scr=pa&&pa.screen;}
@@ -1582,30 +1567,64 @@ function renderDetail(){
   var pt=document.getElementById("pathToBtn");if(pt)pt.onclick=()=>{navPath=findNavPath(pathFrom,selected);render();renderDetail();if(!navPath)alert("경로를 찾지 못했어요 — 버튼 이동(한 방향) 기준으로 이어지지 않는 "+UNIT+JOSA.ieyo+".");};
   var pc=document.getElementById("pathClearBtn");if(pc)pc.onclick=()=>{clearNavPath();render();renderDetail();};
   var pw=document.getElementById("pathWalkBtn");if(pw)pw.onclick=()=>openWalk();
-  var rb=document.getElementById("reportBug"); if(rb)rb.onclick=()=>{state.bugs=state.bugs||{};if(!state.bugs[selected])state.bugs[selected]={};save();updateEditCount();setTab("bug");};
+  var rb=document.getElementById("reportBug"); if(rb)rb.onclick=focusMemo;
 }
-/* 수정 요청 탭 = THE WHOLE STACK, same text as the dock's 전체 복사.
-   It used to build its own list from `state.edits` only — so bug reports and added
-   nodes were silently missing from it, while the tab's badge counted them. A reader
-   who pressed '요청 복사' sent a prompt with their own bugs stripped out. */
-function renderPrompt(){
+/* 고칠점 메모 탭 — 이 도구의 사용자 흐름 그 자체:
+     ① 흐름도에서 카드 클릭 → ② 좌측에서 캡처·설명 읽기 → ③ 문제를 인지하면 여기(우측)에 메모
+     → ④ '수정 요청 복사' 한 번으로 전부 내보내기.
+   복사되는 프롬프트에는 각 메모의 화면·검증된 코드 좌표·게이트·의존 작업·작업 규칙이 자동으로
+   붙지만 화면에는 보이지 않는다 — 비개발자가 확인할 필요가 없는 것은 보여주지 않는다. */
+function renderMemo(){
   const E=stackEntries();
-  const text=buildStackPrompt();
-  sideBody.innerHTML=`<div class="prompt-wrap"><div class="dh">전체 메모 (자유 입력)</div>
-    <textarea class="note" id="gnote" placeholder="전반적으로 바라는 점을 적어주세요">${esc(state.globalNote)}</textarea>
-    <div class="dh">자동으로 만들어진 요청 (${E.length}건 — 메모·버그·추가 노드·연결 변경 전부)</div>
-    <textarea class="prompt" id="promptOut" readonly>${esc(text)}</textarea>
-    <div style="display:flex;gap:8px;margin-top:10px"><button class="btn" id="copyPrompt" style="flex:1">요청 복사</button><button class="btn" id="copyMermaid" title="${esc(UNIT)} 이동 그래프를 Mermaid 코드로 복사 — 위키/이슈/AI에 붙여넣기">Mermaid 복사</button><button class="btn" id="clearEdits">수정 초기화</button></div>
-    <div class="hint">이 글을 복사해 채팅에 붙여넣으면 그대로 흐름도/코드를 고쳐드려요. 아래 <b>프롬프트 스택</b>의 '전체 복사'와 같은 내용이에요. <b>Mermaid 복사</b>는 이동 그래프를 문서(위키·GitHub)용 다이어그램 코드로 내보내요.</div></div>`;
-  document.getElementById("gnote").onchange=ev=>{state.globalNote=ev.target.value.trim();save();updateEditCount();renderPrompt();};
-  document.getElementById("copyPrompt").onclick=()=>navigator.clipboard.writeText(buildStackPrompt()).then(()=>{const b=document.getElementById("copyPrompt");b.textContent="복사됨 ✓";setTimeout(()=>b.textContent="요청 복사",1200);});
+  const n=selected&&nodes.get(selected);
+  const canNote=!!n&&["screen","action","api","ai"].includes(n.type);
+  const ed=canNote?(state.edits[selected]||{}):{};
+  let h="";
+  if(canNote){
+    const tt=(TYPETAG[n.type]||["",""]);
+    h+=`<div class="dh">📍 선택한 ${esc(tt[0])}</div>
+      <div class="memo-target"><b>${esc(dispLabel(n))}</b>${n.screen?`<span class="sm"> · ${esc(scrTitle(n.screen))}</span>`:(n.type==="screen"?`<span class="sm"> · ${esc(n.data.route||"")}</span>`:"")}</div>
+      <textarea class="note" id="memoNote" placeholder="이 ${esc(tt[0])}에서 고칠 점·안 되는 점을 적어주세요&#10;예: 버튼을 눌러도 반응이 없어요 / 이 설명이 실제와 달라요">${esc(ed.note||"")}</textarea>
+      <div class="flags"><div class="fbtn ${ed.flag==='틀림'?'on':''}" data-flag="틀림">틀렸어요</div><div class="fbtn ${ed.flag==='삭제'?'on':''}" data-flag="삭제">빼주세요</div><div class="fbtn ${ed.flag==='추가'?'on':''}" data-flag="추가">더 봐주세요</div></div>
+      <div class="hint">화면 캡처·코드 위치는 복사할 때 <b>자동으로 붙어요</b> — 여기엔 하고 싶은 말만 적으면 돼요.</div>`;
+  }else{
+    h+=`<div class="empty" style="margin-top:20px">흐름도에서 <b>${UNIT}·동작 카드</b>를 누르고<br>왼쪽에서 캡처와 설명을 확인한 뒤,<br>고칠 점이 보이면 여기에 적어주세요.</div>`;
+  }
+  h+=`<div class="dh" style="margin-top:16px">쌓인 메모 (${E.length})</div>`;
+  if(!E.length)h+=`<div class="hint">아직 없어요 — 카드를 선택하고 위에 적으면 여기 쌓여요.</div>`;
+  else E.forEach((e,i)=>{h+=`<div class="pcard" data-pi="${i}">
+    <span class="pbadge" style="background:${e.color}">${e.kind}</span>
+    <div class="pt"><b>${esc(e.title)}</b> <span class="ptext">→ ${esc(e.text)}</span></div>
+    <button class="pdel" data-pdel="${i}" title="이 메모 삭제">✕</button></div>`;});
+  h+=`<div class="dh" style="margin-top:16px">전반적으로 바라는 점 (선택)</div>
+    <textarea class="note" id="gnote" placeholder="특정 화면이 아닌, 앱 전체에 대한 요청">${esc(state.globalNote)}</textarea>
+    <button class="btn" id="copyPrompt" style="width:100%;margin-top:14px;background:var(--accent);color:#0c0c12;border-color:var(--accent);font-weight:700;font-size:14px;padding:10px" ${E.length?"":"disabled style='width:100%;margin-top:14px;opacity:.4;padding:10px'"}>📋 수정 요청 복사 (${E.length}건)</button>
+    <div class="hint">복사한 글을 AI 채팅에 붙여넣으면 바로 작업할 수 있어요 — 각 메모에 화면·검증된 코드 위치·작업 규칙이 자동으로 담겨 나가요.</div>
+    <div style="display:flex;gap:8px;margin-top:8px"><button class="btn" id="copyMermaid" style="flex:1" title="${esc(UNIT)} 이동 그래프를 Mermaid 다이어그램 코드로 복사">Mermaid 복사</button><button class="btn" id="clearEdits">모두 지우기</button></div>`;
+  sideBody.innerHTML=h;
+  const mn=document.getElementById("memoNote");
+  if(mn)mn.onchange=ev=>{setEdit(selected,"note",ev.target.value.trim());renderMemo();};
+  sideBody.querySelectorAll(".fbtn").forEach(b=>b.onclick=()=>{const f=b.dataset.flag,cur=(state.edits[selected]||{}).flag;setEdit(selected,"flag",cur===f?"":f);renderMemo();render();});
+  sideBody.querySelectorAll("[data-pdel]").forEach(b=>b.onclick=ev=>{ev.stopPropagation();removeEntry(stackEntries()[+b.dataset.pdel]);});
+  sideBody.querySelectorAll(".pcard").forEach(cd=>cd.onclick=()=>{const e=stackEntries()[+cd.dataset.pi];if(!e||!e.nodeId)return;const gn=nodes.get(e.nodeId);if(!gn)return;
+    let scrNode=null;
+    if(gn.type==="screen")scrNode=gn;
+    else if(gn.type==="action"&&gn.screen)scrNode=nodes.get(gn.screen.id);
+    else if(gn.parent){const pa=nodes.get(gn.parent);if(pa&&pa.screen)scrNode=nodes.get(pa.screen.id);}
+    if(scrNode&&!navMode&&!expanded.has(scrNode.id)){expanded.add(scrNode.id);state.expanded[scrNode.id]=true;save();}
+    selected=e.nodeId;setTab("detail");render();renderSide();fitToNode(e.nodeId);});
+  document.getElementById("gnote").onchange=ev=>{state.globalNote=ev.target.value.trim();save();updateEditCount();renderMemo();};
+  const cp=document.getElementById("copyPrompt");
+  if(cp&&E.length)cp.onclick=()=>navigator.clipboard.writeText(buildStackPrompt()).then(()=>{cp.textContent="복사됨 ✓ — AI 채팅에 붙여넣으세요";setTimeout(()=>renderMemo(),1600);});
   document.getElementById("copyMermaid").onclick=()=>navigator.clipboard.writeText(mermaidText()).then(()=>{const b=document.getElementById("copyMermaid");b.textContent="복사됨 ✓";setTimeout(()=>b.textContent="Mermaid 복사",1200);});
-  document.getElementById("clearEdits").onclick=()=>{if(!confirm("입력한 이름/메모/표시와 버그 신고·추가 노드·연결 변경을 모두 지울까요? (위치·펼침은 유지)"))return;
+  document.getElementById("clearEdits").onclick=()=>{if(!confirm("모든 메모·표시·추가 노드·연결 변경을 지울까요? (위치·펼침은 유지)"))return;
     [...nodes.keys()].forEach(k=>{if(nodes.get(k).type==="user")nodes.delete(k);});
-    state.edits={};state.bugs={};state.globalNote="";state.addedEdges=[];state.removedEdges=[];state.addedNodes=[];state.promptExtra=[];
+    state.edits={};state.globalNote="";state.addedEdges=[];state.removedEdges=[];state.addedNodes=[];state.promptExtra=[];state.navEdits=[];
     if(selected&&!nodes.has(selected))selected=null;
     save();updateEditCount();renderSide();renderDetail();render();};
 }
+/* 메모를 적으라고 우측 패널을 여닫는 단축 동선 — 좌측 '안 돼요/고칠점' 버튼이 부른다 */
+function focusMemo(){setTab("memo");const mn=document.getElementById("memoNote");if(mn){mn.focus();mn.scrollIntoView({block:"center"});}}
 /* 화면 이동 그래프 → Mermaid flowchart (Whimsical "Copy as Mermaid" 패턴) */
 function mermaidText(){
   const L=["flowchart LR"],idm={};let i=0;const mid=id=>idm[id]||(idm[id]="S"+(++i));
@@ -1616,11 +1635,8 @@ function mermaidText(){
     L.push(`  ${mid(e.from)}["${q(scrTitle(a.data))}"] -->|${q(e.label)}| ${mid(e.to)}["${q(scrTitle(b.data))}"]`);});
   if(L.length===1)L.push("  A[이동 연결이 아직 없어요]");
   return L.join("\n");}
-/* A report with no symptom is not a report — it used to ship "재현해서 고쳐줘" with
-   nothing to reproduce, because pressing the button created the entry and every field
-   was optional. One required field: 무슨 일이 있었나요. */
-function bugReady(b){ return !!(b&&String(b.symptom||"").trim()); }
-/* what a broken node depends on — for a screen, the union over its actions */
+/* what a node depends on — for a screen, the union over its actions. 메모 항목의
+   '함께 점검' 컨텍스트가 여기서 나온다(옛 버그 신고서에서 승계). */
 function bugDeps(n){
   const apis=[],ais=[],risks=[];
   const take=a=>{ (a.apis||[]).forEach(t=>{if(!apis.includes(t))apis.push(t);});
@@ -1630,111 +1646,7 @@ function bugDeps(n){
   else if(n.type==="screen")(n.data.actions||[]).forEach(take);
   return {apis,ais,risks};
 }
-function buildBugReport(ids){
-  const ready=(ids||[]).filter(id=>nodes.has(id)&&bugReady((state.bugs||{})[id]));
-  if(!ready.length)return "(신고 내용이 아직 비어 있어요 — 위에서 '무슨 일이 있었나요?'를 한 줄이라도 적어야 신고서가 만들어져요.)";
-  const out=["[버그 신고서] 이 앱을 쓰는 사람이 직접 작성했어요 (flow-debugger).",""];
-  if(STACK)out.push("[앱 스택] "+STACK,"");
-  if(STAMP&&STAMP.git&&STAMP.git.head)out.push(
-    "[이 지도의 기준] 커밋 "+String(STAMP.git.head).slice(0,8)+(STAMP.git.dirty?" (+커밋 안 된 변경)":"")+
-    (STAMP.at?" · "+String(STAMP.at).slice(0,10):"")+" 기준으로 만들어졌어. 그 뒤로 코드가 바뀌었으면 아래 좌표가 어긋났을 수 있으니, "+
-    "줄이 안 맞으면 그 파일에서 이름으로 찾아줘.","");
-  out.push("[코드 위치의 신뢰도 — 먼저 읽어줘]");
-  if(ANCHORS.checked)out.push(
-    "· ✔ = 파일·줄·**함수 이름까지** 실제 소스와 대조해 확인한 좌표. 출발점으로 신뢰해도 돼.",
-    "· · = 파일과 줄은 실제로 존재하지만, 대조할 함수 이름이 흐름도에 없어서 **그 줄이 맞는지는 확인하지 못했어**. 근처를 읽어보고 판단해줘(대부분의 좌표가 여기 해당한다).",
-    "· ~ = 그 줄이 빈 줄/import/주석이야. 파일은 맞지만 로직은 다른 줄이야.",
-    "· ⚠ = 대조에 실패했어. 좌표를 믿지 말고 직접 찾아 — 이유는 항목에 적혀 있어.");
-  else out.push(
-    "· 이 신고서의 코드 위치는 실제 소스와 대조되지 않았어(빌드 때 --app-root 미지정). 전부 추정이니 힌트로만 쓰고 반드시 직접 확인해줘.");
-  out.push("· '(렌더: …)' 는 프로덕션에서 실제로 그려지는 파일이야 — 같은 ${UNIT}의 legacy 본문을 고치면 빌드는 초록인데 화면은 그대로다.","",
-    "[작업 규칙]",
-    "· 먼저 증상을 재현하고, 실제 원인 함수를 추적해서 최소 수정해줘. '바란 것'이 실제로 관찰되면 완료야.",
-    "· '고칠 파일'과 ✔·· 좌표가 있으면 **파일 전체를 읽지 말고 그 줄 근처만 열어봐도 돼** (토큰 절약용 좌표야). ⚠ 표시나 좌표 없는 항목만 넓게 읽어.",
-    "· 완료 기준 밖은 건드리지 말고, 애매하면 추측하지 말고 물어봐.","");
-  ready.forEach(id=>{const n=nodes.get(id),a=n.data||{},b=state.bugs[id],isScr=n.type==="screen";
-    out.push(`■ 안 되는 ${isScr?UNIT:"동작"}: ${dispLabel(n)}${n.screen?`  (${UNIT}: ${scrTitle(n.screen)} ${n.screen.route||""})`:isScr?`  (${a.route||""})`:""}`);
-    const gt=gateOf(n);
-    if(gt)out.push(`  🔒 도달 가능성: 이 ${UNIT}은 [${GATE_KO[gt.gate]||gt.gate}] 게이트 뒤에 있어 — ${gt.why}`,
-                   `     근거: ${gt.evidence}`,
-                   `     ** 먼저 이 ${UNIT}이 프로덕션에서 실제로 열리는지 확인해줘. 안 열리면 이건 사용자에게 보이지 않는 문제이고,`,
-                   `        코드를 고치기 전에 그 사실부터 알려줘. (게이트를 안 물어서 확신에 찬 허위 신고가 나온 적이 있다.) **`);
-    if(n.type==="action"&&a.feature)out.push(`  코드에서 부르는 이름: ${a.feature}`);
-    // one plain, actionable pointer up front: which file, which line. The detailed anchor list
-    // (with trust marks) still follows; this is the "open THIS first" line the reader asked for.
-    const primaryLoc=locSentence(codeRef(n,false));
-    if(primaryLoc)out.push(`  고칠 파일: ${primaryLoc} 부터 열어봐.`);
-    const anc=nodeAnchors(n);
-    if(!anc.length)out.push(`  코드 위치: 흐름도에 기록이 없어 — 아래 증상과 의존 작업으로 찾아줘.`);
-    else if(!ANCHORS.checked){ out.push("  코드 위치 (미검증 — 직접 확인 필요):"); anc.forEach(x=>out.push(`    · ${x.label}: ${x.raw}`)); }
-    else{
-      const ver=anc.filter(x=>x.verified),loc=anc.filter(x=>x.located),
-            caut=anc.filter(x=>x.caution),bad=anc.filter(x=>!x.ok&&!x.caution);
-      if(ver.length){out.push("  ✔ 함수까지 대조 완료:");
-        ver.forEach(x=>out.push(`    · ${x.label}: ${x.raw}  (${x.why})`));}
-      if(loc.length){out.push("  · 파일·줄은 실재하지만 함수 대조는 못 함 (그 줄이 맞는지는 직접 확인):");
-        loc.forEach(x=>out.push(`    · ${x.label}: ${x.raw}`));}
-      if(caut.length){out.push("  ~ 그 줄이 코드가 아님(빈 줄/import/주석) — 주변에서 실제 로직을 찾아:");
-        caut.forEach(x=>out.push(`    · ${x.label}: ${x.raw}  — ${x.why}`));}
-      if(bad.length){out.push("  ⚠ 믿을 수 없는 위치 — 직접 찾아야 해:");
-        bad.forEach(x=>out.push(`    · ${x.label}: ${x.raw}  — ${x.why}`));}
-    }
-    const dw=delegWarn(n);
-    if(dw)out.push(`  ⚠⚠ 위임 경고: 위 파일은 프로덕션에서 <${dw}/> 를 대신 렌더해. 그 파일 본문을 고치면 빌드는 초록인데 화면은 안 바뀐다.`,
-                   `     먼저 이 라우트가 실제로 렌더하는 컴포넌트(<${dw}/> 쪽)를 찾아서 거기서 고쳐줘. 흐름도에 renders 가 빠져 있으니 그것도 알려주면 좋아.`);
-    nodeNotes(n).forEach(([l,t])=>out.push(`  ${l}(코드 위치 아님, 스캔 메모): ${t}`));
-    if(isScr&&(a.actions||[]).length)out.push(`  이 ${UNIT}의 동작 ${a.actions.length}개: ${a.actions.map(x=>actLabel(x)).join(", ")}`);
-    out.push(`  무슨 일이: ${b.symptom}`);
-    if(b.errorText)out.push(`  화면에 뜬 문구(그대로 옮김): ${b.errorText}`);
-    if(b.expected)out.push(`  바란 것(완료 기준): ${b.expected}`);
-    if(b.repro)out.push(`  하던 중(재현 절차): ${b.repro}`);
-    if(b.freq)out.push(`  빈도: ${b.freq}`);
-    const d=bugDeps(n);
-    if(d.ais.length)out.push(`  의존 AI(함께 점검): ${d.ais.map(x=>aiKo(x.purpose)+" ("+x.purpose+(x.model?", "+x.model:"")+(x.via?", "+x.via:"")+")").join(", ")}`);
-    if(d.apis.length)out.push(`  의존 작업(함께 점검): ${d.apis.map(t=>apiKo(t)+" ["+t+"]").join(", ")}`);
-    if(d.risks.length)out.push(`  점검 포인트(약점): ${d.risks.map(r=>RISK_KO[r]||r).join(", ")}`);
-    out.push(`  작업: 증상 재현 → 실제 원인 추적 → 최소 수정 → '바란 것'이 관찰되는지 재현으로 확인.`,"");});
-  return out.join("\n");
-}
-const FREQ=["항상","가끔","한 번만","특정 조건에서"];
-function renderBug(){
-  const ids=Object.keys(state.bugs||{}).filter(id=>nodes.has(id));
-  let h=`<div class="dh">안 되는 것 신고</div>
-    <div class="hint"><b>${UNIT}</b> 카드나 <b>동작</b> 카드를 열고 <b>'안 돼요 → 신고서 만들기'</b>를 누르면 여기에 추가돼요. 무슨 일이 있었는지만 적으면, 개발자(또는 AI)가 바로 고칠 수 있는 신고서가 만들어집니다.</div>`;
-  if(!ids.length){ h+=`<div class="empty">아직 신고한 게 없어요.<br><br>흐름도에서 안 되는 ${UNIT+JOSA.ina} 동작 카드를 열고<br><b>'안 돼요'</b>를 눌러보세요.</div>`; sideBody.innerHTML=h; return; }
-  ids.forEach(id=>{const n=nodes.get(id),b=state.bugs[id]||{},ok=bugReady(b);
-    h+=`<div class="actrow" style="cursor:default">
-      <div class="an">${esc(dispLabel(n))} <span class="rchip" style="background:${ok?"#e8896f":"#9a9ab2"}">${ok?"고장":"작성 중"}</span></div>
-      ${n.screen?`<div class="ap">${esc(scrTitle(n.screen))} ${esc(UNIT)}</div>`:n.type==="screen"?`<div class="ap">${esc(n.data.route||"")}</div>`:""}
-      <div class="dh">무슨 일이 있었나요? <span style="color:#e8896f">*필수</span></div>
-      <textarea class="note" data-bug="${id}" data-f="symptom" placeholder="예: 로그인 버튼을 눌러도 아무 반응이 없었어요">${esc(b.symptom||"")}</textarea>
-      ${ok?"":`<div class="hint" style="color:#e8896f">이 줄을 적어야 신고서에 들어가요.</div>`}
-      <div class="dh">화면에 뜬 문구가 있었나요? (있으면 그대로)</div>
-      <textarea class="note" data-bug="${id}" data-f="errorText" placeholder="예: '요청을 처리할 수 없습니다 (429)' 라는 빨간 글씨가 떴어요">${esc(b.errorText||"")}</textarea>
-      <div class="dh">어떻게 되길 바랐나요?</div>
-      <textarea class="note" data-bug="${id}" data-f="expected" placeholder="예: 로그인되고 홈 화면으로 넘어가길 바랐어요">${esc(b.expected||"")}</textarea>
-      <div class="dh">어떻게 하다가 그랬나요? (선택)</div>
-      <textarea class="note" data-bug="${id}" data-f="repro" placeholder="예: 카카오로 로그인을 누르고 잠깐 기다렸더니">${esc(b.repro||"")}</textarea>
-      <div class="dh">얼마나 자주?</div>
-      <div class="seg" data-freqfor="${id}">${FREQ.map(f=>`<button data-freq="${f}" class="${b.freq===f?"on":""}">${f}</button>`).join("")}</div>
-      <button class="btn" data-rmbug="${id}" style="margin-top:8px">이 신고 빼기</button></div>`;});
-  const rep=buildBugReport(ids);
-  const nReady=ids.filter(id=>bugReady(state.bugs[id])).length;
-  h+=`<div class="dh">자동 생성된 신고서 (${nReady}건)</div>
-    <textarea class="prompt" id="bugOut" style="min-height:200px" readonly>${esc(rep)}</textarea>
-    <button class="btn" id="copyBug" style="width:100%;margin-top:10px;opacity:${nReady?1:.45}" ${nReady?"":"disabled"}>신고서 복사</button>
-    <div class="hint">복사해서 채팅에 붙여넣으면, ${ANCHORS.checked?"<b>검증된 코드 위치</b>부터":"적힌 힌트부터"} 원인을 찾아 고쳐드려요.</div>`;
-  sideBody.innerHTML=h;
-  const refresh=()=>{const o=document.getElementById("bugOut");if(o)o.value=buildBugReport(Object.keys(state.bugs));};
-  sideBody.querySelectorAll("[data-bug]").forEach(t=>t.onchange=ev=>{const id=ev.target.dataset.bug,f=ev.target.dataset.f;
-    state.bugs[id]=state.bugs[id]||{};state.bugs[id][f]=ev.target.value.trim();save();updateEditCount();refresh();
-    if(f==="symptom")renderBug();});
-  sideBody.querySelectorAll("[data-freqfor] [data-freq]").forEach(b=>b.onclick=()=>{const id=b.closest("[data-freqfor]").dataset.freqfor,f=b.dataset.freq;
-    state.bugs[id]=state.bugs[id]||{};state.bugs[id].freq=state.bugs[id].freq===f?"":f;save();renderBug();});
-  sideBody.querySelectorAll("[data-rmbug]").forEach(b=>b.onclick=()=>{delete state.bugs[b.dataset.rmbug];save();updateEditCount();renderBug();});
-  const cb=document.getElementById("copyBug");
-  if(cb&&nReady)cb.onclick=()=>navigator.clipboard.writeText(buildBugReport(Object.keys(state.bugs))).then(()=>{cb.textContent="복사됨 ✓";setTimeout(()=>cb.textContent="신고서 복사",1200);});
-}
+/* (버그 신고서 UI 제거 — 그 맥락(검증 좌표·게이트·의존)은 stackEntries의 메모 항목이 승계) */
 
 /* ---------- toolbar ---------- */
 /* search: 150ms debounce (every keystroke used to re-serialize 2MB of embedded
@@ -1824,18 +1736,20 @@ function stackEntries(){
     if(ed.flag==="삭제")parts.push("이 항목은 실제와 다르거나 불필요하니 흐름도에서 빼줘");
     if(ed.flag==="추가")parts.push("이 주변에 누락된 동작·연결이 없는지 코드에서 더 확인해줘");
     if(ed.note)parts.push(ed.note);
-    if(parts.length)E.push({kind:"메모",color:"#8b93ff",nodeId:id,title,code,text:parts.join(" / "),accept,guard});}
-  /* Only a bug with a symptom becomes a task. An entry created by pressing the button
-     and never filled in used to ship as "재현해서 고쳐줘" with nothing to reproduce —
-     and with an invented 완료 기준 ("기대한 정상 동작이 관찰되면 완료") attached to it. */
-  for(const [id,bg] of Object.entries(state.bugs||{})){const n=nodes.get(id);if(!n||!bugReady(bg))continue;const d=bugDeps(n);
-    const t=["증상: "+bg.symptom];if(bg.errorText)t.push("화면 문구: "+bg.errorText);if(bg.expected)t.push("기대: "+bg.expected);
-    if(bg.repro)t.push("재현: "+bg.repro);if(bg.freq)t.push("빈도: "+bg.freq);
-    const dep=[];if(d.ais.length)dep.push("AI: "+d.ais.map(x=>x.purpose).join(", "));if(d.apis.length)dep.push("의존: "+d.apis.join(", "));if(d.risks.length)dep.push("점검: "+d.risks.map(r=>RISK_KO[r]||r).join(","));
-    E.push({kind:"버그",color:"#e8896f",nodeId:id,title:`${n.type==="screen"?UNIT:"동작"} "${dispLabel(n)}"${n.screen?` — ${UNIT} ${scrTitle(n.screen)}`:""}`,code:codeRef(n,true),
-      text:t.join(" · ")+(dep.length?"  ["+dep.join(" · ")+"]":""),
-      accept:(bg.expected?`기대한 동작이 실제로 관찰되면 완료: ${bg.expected}`:"증상이 사라지고 정상 동작이 관찰되면 완료.")+" 재현 절차로 검증할 것.",
-      guard:anchorGuard(n)+(dep.length?` 관련 의존[${dep.join(" · ")}]도 함께 점검. `:" ")+"완료 기준에 없는 범위는 건드리지 말고, 애매하면 추측하지 말고 물어봐."});}
+    if(parts.length){
+      /* 메모는 이제 유일한 신고 채널 — 옛 버그 신고서가 싣던 맥락(검증 좌표 가드·의존 작업·
+         도달 게이트)을 메모 항목이 그대로 이어받는다. 화면에는 안 보이고 복사본에만 실린다. */
+      const d=bugDeps(n);
+      const dep=[];if(d.ais.length)dep.push("AI: "+d.ais.map(x=>x.purpose).join(", "));if(d.apis.length)dep.push("의존: "+d.apis.join(", "));if(d.risks.length)dep.push("점검: "+d.risks.map(r=>RISK_KO[r]||r).join(","));
+      const gt=gateOf(n);
+      const dw=delegWarn(n);
+      if(ed.note&&!accept)accept="메모에 적힌 문제가 해소된 것이 실제 화면/동작으로 관찰되면 완료. 재현으로 검증할 것.";
+      guard=(guard?guard+" ":"")+anchorGuard(n)
+        +(dep.length?`관련 의존[${dep.join(" · ")}]도 함께 점검. `:"")
+        +(gt?`⚠ 이 ${UNIT}은 [${GATE_KO[gt.gate]||gt.gate}] 게이트 뒤에 있어(${gt.why}) — 먼저 프로덕션에서 실제로 열리는지 확인하고, 안 열리면 코드를 고치기 전에 그 사실부터 알려줘. `:"")
+        +(dw?`⚠⚠ 위임 경고: 이 항목의 파일은 프로덕션에서 <${dw}/> 를 대신 렌더해 — 그 파일 본문을 고치면 빌드는 초록인데 화면은 그대로다. 실제 렌더되는 컴포넌트를 찾아 거기서 고쳐줘. `:"")
+        +"완료 기준에 없는 범위는 건드리지 말고, 애매하면 추측하지 말고 물어봐.";
+      E.push({kind:"메모",color:"#8b93ff",nodeId:id,title,code,text:parts.join(" / "),accept,guard});}}
   (state.addedNodes||[]).forEach((u,i)=>{ if(!String(u.label||"").trim())return;   // an unnamed node is not a request
     const link=(state.addedEdges||[]).find(e=>e.to===u.id&&nodes.get(e.from));const lf=link?nodes.get(link.from):null;const uk=UKIND[u.kind]||"노드";
     E.push({kind:"추가",color:"#8b93ff",addNode:i,nodeId:u.id,title:`새 ${uk} "${u.label||"(이름 없음)"}"${lf?` — ${origLabel(lf)}에 연결`:""}`,code:"",
@@ -1927,7 +1841,6 @@ function buildStackPrompt(){
 }
 function removeEntry(e){
   if(e.kind==="메모"&&e.nodeId)delete state.edits[e.nodeId];
-  else if(e.kind==="버그"&&e.nodeId)delete state.bugs[e.nodeId];
   else if(e.edge&&e.edge.type==="add")state.addedEdges.splice(e.edge.i,1);
   else if(e.edge&&e.edge.type==="del")state.removedEdges.splice(e.edge.i,1);
   else if(e.global)state.globalNote="";
@@ -1936,40 +1849,7 @@ function removeEntry(e){
   else if(e.extra!=null)state.promptExtra.splice(e.extra,1);
   save();updateEditCount();renderSide();renderDetail();
 }
-function updateDock(){
-  const dock=document.getElementById("pdock");if(!dock)return;
-  const E=stackEntries();
-  const c=document.getElementById("pdockCount");c.style.display=E.length?"inline-block":"none";c.textContent=E.length;
-  dock.classList.toggle("open",!!state.dockOpen);
-  document.getElementById("pdockChev").textContent=state.dockOpen?"▾":"▸";
-  if(!state.dockOpen)return;
-  const list=document.getElementById("pdockList");
-  if(!E.length){list.innerHTML=`<div class="pempty">아직 쌓인 항목이 없어요 — 카드를 눌러 <b>고칠 점 메모</b>를 적거나, <b>이 동작이 안 돼요</b>로 버그를 신고하거나, 아래 입력창에 직접 요청을 적으면 여기에 프롬프트로 쌓여요.</div>`;return;}
-  list.innerHTML=E.map((e,i)=>`<div class="pcard" data-pi="${i}">
-    <span class="pbadge" style="background:${e.color}">${e.kind}</span>
-    <div class="pt"><b>${esc(e.title)}</b> <span class="ptext">→ ${esc(e.text)}</span>${e.code?`<div class="pcode">${esc(e.code)}</div>`:""}</div>
-    <button class="pdel" data-pdel="${i}" title="이 항목 삭제">✕</button></div>`).join("");
-  list.querySelectorAll("[data-pdel]").forEach(b=>b.onclick=ev=>{ev.stopPropagation();removeEntry(stackEntries()[+b.dataset.pdel]);});
-  list.querySelectorAll(".pcard").forEach(cd=>cd.onclick=()=>{const e=stackEntries()[+cd.dataset.pi];if(!e||!e.nodeId)return;const gn=nodes.get(e.nodeId);if(!gn)return;
-    // find the owning screen node so we can expand it before selecting
-    let scrNode=null;
-    if(gn.type==="screen")scrNode=gn;
-    else if(gn.type==="action"&&gn.screen)scrNode=nodes.get(gn.screen.id);
-    else if(gn.parent){const pa=nodes.get(gn.parent);if(pa&&pa.screen)scrNode=nodes.get(pa.screen.id);}
-    if(scrNode&&!navMode&&!expanded.has(scrNode.id)){expanded.add(scrNode.id);state.expanded[scrNode.id]=true;save();}
-    selected=e.nodeId;setTab("detail");render();fitToNode(e.nodeId);});
-}
-document.getElementById("pdockHead").onclick=e=>{if(e.target.closest("button"))return;state.dockOpen=!state.dockOpen;save();updateDock();};
-document.getElementById("pdockCopy").onclick=e=>{e.stopPropagation();navigator.clipboard.writeText(buildStackPrompt()).then(()=>{const b=document.getElementById("pdockCopy");b.textContent="복사됨 ✓";setTimeout(()=>b.textContent="전체 복사",1200);});};
-document.getElementById("pdockClear").onclick=e=>{e.stopPropagation();if(!confirm("프롬프트 스택의 모든 항목(메모·버그·연결 변경·직접 요청)을 지울까요?"))return;
-  state.edits={};state.bugs={};state.addedEdges=[];state.removedEdges=[];state.globalNote="";state.promptExtra=[];save();updateEditCount();renderSide();renderDetail();render();};
-function pdockAddNow(){const inp=document.getElementById("pdockInput");const v=inp.value.trim();if(!v)return;
-  const n=selected&&nodes.get(selected);
-  state.promptExtra=state.promptExtra||[];
-  state.promptExtra.push({t:v,id:n?selected:null,label:n?((TYPETAG[n.type]||[""])[0]+' "'+dispLabel(n)+'"'):null,code:n?codeRef(n):""});
-  inp.value="";save();updateEditCount();}
-document.getElementById("pdockAdd").onclick=e=>{e.stopPropagation();pdockAddNow();};
-document.getElementById("pdockInput").addEventListener("keydown",e=>{if(e.key==="Enter"){e.stopPropagation();pdockAddNow();}});
+/* (프롬프트 스택 독 제거 — 메모 탭의 '수정 요청 복사'가 그 역할을 대신한다) */
 
 /* ---------- 노드 추가 ("이런 게 있어야 해요") — 우측 '노드 추가' 탭 ---------- */
 let addForm={kind:"screen",label:"",desc:""}; // 탭 재렌더(카드 선택 등) 사이에 입력값 보존
@@ -2103,8 +1983,6 @@ function applyVocab(){
   const nf=document.getElementById("navFlowBtn");if(nf){nf.textContent=UNIT+" 흐름";nf.title=UNIT+"들이 어떻게 이어지는지 (다음으로 이동/호출 흐름)";}
   const an=document.getElementById("addNode");if(an)an.title=an.title.split("화면").join(UNIT);
   const help=document.querySelector(".help");if(help)help.innerHTML=help.innerHTML.split("화면").join(UNIT);
-  const ph=document.querySelector("#pdock .phint");if(ph)ph.textContent=ph.textContent.split("화면").join(UNIT);
-  const pi=document.getElementById("pdockInput");if(pi)pi.placeholder=pi.placeholder.split("화면").join(UNIT);
 }
 
 // The AI 하네스 button only exists when this app actually calls AI (it used to render a
