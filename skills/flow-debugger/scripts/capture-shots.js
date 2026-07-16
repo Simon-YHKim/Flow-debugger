@@ -120,9 +120,14 @@ const isBlank = st => !!st && (st.std < 4 || (st.std < 6 && st.mean < 8));
     const type = async (sels, val) => { for (const s of sels) { const el = await page.$(s); if (el) { await el.fill(String(val)); return true; } } return false; };
     await type(['input[type=email]', 'input[name=email]', 'input[placeholder*="메일"]', 'input[placeholder*="mail"]'], flags.email);
     await type(['input[type=password]', 'input[name=password]', 'input[placeholder*="비밀"]'], flags.password || '');
-    for (const s of ['button[type=submit]', 'button:has-text("로그인")', 'button:has-text("Sign in")']) {
-      const b = await page.$(s); if (b) { await b.click().catch(() => {}); break; }
+    // React Native Web renders touchables as <div role="button">, not <button> — an html-only
+    // selector list silently never clicks, and the whole run "captures" the login screen.
+    let clicked = false;
+    for (const s of ['button[type=submit]', 'button:has-text("로그인")', '[role=button]:has-text("로그인")',
+                     'button:has-text("Sign in")', '[role=button]:has-text("Sign in")', '[role=button]:has-text("Log in")']) {
+      const b = await page.$(s); if (b) { await b.click().catch(() => {}); clicked = true; break; }
     }
+    if (!clicked) { const pw = await page.$('input[type=password]'); if (pw) await pw.press('Enter').catch(() => {}); }
     await page.waitForTimeout(wait * 2);
     const tapped = await tapGates();
     console.log('  -> ' + page.url() + (tapped ? '  (gate tapped x' + tapped + ')' : ''));
@@ -216,11 +221,14 @@ const isBlank = st => !!st && (st.std < 4 || (st.std < 6 && st.mean < 8));
         row.pageErrors = pageErrors.n - errBase;
 
         // verdict — priority: blank > redirected > duplicate > ok. All are REPORTED, none hidden.
+        // duplicate is only declared against an OK canonical: if the first route that produced this
+        // frame was itself redirected/blank, THIS route is the screen's only honest capture — marking
+        // it duplicate would erase the screen from the map entirely (found by adversarial verify).
         if (isBlank(st)) { row.status = 'blank'; process.stdout.write('B'); }
         else if (row.finalPath !== wantPath) { row.status = 'redirected'; row.note = '→ ' + row.finalPath; process.stdout.write('R'); }
         else if (st && seenHash[st.phash] && seenHash[st.phash] !== r) { row.status = 'duplicate'; row.dupOf = seenHash[st.phash]; process.stdout.write('D'); }
         else { row.status = row.fmt === 'gif' ? 'ok-motion' : 'ok'; process.stdout.write(row.fmt === 'gif' ? 'g' : '.'); }
-        if (st && !seenHash[st.phash]) seenHash[st.phash] = r;
+        if (st && !seenHash[st.phash] && (row.status === 'ok' || row.status === 'ok-motion')) seenHash[st.phash] = r;
         break;
       } catch (e) {
         row.note = String(e.message).split('\n')[0];

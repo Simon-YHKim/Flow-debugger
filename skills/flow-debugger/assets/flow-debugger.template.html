@@ -661,10 +661,12 @@ try{state={...state,...JSON.parse(localStorage.getItem(LSKEY)||"{}")};}catch(e){
 /* 옛 '버그 신고'는 '고칠점 메모'로 통합됐다 — 이전 버전에서 작성한 신고를 메모로 승계(유실 금지). */
 if(state.bugs&&Object.keys(state.bugs).length){
   for(const[id,b]of Object.entries(state.bugs)){
-    if(!b||!String(b.symptom||"").trim())continue;
-    const t=["안 돼요: "+b.symptom];if(b.errorText)t.push("화면 문구: "+b.errorText);if(b.expected)t.push("바란 것: "+b.expected);if(b.repro)t.push("재현: "+b.repro);if(b.freq)t.push("빈도: "+b.freq);
-    state.edits[id]=state.edits[id]||{};
-    state.edits[id].note=[state.edits[id].note,t.join(" · ")].filter(Boolean).join(" / ");
+    try{
+      if(!b||!String(b.symptom||"").trim())continue;
+      const t=["안 돼요: "+b.symptom];if(b.errorText)t.push("화면 문구: "+b.errorText);if(b.expected)t.push("바란 것: "+b.expected);if(b.repro)t.push("재현: "+b.repro);if(b.freq)t.push("빈도: "+b.freq);
+      if(typeof state.edits[id]!=="object"||!state.edits[id])state.edits[id]={};
+      state.edits[id].note=[state.edits[id].note,t.join(" · ")].filter(Boolean).join(" / ");
+    }catch(e){/* 한 항목이 깨져도 나머지 승계는 계속 — 마이그레이션이 페이지를 죽이면 안 된다 */}
   }
   delete state.bugs;
 }else delete state.bugs;
@@ -1493,7 +1495,7 @@ function renderDetail(){
       <div class="dh">이름</div><input class="ed-label" id="uLabel" value="${esc(d.label||"")}" placeholder="예: 알림 설정 화면">
       <div class="dh">설명 (선택)</div><textarea id="uDesc" class="unote" placeholder="이 ${UKIND[d.kind]||"노드"}가 어떤 건지 적어주세요">${esc(d.desc||"")}</textarea>
       ${lf?`<div class="kv" style="margin-top:6px">🔗 <b>${esc(origLabel(lf))}</b> 에 연결됨</div>`:`<div class="hint">이 노드 오른쪽의 점을 다른 노드로 끌어서 <b>연결</b>할 수 있어요.</div>`}
-      <div class="hint">이 항목은 아래 <b>프롬프트</b> 창에 <b>"만들어줘" 요청</b>으로 자동으로 담겨요.</div>
+      <div class="hint">이 항목은 우측 <b>고칠점 메모</b>의 <b>수정 요청 복사</b>에 <b>"만들어줘" 요청</b>으로 자동으로 담겨요.</div>
       <button class="btn" id="uDelete" style="border-color:#e8896f;color:#e8896f;margin-top:12px">🗑 이 노드 삭제</button>`;
     const lab=document.getElementById("uLabel");if(lab)lab.onchange=()=>{d.label=lab.value.trim();save();render();};
     const des=document.getElementById("uDesc");if(des)des.onchange=()=>{d.desc=des.value.trim();save();updateEditCount();};
@@ -1598,7 +1600,7 @@ function renderMemo(){
     <button class="pdel" data-pdel="${i}" title="이 메모 삭제">✕</button></div>`;});
   h+=`<div class="dh" style="margin-top:16px">전반적으로 바라는 점 (선택)</div>
     <textarea class="note" id="gnote" placeholder="특정 화면이 아닌, 앱 전체에 대한 요청">${esc(state.globalNote)}</textarea>
-    <button class="btn" id="copyPrompt" style="width:100%;margin-top:14px;background:var(--accent);color:#0c0c12;border-color:var(--accent);font-weight:700;font-size:14px;padding:10px" ${E.length?"":"disabled style='width:100%;margin-top:14px;opacity:.4;padding:10px'"}>📋 수정 요청 복사 (${E.length}건)</button>
+    <button class="btn" id="copyPrompt" style="width:100%;margin-top:14px;background:var(--accent);color:#0c0c12;border-color:var(--accent);font-weight:700;font-size:14px;padding:10px${E.length?"":";opacity:.4"}" ${E.length?"":"disabled"}>📋 수정 요청 복사 (${E.length}건)</button>
     <div class="hint">복사한 글을 AI 채팅에 붙여넣으면 바로 작업할 수 있어요 — 각 메모에 화면·검증된 코드 위치·작업 규칙이 자동으로 담겨 나가요.</div>
     <div style="display:flex;gap:8px;margin-top:8px"><button class="btn" id="copyMermaid" style="flex:1" title="${esc(UNIT)} 이동 그래프를 Mermaid 다이어그램 코드로 복사">Mermaid 복사</button><button class="btn" id="clearEdits">모두 지우기</button></div>`;
   sideBody.innerHTML=h;
@@ -1884,7 +1886,7 @@ function renderAddNode(){
   const KIND=[["screen","🖼 "+UNIT],["action","☝ 동작"],["note","📝 메모"]];
   const added=state.addedNodes||[];
   let h=`<div class="dh">＋ 노드 추가</div>
-    <div class="hint"><b>이런 ${UNIT}·기능이 있어야 해요</b> 하고 새 노드를 얹으면, 오른쪽 <b>수정 요청</b>과 아래 프롬프트에 <b>"만들어줘"</b> 요청으로 담겨요.</div>
+    <div class="hint"><b>이런 ${UNIT}·기능이 있어야 해요</b> 하고 새 노드를 얹으면, <b>고칠점 메모</b> 탭의 <b>수정 요청 복사</b>에 <b>"만들어줘"</b> 요청으로 담겨요.</div>
     <div class="seg" id="adKind">${KIND.map(k=>`<button data-k="${k[0]}" class="${addForm.kind===k[0]?"on":""}">${k[1]}</button>`).join("")}</div>
     <input id="adLabel" class="note" placeholder="이름 (예: 알림 설정 화면)">
     <textarea id="adDesc" class="note" placeholder="설명 (선택) — 어떤 화면·기능인지, 왜 필요한지"></textarea>
