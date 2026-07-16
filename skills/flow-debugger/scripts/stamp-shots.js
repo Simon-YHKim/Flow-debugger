@@ -30,10 +30,21 @@ if (end < 0) { console.error('SHOTS terminator ")||{}" not found.'); process.exi
 const shots = JSON.parse(html.slice(start, end));   // route -> dataURI (current)
 const before = Object.keys(shots).length;
 
+// capture-shots writes paths relative to the CWD it ran in (e.g. "out/authed/x.jpg"), not relative
+// to the map file. Try the path as-given (CWD), then relative to the map dir, then its basename there.
+const resolveShot = p => {
+  const cands = [
+    path.isAbsolute(p) ? p : path.resolve(p),
+    path.join(mapDir, p),
+    path.join(mapDir, path.basename(p)),
+  ];
+  return cands.find(c => fs.existsSync(c));
+};
+
 let n = 0;
 for (const [route, p] of Object.entries(map)) {
-  const fp = path.isAbsolute(p) ? p : path.join(mapDir, p);
-  if (!fs.existsSync(fp)) { console.error('missing image, skipped: ' + fp); continue; }
+  const fp = resolveShot(p);
+  if (!fp) { console.error('missing image, skipped: ' + p); continue; }
   const buf = fs.readFileSync(fp);
   const ext = (path.extname(fp).slice(1) || 'png').toLowerCase();
   shots[route] = 'data:image/' + (ext === 'jpg' ? 'jpeg' : ext) + ';base64,' + buf.toString('base64');
