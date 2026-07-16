@@ -145,6 +145,66 @@ npm install && node scripts/verify-html.js Output/flow-debugger.html --template 
 | `screenmap.debug.mode.txt` | `ui`(기본) / `backend`(엔드포인트) / `cli`(명령) |
 | `screenmap.debug.harness.json` | 이 앱의 AI 배선을 직접 그릴 때. 없으면 스캔한 AI 호출에서 **자동 파생** |
 
+## 자동 갱신 — 코드가 바뀌면 흐름도가 따라온다 (v0.19–0.21)
+
+지도(좌표)와 그림(썸네일)은 **따로** 낡는다. 손 안 대고 최신으로 유지하는 세 가지.
+
+### 1) 바뀐 화면을 차트에 표시 — `flag-changed-screens.js`
+
+지문 대비 소스가 바뀐 화면을 찾아, **차트 카드에 `⚠ 바뀜` 배지 + 호박색 틴트 + `그림 재확인` pill**을
+stamp 한다(**🌐 시스템 플로우** 뷰에서 카드로 보인다). 비개발자가 열어도 어떤 화면이 실제와 달라졌는지
+눈으로 안다.
+
+```bash
+node scripts/flag-changed-screens.js docs/flow-map.json <앱루트> --stamp docs/flow-debugger.html
+```
+
+한계: **소스 변경**을 잡는다. 코드는 그대로인데 그림만 옛것인 순수 시각 변경은 재캡처(아래 2)가 방어책.
+
+### 2) 이미지 자동 재캡처 — CI (앱 레포)
+
+PR이 화면 코드를 건드리면 **바뀐 화면만** 실제 웹빌드에서 다시 찍어 그 PR에 커밋한다. 흐름:
+
+```
+바뀐 파일 → 화면 라우트 매핑 → 웹 정적 export → serve → capture-shots --only --jpeg → stamp-shots → PR에 [skip ci] 커밋
+```
+
+- 캡처는 **정적 export**를 serve 한다(개발서버는 큰 앱에서 OOM). 로그인 화면은 로그아웃 상태로, 나머지는
+  테스트 계정으로 로그인해서.
+- `capture-shots.js --jpeg [품질=72]` — 작은 JPEG. 썸네일은 base64로 html에 박혀 커밋되므로, JPEG가
+  그 파일(과 매 git blob)을 한 자릿수 작게 유지한다 — CI 기본값으로 알맞다.
+- `stamp-shots.js` — 새 썸네일을 **바뀐 라우트만** html의 `SHOTS` 상수에 overlay(전체 재빌드 없이, 나머지
+  썸네일 보존).
+- 워크플로 실물 예시: 앱 레포의 `.github/workflows/flow-thumbnails.yml`. 핵심 스텝만:
+
+```yaml
+# PR이 src/** 를 바꾸면 → 바뀐 화면만 재캡처 → PR에 커밋 (best-effort, 실패해도 PR 안 깨짐)
+- run: ROUTES=$(node scripts/flow/changed-screens.mjs origin/${{ github.base_ref }})   # 바뀐 파일 → 라우트
+- run: npx expo export --platform web --output-dir dist && npx serve -s dist -l 8081 & # 실제 웹빌드
+- run: git clone --depth 1 <flow-debugger> fd && (cd fd/skills/flow-debugger && npm install)
+- run: node fd/.../capture-shots.js graph.json http://localhost:8081 out --only "$ROUTES" --jpeg 72
+- run: node fd/.../stamp-shots.js docs/flow-debugger.html out/shots-map.json
+- run: git commit -am "chore(flow-debugger): auto-refresh thumbnails [skip ci]" && git push
+```
+
+### 3) 세션 종료 시 자동 갱신 — Stop 훅
+
+flow-debugger를 쓴 세션이 화면 코드를 고치고 끝나면, 종료 시 자동으로 **배지 표시 + 좌표 rebase**.
+훅 스크립트를 `~/.claude/hooks/flow-debugger-autoupdate.mjs` 에 두고 `~/.claude/settings.json` 에 등록:
+
+```json
+{ "hooks": { "Stop": [ { "hooks": [
+  { "type": "command", "command": "node ~/.claude/hooks/flow-debugger-autoupdate.mjs" }
+] } ] } }
+```
+
+- 세션 끝에 낡음 점검 → 바뀐 화면에 배지 stamp + 스크린맵이 있으면 `rebase-anchors` 로 좌표 이사.
+- flow-debugger가 없는 레포에선 **조용히 no-op**, 지도가 최신이면 아무것도 안 한다.
+- **커밋은 안 한다**(작업트리만 갱신). 구조 변경(새 화면·버튼)은 배지 + `/flow-update` 안내 —
+  새 노드는 재스캔으로만 등장한다(지어내지 않는 원칙 그대로).
+
+> 역할 분담: **이미지=CI(2)** · **표시·좌표=Stop 훅(3)** · **구조 재스캔=`/flow-update`(사람 확인)**.
+
 ## 산출물 HTML이 주는 것
 
 - 화면 카드(유형 아이콘·실제 스크린샷 썸네일)로 어떤 화면인지 인식
@@ -176,15 +236,18 @@ Flow-debugger/
     package.json                         playwright (캡처·라이브검증용 devDep)
     assets/flow-debugger.template.html   토큰: __GRAPH_JSON__ __GLOSSARY_JSON__ __SHOTS_JSON__
                                                __STACK_JSON__ __ANCHORS_JSON__ __HARNESS_JSON__
-                                               __BACKEND_JSON__ __STAMP_JSON__ __APP_NAME__ __MODE__
+                                               __BACKEND_JSON__ __STAMP_JSON__ __IDENTITY_JSON__
+                                               __STALE_JSON__ __APP_NAME__ __MODE__
     scripts/
       lib/anchors.js        앵커 파싱·해석·검증 엔진 (이 도구의 심장)
       verify-anchors.js     앵커를 실제 소스트리에 대조·보정  ← 4단계
       merge-readers.js      리더 출력 병합 + 스키마 검사
       apply-anchors.js      RESCAN 패치 병합 (한국어·위험 보존)
       prescan.js            프로덕션 렌더 경로·게이트·헬퍼 인덱스 (0단계)
-      capture-shots.js      라우트별 스크린샷
+      capture-shots.js      라우트별 스크린샷 (`--jpeg` 로 작은 JPEG)
       embed-shots.js        base64 임베드
+      stamp-shots.js        새 썸네일을 바뀐 라우트만 html SHOTS에 overlay (CI 재캡처용)
+      flag-changed-screens.js  바뀐 화면을 STALE 배지로 차트에 stamp (표시)
       lib/backend.js        서버 핸들러·테이블·RLS 스캔 → 서버·데이터 뷰
       lib/fingerprint.js    지문(커밋 + 앵커한 파일 해시)
       lib/reach.js          렌더 모드·게이트·헬퍼(AI SDK import) 탐지
