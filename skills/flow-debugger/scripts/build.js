@@ -195,12 +195,15 @@ const ID = require('./lib/screens-identity');
 const identityMap = {};
 for (const r of ID.identities(graphObj)) identityMap[r.route] = { real: r.real, delegates: r.delegates, sharesWith: r.sharesWith, reach: r.reach, warnings: r.warnings };
 html = html.replace('__IDENTITY_JSON__', JSON.stringify(identityMap));
+// STALE screens: at build time the map IS the code, so nothing is stale. flag-changed-screens.js
+// re-stamps this constant when source later drifts; flow-watch fills it live from /status.
+html = html.replace('__STALE_JSON__', JSON.stringify({}));
 html = html.split('__APP_NAME__').join(appName);
 html = html.split('__MODE__').join(mode);
 
 for (const t of ['__GRAPH_JSON__', '__GLOSSARY_JSON__', '__SHOTS_JSON__', '__STACK_JSON__',
                  '__HARNESS_JSON__', '__ANCHORS_JSON__', '__STAMP_JSON__', '__BACKEND_JSON__',
-                 '__IDENTITY_JSON__', '__APP_NAME__', '__MODE__']) {
+                 '__IDENTITY_JSON__', '__STALE_JSON__', '__APP_NAME__', '__MODE__']) {
   if (html.includes(t)) die('token not replaced: ' + t);
 }
 fs.writeFileSync(out, html, 'utf8');

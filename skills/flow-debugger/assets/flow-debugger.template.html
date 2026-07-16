@@ -102,6 +102,10 @@
   .node.usernode.note{border-color:#d8a657;background:linear-gradient(180deg,rgba(216,166,87,.16),var(--panel))}
   .node.usernode .t{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
   .ubadge{font-size:10px;padding:1px 7px;border-radius:99px;font-weight:700;background:var(--accent);color:#0c0c12}
+  /* 화면이 그림/지도 이후 바뀜 — 카드에 호박색 테두리 + "⚠ 바뀜" 배지 */
+  .node.screen.stale{box-shadow:inset 0 0 0 2px #e0a35c, 0 0 16px -5px #e0a35c}
+  .sbadge{font-size:10px;padding:1px 7px;border-radius:99px;font-weight:700;background:#e0a35c;color:#1a1200;cursor:help}
+  @media (prefers-color-scheme:light){.sbadge{background:#b5700f;color:#fff}}
   .node.usernode.note .ubadge{background:#d8a657}
   .seg{display:flex;gap:6px;margin:8px 0}
   .seg button{flex:1;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--muted);cursor:pointer;font-family:inherit;font-size:12.5px}
@@ -353,6 +357,10 @@ const BACKEND = (__BACKEND_JSON__)||null;
    user can reach it at all(⛔ dev/admin-only). The invariant: a screen node stands for what a
    USER sees — never the legacy body a delegating route file still contains. */
 const IDENTITY = (__IDENTITY_JSON__)||{};
+/* STALE = 화면이 그림/지도 이후 바뀌었나 — route -> {files:[...], kind}. 소스가 바뀌면 그 화면이
+   지금 보이는 그림과 달라졌을 수 있다는 신호. 오프라인: flag-changed-screens.js 가 stamp.
+   flow-watch 중: 아래 /status 소비자가 라이브로 채운다. 어느 쪽이든 카드에 "⚠ 바뀜" 배지로 뜬다. */
+const STALE = (__STALE_JSON__)||{};
 function idOf(n){const r=n&&(n.type==="screen"?(n.data&&n.data.route):(n.screen&&n.screen.route));return (r&&IDENTITY[r])||null;}
 /* the little marks on a screen card that answer "which screen is this, really?" at a glance:
    🔀 = the URL delegates to a different render file · 📎N = N screens live in this same file ·
@@ -884,9 +892,11 @@ function nodeHtml(n){
     const s=n.data,ty=screenType(s),nAct=(s.actions||[]).length,nAi=(s.actions||[]).filter(a=>a.ai).length;
     const gc=GROUP_COLOR[s.group]||"var(--accent)";
     const shot=SHOTS[s.route]?`<img class="thumb" src="${SHOTS[s.route]}" alt="">`:"";
-    return `<div class="node screen${sel}${lit}" data-id="${n.id}" style="--gc:${gc}">${flag}
-      <div class="shead"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><div class="stitle">${lab}</div><span class="stype" style="--gc:${gc}">${TYPE_KO[ty]||""}</span>${idBadges(n)}${gateOf(n)?`<span class="stype" style="--gc:#d8a657" title="${esc((gateOf(n)||{}).why||"")}">🔒</span>`:""}<span class="ex">${expanded.has(n.id)?"▾":"▸"}</span></div>
-      ${shot}<div class="pad"><div class="sub">${esc(s.summaryKo||"")}</div><div class="badges"><span class="pill">${nAct}개 동작</span>${nAi?`<span class="pill ai">AI ${nAi}</span>`:""}</div></div></div>`;
+    const st=STALE[s.route];
+    const stTitle=st?("이 화면 소스가 지도·그림 이후 바뀌었어요"+((st.files&&st.files.length)?": "+st.files.join(", "):"")+" — 지금 그림과 실제 화면이 다를 수 있으니 재확인/재캡처하세요."):"";
+    return `<div class="node screen${sel}${lit}${st?" stale":""}" data-id="${n.id}" style="--gc:${gc}">${flag}
+      <div class="shead"><span class="sicon" style="--gc:${gc}">${ICONS[ty]||ICONS.detail}</span><div class="stitle">${lab}</div><span class="stype" style="--gc:${gc}">${TYPE_KO[ty]||""}</span>${idBadges(n)}${st?`<span class="sbadge" title="${esc(stTitle)}">⚠ 바뀜</span>`:""}${gateOf(n)?`<span class="stype" style="--gc:#d8a657" title="${esc((gateOf(n)||{}).why||"")}">🔒</span>`:""}<span class="ex">${expanded.has(n.id)?"▾":"▸"}</span></div>
+      ${shot}<div class="pad"><div class="sub">${esc(s.summaryKo||"")}</div><div class="badges"><span class="pill">${nAct}개 동작</span>${nAi?`<span class="pill ai">AI ${nAi}</span>`:""}${st?`<span class="pill" style="background:#e0a35c;color:#1a1200">그림 재확인</span>`:""}</div></div></div>`;
   }
   if(n.type==="action"){const a=n.data;
     const rd=(a.risks||[]).map(r=>`<span class="rdot" style="background:${RISK_COLOR[r]||'#888'}" title="${RISK_KO[r]||r}"></span>`).join("");
@@ -2141,7 +2151,15 @@ renderChips();render();renderDetail();renderSide();updateEditCount();fit();
     bar.innerHTML=head+"<div class='wb-detail' style='display:"+(showDetail?"block":"none")+"'>"+det+"</div>";
     var m=document.getElementById("wbMore");if(m)m.onclick=function(){showDetail=!showDetail;render(last);};
   }
-  function check(){fetch("/status",{cache:"no-store"}).then(function(r){return r.json();}).then(function(s){last=s;render(s);}).catch(function(){});}
+  function markCards(s){                                          // /status 가 준 화면별 변경을 카드 배지로 (라이브)
+    var next={};
+    if(s&&!s.fresh){[].concat(routes(s.rescan||[]),routes(s.drift||[])).forEach(function(r){next[r]={kind:"live",files:[]};});}
+    var a=Object.keys(next).sort(),b=Object.keys(STALE).sort();
+    if(a.join("|")===b.join("|"))return;                         // 바뀐 게 없으면 다시 그리지 않음
+    for(var k in STALE)delete STALE[k]; for(var k2 in next)STALE[k2]=next[k2];
+    if(window.render&&window.render!==render){try{window.render();}catch(e){}}   // 카드 다시 그려 배지 반영
+  }
+  function check(){fetch("/status",{cache:"no-store"}).then(function(r){return r.json();}).then(function(s){last=s;render(s);markCards(s);}).catch(function(){});}
   check();
   window.addEventListener("focus",check);                        // 코드 고치고 탭으로 돌아오면 재확인
   try{var es=new EventSource("/events");es.addEventListener("changed",check);}catch(e){}  // 저장하는 순간 라이브

@@ -3,7 +3,28 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
-## [0.19.0] - 2026-07-15
+## [0.20.0] - 2026-07-16
+
+### Added — a changed screen now shows ON the chart ("⚠ 바뀜" badge)
+Freshness was answerable only from a CI log or a terminal check — the chart itself never showed
+that a screen no longer matched its picture. Now it does. Each screen card carries a `STALE` signal
+(route → the source files that changed since the map/picture was made); a changed screen gets an
+amber card tint, a **⚠ 바뀜** badge, and a **그림 재확인** pill, so a non-developer opening the
+file SEES which screens drifted.
+
+- **`scripts/flag-changed-screens.js`** (new) — recomputes the map's fingerprint against the working
+  tree, maps each changed file to the screen(s) it backs, and stamps a `STALE` constant into a built
+  flow-debugger.html (`--stamp`). Same sha as check-flow-map-fresh, so verdicts agree.
+- **Template + build.js** — new `STALE` constant (`__STALE_JSON__`, empty at build) and card
+  rendering that badges stale screens.
+- **flow-watch (live)** — the `/status` consumer now also marks the changed screen *cards* (not just
+  the top banner), so editing a screen's code lights up that card in real time.
+
+Note: this flags screens whose **source** changed. A pure visual change with no source change (a
+thumbnail older than the build) is still not auto-detected — the defense there is re-capture on
+rebuild (v0.19.0).
+
+
 
 ### Fixed — a re-scan now refreshes the PICTURE, not just the skeleton
 A re-scan is a "something changed" signal, but `/flow-update` only re-verified code anchors and
