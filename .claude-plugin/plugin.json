@@ -1,7 +1,7 @@
 {
   "name": "flow-debugger",
   "description": "Visual workflow debugger for non-developers: maps every app screen to its user actions, data/server/AI calls, with risk markers and diagnostic checklists. Every code anchor is VERIFIED against the real source tree, so the file:line bug report it generates can be trusted. Produces one self-contained interactive HTML (no network, no CDN).",
-  "version": "0.22.0",
+  "version": "0.23.0",
   "author": {
     "name": "Simon Kim"
   },

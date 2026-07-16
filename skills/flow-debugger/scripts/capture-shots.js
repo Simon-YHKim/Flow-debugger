@@ -9,6 +9,7 @@
 //        [--base-path /app] [--wait 1200] [--width 390] [--height 844]
 //        [--auth-url <url> --email <id> --password <pw>]
 //        [--only /route,/route2] [--limit 20] [--jpeg [quality=72]]
+//        [--motion /route,/route2 [--frames 8] [--frame-gap 350] [--gif-width 240]]  # animated GIF thumbnails
 //
 // writes  <outDir>/<slug>.png ...  and  <outDir>/shots-map.json  ({route: pngPath})
 // then:   node embed-shots.js <outDir>/shots-map.json Output/shots.json
@@ -79,17 +80,35 @@ fs.mkdirSync(outDir, { recursive: true });
   const quality = (flags.jpeg && flags.jpeg !== true) ? parseInt(flags.jpeg, 10) : 72;
   const ext = jpeg ? '.jpg' : '.png';
 
+  // --motion <routes>: some screens can't be told in one frame (loading→loaded, star fields,
+  // carousels). For those, grab several frames over time and encode ONE animated GIF (pure JS) that
+  // plays in the card <img>. GIFs are heavy, so it's opt-in per route; every other route stays a still.
+  const motionSet = (flags.motion && flags.motion !== true) ? String(flags.motion).split(',').map(s => s.trim()).filter(Boolean) : [];
+  const mFrames = parseInt(flags.frames, 10) || 8;
+  const mGap = parseInt(flags['frame-gap'], 10) || 350;
+  const gifWidth = parseInt(flags['gif-width'], 10) || 240;
+  let encodeGif = null;
+  if (motionSet.length) { try { ({ encodeGif } = require('./lib/gif')); } catch (e) { console.error('motion needs gifenc+pngjs (npm install in skills/flow-debugger) — those routes fall back to stills.'); } }
+
   const map = {}; const fail = [];
   for (const r of routes) {
     const url = baseUrl.replace(/\/$/, '') + basePath + (r === '/' ? '/' : r);
-    const file = path.join(outDir, slug(r) + ext);
+    const motion = !!encodeGif && motionSet.includes(r);
+    const file = path.join(outDir, slug(r) + (motion ? '.gif' : ext));
     try {
       const resp = await page.goto(url, { waitUntil: 'networkidle', timeout: 20000 });
       if (resp && resp.status() >= 400) throw new Error('HTTP ' + resp.status());
       await page.waitForTimeout(wait);
-      await page.screenshot(jpeg ? { path: file, type: 'jpeg', quality } : { path: file });
+      if (motion) {
+        const frames = [];
+        for (let i = 0; i < mFrames; i++) { frames.push(await page.screenshot({ type: 'png' })); if (i < mFrames - 1) await page.waitForTimeout(mGap); }
+        fs.writeFileSync(file, encodeGif(frames, { width: gifWidth, delay: mGap }));
+        process.stdout.write('g');
+      } else {
+        await page.screenshot(jpeg ? { path: file, type: 'jpeg', quality } : { path: file });
+        process.stdout.write('.');
+      }
       map[r] = file;
-      process.stdout.write('.');
     } catch (e) { fail.push(r + ' (' + e.message.split('\n')[0] + ')'); process.stdout.write('x'); }
   }
   await browser.close();

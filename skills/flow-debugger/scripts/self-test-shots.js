@@ -69,6 +69,18 @@ eq('overlays exactly 1 shot (resolves CWD-relative path)', /overlaid 1 /.test(st
   eq('preserves the untouched /y thumbnail', shots['/y'], 'data:image/jpeg;base64,KEEP');
 }
 
+// ============================================================ motion GIF encoder (lib/gif)
+console.log('gif encoder (--motion):');
+try {
+  const { PNG } = require('pngjs');
+  const { encodeGif } = require('./lib/gif');
+  const frame = shift => { const p = new PNG({ width: 40, height: 30 }); for (let i = 0; i < 40 * 30; i++) { const o = i * 4; p.data[o] = (i * 3 + shift) % 256; p.data[o + 1] = (i * 5) % 256; p.data[o + 2] = 120; p.data[o + 3] = 255; } return PNG.sync.write(p); };
+  const gif = encodeGif([frame(0), frame(80), frame(160)], { width: 40, delay: 200 });
+  eq('produces a GIF89a', gif.slice(0, 6).toString('ascii'), 'GIF89a');
+  eq('loops (NETSCAPE2.0 app extension)', gif.includes(Buffer.from('NETSCAPE2.0')), true);
+  eq('downscales past target width', require('./lib/gif').resizeRGBA(Buffer.alloc(80 * 60 * 4), 80, 60, 40).w, 40);
+} catch (e) { eq('gif encoder loads (needs gifenc+pngjs)', String(e.message).split('\n')[0], '<installed>'); }
+
 // ---- teardown ----
 try { fs.rmSync(root, { recursive: true, force: true }); } catch { /* best effort */ }
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

@@ -3,6 +3,14 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.23.0] - 2026-07-16
+
+### Added — animated GIF thumbnails for screens a single frame can't tell
+- `capture-shots.js --motion <routes>` — for the listed routes, grab N frames over time and encode ONE animated GIF (loading→loaded, star fields, carousels). GIFs play in the card <img> as-is (no template change). Opt-in per route; every other route stays a still. Tuning: `--frames` `--frame-gap` `--gif-width`.
+- `scripts/lib/gif.js` — pure-JS encoder (pngjs decode + nearest-neighbour downscale + gifenc), no ffmpeg. A card thumbnail is tiny, so low-res/small-palette keeps it light (deep-space onboarding, 8 frames ≈ 19KB). `stamp-shots`/`embed-shots` embed `.gif` unchanged.
+- self-test-shots.js covers the encoder (GIF89a header, loop extension, downscale). 6 → 9 cases.
+
+
 ## [0.22.0] - 2026-07-16
 
 ### Added / hardened
