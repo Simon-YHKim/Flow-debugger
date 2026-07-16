@@ -8,7 +8,7 @@
 //   node capture-shots.js <graph.json> <baseUrl> <outDir>
 //        [--base-path /app] [--wait 1200] [--width 390] [--height 844]
 //        [--auth-url <url> --email <id> --password <pw>]
-//        [--only /route,/route2] [--limit 20]
+//        [--only /route,/route2] [--limit 20] [--jpeg [quality=72]]
 //
 // writes  <outDir>/<slug>.png ...  and  <outDir>/shots-map.json  ({route: pngPath})
 // then:   node embed-shots.js <outDir>/shots-map.json Output/shots.json
@@ -72,15 +72,22 @@ fs.mkdirSync(outDir, { recursive: true });
     console.log('  -> ' + page.url());
   }
 
+  // --jpeg [quality]: emit small JPEGs instead of PNGs. Thumbnails are embedded base64 in the HTML,
+  // which gets committed; JPEG keeps that file (and every git blob of it) an order of magnitude
+  // smaller — the right default for CI that commits refreshed shots on every change.
+  const jpeg = !!flags.jpeg;
+  const quality = (flags.jpeg && flags.jpeg !== true) ? parseInt(flags.jpeg, 10) : 72;
+  const ext = jpeg ? '.jpg' : '.png';
+
   const map = {}; const fail = [];
   for (const r of routes) {
     const url = baseUrl.replace(/\/$/, '') + basePath + (r === '/' ? '/' : r);
-    const file = path.join(outDir, slug(r) + '.png');
+    const file = path.join(outDir, slug(r) + ext);
     try {
       const resp = await page.goto(url, { waitUntil: 'networkidle', timeout: 20000 });
       if (resp && resp.status() >= 400) throw new Error('HTTP ' + resp.status());
       await page.waitForTimeout(wait);
-      await page.screenshot({ path: file });
+      await page.screenshot(jpeg ? { path: file, type: 'jpeg', quality } : { path: file });
       map[r] = file;
       process.stdout.write('.');
     } catch (e) { fail.push(r + ' (' + e.message.split('\n')[0] + ')'); process.stdout.write('x'); }

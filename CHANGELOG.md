@@ -3,7 +3,22 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
-## [0.20.0] - 2026-07-16
+## [0.21.0] - 2026-07-16
+
+### Added — building blocks for auto-refreshing thumbnails in CI
+So a picture can be re-shot and committed back automatically when a screen changes:
+
+- **`scripts/stamp-shots.js`** (new) — overlay a `capture-shots` shots-map (route → png) INTO a built
+  flow-debugger.html's SHOTS constant, refreshing only those routes and preserving every other
+  embedded thumbnail. No full rebuild needed.
+- **`capture-shots.js --jpeg [quality=72]`** — emit small JPEGs instead of PNGs. Thumbnails are
+  base64-embedded in the committed html, so JPEG keeps that file (and every git blob of it) an order
+  of magnitude smaller — the right default for CI that commits refreshed shots on every change.
+
+(The consuming CI workflow lives in the app repo — it re-shoots the screens a PR changed from a real
+web build and commits the refreshed html back onto the PR.)
+
+
 
 ### Added — a changed screen now shows ON the chart ("⚠ 바뀜" badge)
 Freshness was answerable only from a CI log or a terminal check — the chart itself never showed
