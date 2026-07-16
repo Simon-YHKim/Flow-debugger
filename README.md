@@ -190,7 +190,8 @@ PR이 화면 코드를 건드리면 **바뀐 화면만** 실제 웹빌드에서 
 ### 3) 세션 종료 시 자동 갱신 — Stop 훅
 
 flow-debugger를 쓴 세션이 화면 코드를 고치고 끝나면, 종료 시 자동으로 **배지 표시 + 좌표 rebase**.
-훅 스크립트를 `~/.claude/hooks/flow-debugger-autoupdate.mjs` 에 두고 `~/.claude/settings.json` 에 등록:
+훅 스크립트는 이 레포 `hooks/flow-debugger-autoupdate.mjs` — `~/.claude/hooks/` 로 복사한 뒤
+`~/.claude/settings.json` 에 등록:
 
 ```json
 { "hooks": { "Stop": [ { "hooks": [
@@ -268,7 +269,8 @@ Flow-debugger/
 
 ```bash
 cd skills/flow-debugger
-node scripts/self-test.js      # 앵커 엔진 + 드리프트 복구 59 케이스, 브라우저·네트워크 불필요
+npm test                       # self-test.js(앵커 엔진·드리프트) + self-test-shots.js(stamp/flag) — 노드만
+node scripts/self-test-shots.js  # 썸네일 재캡처·STALE 배지 스크립트(경로해석 회귀 포함)
 npm install && node scripts/verify-html.js <built.html> --template assets/flow-debugger.template.html
 ```
 

@@ -3,6 +3,13 @@
 All notable changes to this project are documented here.
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
 
+## [0.22.0] - 2026-07-16
+
+### Added / hardened
+- `scripts/self-test-shots.js` — spawns stamp-shots + flag-changed-screens against a fixture (6 cases), incl. the CWD-relative path resolution that once made stamp-shots overlay nothing. Wired into `npm test`.
+- `hooks/flow-debugger-autoupdate.mjs` — the Stop hook is now vendored in-repo (copy to ~/.claude/hooks). It picks the screenmap that produced the committed map (fingerprint-commit match, then generatedFrom, then newest) instead of trusting a possibly-stray generatedFrom, so the coordinate rebase actually fires.
+
+
 ## [0.21.0] - 2026-07-16
 
 ### Added — building blocks for auto-refreshing thumbnails in CI

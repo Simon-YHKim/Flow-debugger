@@ -8,7 +8,7 @@
     "verify-anchors": "node scripts/verify-anchors.js",
     "verify-html": "node scripts/verify-html.js",
     "build": "node scripts/build.js",
-    "test": "node scripts/self-test.js"
+    "test": "node scripts/self-test.js && node scripts/self-test-shots.js"
   },
   "devDependencies": {
     "playwright": "^1.49.0"
